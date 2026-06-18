@@ -1958,8 +1958,10 @@ elif mode == "⚙️ Admin Panel":
             st.markdown(f"**{len(cams_codes)} AMC code(s) found**")
             unmapped = [c for c in cams_codes if c not in current_map]
             if unmapped: st.warning(f"{len(unmapped)} code(s) not yet mapped: {', '.join(unmapped)}")
-            updated_map = {}
-            cols_per_row, rows_needed = 2, -(-len(cams_codes) // cols_per_row)
+            updated_map: dict[str, str] = {}
+            # Split into two separate lines so 'cols_per_row' is defined before it is used
+            cols_per_row = 2
+            rows_needed = -(-len(cams_codes) // cols_per_row)
             for row_i in range(rows_needed):
                 cols = st.columns(cols_per_row)
                 for col_i in range(cols_per_row):
@@ -2016,7 +2018,9 @@ elif mode == "⚙️ Admin Panel":
                 "SELECT amc, rta FROM amc_config WHERE amc IN (SELECT DISTINCT amc FROM holdings)").fetchall()
             for amc, rta in db_overrides: amc_rta_map[amc] = rta
             updated_rtas = {}
-            cols_per_row, rows_needed = 2, -(-len(amc_rta_map) // cols_per_row)
+            # Split into two separate lines
+            cols_per_row = 2
+            rows_needed = -(-len(amc_rta_map) // cols_per_row)
             for row_i in range(rows_needed):
                 cols = st.columns(cols_per_row)
                 for col_i in range(cols_per_row):
