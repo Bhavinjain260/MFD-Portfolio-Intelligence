@@ -2446,7 +2446,9 @@ elif mode == "⚙️ Admin Panel":
             st.markdown("#### Existing CAMS Brokerage Summary")
             with get_conn() as conn:
                 cams_summary = pd.read_sql(
-                    """SELECT accrual_month AS "Month", COUNT(*) AS "Rows", COUNT(DISTINCT folio_no) AS "Folios", ROUND(SUM(brkage_amt), 2) AS "Total Brokerage (Rs)", upload_batch AS "Batch" FROM cams_brokerage GROUP BY accrual_month, upload_batch ORDER BY accrual_month DESC""",
+                    """SELECT accrual_month AS "Month", COUNT(*) AS "Rows", COUNT(DISTINCT folio_no) AS "Folios", 
+                    ROUND(SUM(brkage_amt), 2) AS "Total Brokerage (Rs)", upload_batch AS "Batch" FROM cams_brokerage 
+                    GROUP BY accrual_month, upload_batch ORDER BY accrual_month DESC""",
                     conn)
             if cams_summary.empty:
                 st.info("No CAMS brokerage data uploaded yet.")
@@ -2455,7 +2457,7 @@ elif mode == "⚙️ Admin Panel":
             if st.button("⚠️ Clear All CAMS Brokerage Data"):
                 with get_conn() as conn: conn.execute("DELETE FROM cams_brokerage")
                 st.warning("All CAMS brokerage data deleted.")
-                st.cache_data.clear();
+                st.cache_data.clear()
                 st.rerun()
 
             st.divider()
@@ -2465,7 +2467,9 @@ elif mode == "⚙️ Admin Panel":
             kf_brok_file = st.file_uploader("KFinTech Brokerage CSV / TSV", type=["csv", "txt", "tsv"],
                                             key="kf_brok_file")
             replace_kf_brok = st.checkbox("Replace ALL existing KFinTech brokerage data", key="replace_kf_brok",
-                                          help="Checked: deletes all existing KFinTech brokerage rows, then reinserts.\nUnchecked: only inserts transactions not already present (matched on trxn_no + folio + accrual_month).")
+                                          help="Checked: deletes all existing KFinTech brokerage rows, "
+                                               "then reinserts.\nUnchecked: only inserts transactions not already "
+                                               "present (matched on trxn_no + folio + accrual_month).")
             if replace_kf_brok:
                 st.warning("Replace mode: ALL existing KFinTech brokerage data will be deleted and reimported.",
                            icon="⚠️")
@@ -2496,8 +2500,8 @@ elif mode == "⚙️ Admin Panel":
                 st.dataframe(kf_summary, use_container_width=True, hide_index=True)
             if st.button("⚠️ Clear All KFinTech Brokerage Data"):
                 with get_conn() as conn: conn.execute("DELETE FROM kfintech_brokerage")
-                st.warning("All KFinTech brokerage data deleted.");
-                st.cache_data.clear();
+                st.warning("All KFinTech brokerage data deleted.")
+                st.cache_data.clear()
                 st.rerun()
         else:
             col_cams, col_kfin = st.columns(2)
@@ -2561,8 +2565,8 @@ elif mode == "⚙️ Admin Panel":
                 st.metric("CAMS Grand Total", format_aum(load_total_aum()))
                 if st.button("⚠️ Clear CAMS AUM"):
                     with get_conn() as conn: conn.execute("DELETE FROM cams_aum")
-                    st.warning("CAMS AUM data deleted.");
-                    st.cache_data.clear();
+                    st.warning("CAMS AUM data deleted.")
+                    st.cache_data.clear()
                     st.rerun()
             with c2:
                 st.markdown("**KFinTech AUM**")
@@ -2586,10 +2590,10 @@ elif mode == "⚙️ Admin Panel":
             st.metric("📦 Combined Total AUM (CAMS + KFinTech)", format_aum(combined["total"]))
             if st.button("⚠️ Clear ALL AUM Data"):
                 with get_conn() as conn:
-                    conn.execute("DELETE FROM cams_aum");
+                    conn.execute("DELETE FROM cams_aum")
                     conn.execute("DELETE FROM kfintech_aum")
-                st.warning("All AUM data (CAMS + KFinTech) deleted.");
-                st.cache_data.clear();
+                st.warning("All AUM data (CAMS + KFinTech) deleted.")
+                st.cache_data.clear()
                 st.rerun()
 
     with tab_amc:
@@ -2607,8 +2611,8 @@ elif mode == "⚙️ Admin Panel":
                 with get_conn() as conn:
                     for amc, enabled in updated_enabled.items(): conn.execute(
                         "UPDATE amc_config SET is_enabled=? WHERE amc=?", (1 if enabled else 0, amc))
-                st.success("AMC config saved.");
-                st.cache_data.clear();
+                st.success("AMC config saved.")
+                st.cache_data.clear()
                 st.rerun()
 
     with tab_map:
@@ -2653,8 +2657,8 @@ elif mode == "⚙️ Admin Panel":
                                 (code.strip(), name))
                         else:
                             conn.execute("DELETE FROM amc_code_map WHERE amc_code=?", (code.strip(),))
-                st.success("Mappings saved.");
-                st.cache_data.clear();
+                st.success("Mappings saved.")
+                st.cache_data.clear()
                 st.rerun()
 
     with tab_db:
@@ -2678,8 +2682,8 @@ elif mode == "⚙️ Admin Panel":
         for k, v in stats.items(): st.metric(k, v)
         if st.button("⚠️ Clear All Holdings"):
             with get_conn() as conn: conn.execute("DELETE FROM holdings")
-            st.warning("All holdings deleted.");
-            st.cache_data.clear();
+            st.warning("All holdings deleted.")
+            st.cache_data.clear()
             st.rerun()
 
     with tab_rta_map:
@@ -2713,6 +2717,6 @@ elif mode == "⚙️ Admin Panel":
                         (amc, rta))
                     conn.execute(
                         "UPDATE holdings SET rta = (SELECT rta FROM amc_config WHERE amc = holdings.amc) WHERE amc IN (SELECT amc FROM amc_config)")
-                st.success("RTA mappings updated & synced to holdings.");
-                st.cache_data.clear();
+                st.success("RTA mappings updated & synced to holdings.")
+                st.cache_data.clear()
                 st.rerun()
