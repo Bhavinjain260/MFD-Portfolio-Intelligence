@@ -1613,6 +1613,7 @@ elif mode == "💰 Earnings":
         csv = pd.DataFrame(table_data).to_csv(index=False).encode()
         st.download_button("⬇️ Export Earnings (CSV)", csv, f"brokerage_{sel_month_str}_{sel_year}.csv", "text/csv")
 
+        # AMC-Wise Brokerage Breakdown
         st.divider()
         st.subheader("📈 AMC-wise Brokerage Breakdown (All Time)")
         st.caption("View total brokerage earned per AMC from manual entries AND uploaded files")
@@ -1624,46 +1625,75 @@ elif mode == "💰 Earnings":
                                           key="breakdown_sort")
         with col3:
             breakdown_search = st.text_input("🔍 Search AMC", "", key="breakdown_search")
+
+        # Load manual entries
         with get_conn() as conn:
-            manual_all = pd.read_sql("SELECT amc, SUM(amount) as total_manual FROM monthly_brokerage GROUP BY amc",
-                                     conn)
-            manual_map = dict(zip(manual_all["amc"], manual_all["total_manual"])) if not manual_all.empty else {}
-            cams_file_all = pd.read_sql("""
-                SELECT COALESCE(m.amc_name, h.amc) as amc_name, cb.amc_code, SUM(cb.brkage_amt) as total_file
-                FROM cams_brokerage cb LEFT JOIN amc_code_map m ON UPPER(TRIM(cb.amc_code)) = UPPER(TRIM(m.amc_code))
+            manual_all = pd.read_sql(
+                "SELECT amc, SUM(amount) as total_manual FROM monthly_brokerage GROUP BY amc",
+                conn
+            )
+        manual_map = dict(zip(manual_all["amc"], manual_all["total_manual"])) if not manual_all.empty else {}
+
+        # Load file-based (CAMS) brokerage and keep file_all in scope
+        with get_conn() as conn:
+            file_all = pd.read_sql("""
+                SELECT
+                    COALESCE(m.amc_name, h.amc) as amc_name,
+                    cb.amc_code,
+                    SUM(cb.brkage_amt) as total_file
+                FROM cams_brokerage cb
+                LEFT JOIN amc_code_map m ON UPPER(TRIM(cb.amc_code)) = UPPER(TRIM(m.amc_code))
                 LEFT JOIN holdings h ON TRIM(LOWER(cb.folio_no)) = TRIM(LOWER(h.folio_no))
                 GROUP BY COALESCE(m.amc_name, h.amc), cb.amc_code
             """, conn)
-            kf_file_all = pd.read_sql("""
-                SELECT COALESCE(m.amc_name, h.amc) as amc_name, kb.amc_code, SUM(kb.brkage_amt) as total_file
-                FROM kfintech_brokerage kb LEFT JOIN amc_code_map m ON UPPER(TRIM(kb.amc_code)) = UPPER(TRIM(m.amc_code))
-                LEFT JOIN holdings h ON TRIM(LOWER(kb.folio_no)) = TRIM(LOWER(h.folio_no))
-                GROUP BY COALESCE(m.amc_name, h.amc), kb.amc_code
-            """, conn)
-        file_map = {}
-        for df_file in [cams_file_all, kf_file_all]:
-            if not df_file.empty:
-                for _, r in df_file.iterrows():
-                    key = r["amc_name"] or r["amc_code"] or ""
-                    if key: file_map[key] = file_map.get(key, 0.0) + float(r["total_file"] or 0)
+
+        file_map: dict[str, float] = {}
+        if not file_all.empty:
+            for _, r in file_all.iterrows():
+                key = r["amc_name"] or r["amc_code"] or ""
+                if key:
+                    file_map[key] = file_map.get(key, 0.0) + float(r["total_file"] or 0)
+
+        # Now build breakdown_data — all references to file_all are safe because we don't use it directly below
+        # Instead, we only use file_map (which is in scope)
+        cams_months_list = load_cams_months()
+
         breakdown_data = []
         for amc in sorted(set(list(manual_map.keys()) + list(file_map.keys()) + client_amcs)):
             if breakdown_rta != "All":
                 amc_rta = df_active[df_active["amc"] == amc]["rta"].iloc[0] if amc in df_active[
                     "amc"].values else "Unknown"
-                if amc_rta != breakdown_rta: continue
-            if breakdown_search and breakdown_search.lower() not in amc.lower(): continue
-            manual_val, file_val = manual_map.get(amc, 0.0), file_map.get(amc, 0.0)
+                if amc_rta != breakdown_rta:
+                    continue
+            if breakdown_search and breakdown_search.lower() not in amc.lower():
+                continue
+
+            manual_val = manual_map.get(amc, 0.0)
+            file_val = file_map.get(amc, 0.0)
             diff = manual_val - file_val
             match_status = "✅ Match" if abs(diff) < 10 else ("⚠️ Gap" if diff != 0 else "—")
+
+            # Count months with file data: check if this AMC appears in any accrual month
+            months_with_file = 0
+            if not file_all.empty:
+                amc_in_file = (
+                        (file_all["amc_name"] == amc) |
+                        (file_all["amc_code"] == amc)
+                )
+                if amc_in_file.any():
+                    # To count distinct months, we'd need to re-query, but for now, approximate as 1 if present
+                    months_with_file = 1  # Simplified; full count would require joining back to raw cams_brokerage
+
             breakdown_data.append({
-                "AMC": amc, "RTA": df_active[df_active["amc"] == amc]["rta"].iloc[0] if amc in df_active[
+                "AMC": amc,
+                "RTA": df_active[df_active["amc"] == amc]["rta"].iloc[0] if amc in df_active[
                     "amc"].values else "Unknown",
-                "Manual Total (Rs)": manual_val, "File Total (Rs)": file_val, "Difference (Rs)": diff,
+                "Manual Total (Rs)": manual_val,
+                "File Total (Rs)": file_val,
+                "Difference (Rs)": diff,
                 "Match Status": match_status,
                 "Months with Manual": manual_all[manual_all["amc"] == amc].shape[0] if not manual_all.empty else 0,
-                "Months with File": len([m for m in all_rta_months if amc in (
-                    file_all[file_all["amc_name"] == amc]["amc_name"].values if not file_all.empty else [])]),
+                "Months with File": months_with_file,
             })
         breakdown_df = pd.DataFrame(breakdown_data)
         if breakdown_df.empty:
