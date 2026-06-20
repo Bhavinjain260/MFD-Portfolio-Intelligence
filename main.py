@@ -6,6 +6,8 @@ Updated: Folio Normalization + Full Precision Brokerage + Month Filters + RTA Bi
 + KFINTECH BROKERAGE UPLOAD + RECONCILIATION + CLIENT VIEW INTEGRATION
 + Admin Panel Revamp: Import BSE Data tab, merged RTA Data Upload tab
 + Smart Upsert: skip existing records, Replace = delete+reinsert only that dataset
++ Removed RTA filters from all pages, moved refresh/notifications to Dashboard only
++ Fixed dark mode CSS theming
 """
 import logging
 import re
@@ -241,7 +243,7 @@ def init_db() -> None:
         upload_batch    TEXT,
         UNIQUE(sip_reg_no, folio_no)
     );
-    
+
     CREATE TABLE IF NOT EXISTS kfintech_transactions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     product_code    TEXT,
@@ -600,6 +602,22 @@ def get_next_sip_date(day) -> str:
         return "N/A"
 
 
+def theme_plotly(fig, dark: bool):
+    """Apply dark/light theming to a Plotly figure."""
+    text_c = "#e6edf3" if dark else "#1a1a2e"
+    grid_c = "#30363d" if dark else "#e2e8f0"
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font_color=text_c,
+        title_font_color=text_c,
+        legend_font_color=text_c,
+        xaxis=dict(gridcolor=grid_c, linecolor=grid_c),
+        yaxis=dict(gridcolor=grid_c, linecolor=grid_c),
+    )
+    return fig
+
+
 # ==================== AMFI SYNC ====================
 def _amfi_sync_worker(result_bucket: list) -> None:
     try:
@@ -612,11 +630,9 @@ def _amfi_sync_worker(result_bucket: list) -> None:
             if not line:
                 continue
             if ";" not in line:
-                # AMC header line — e.g. "Aditya Birla Sun Life Mutual Fund"
                 if "Mutual Fund" in line or "mutual fund" in line.lower():
                     curr_amc = line.strip()
                 continue
-            # Lines with semicolons = scheme data rows
             parts = line.split(";")
             if len(parts) < 6 or parts[0] == "Scheme Code":
                 continue
@@ -949,22 +965,6 @@ def global_search(query: str) -> dict:
 
 # ==================== APP INIT ====================
 st.set_page_config(page_title="MFD Portfolio Intelligence", layout="wide", page_icon="📊")
-st.markdown("""
-<style>
-.stMarkdown, .stMetric, .stDataFrame, .stPlotlyChart, [data-testid="stMetricLabel"], [data-testid="stMetricValue"], .streamlit-expanderContent, .stAlert { color: var(--text-color) !important; }
-.dataframe { color: var(--text-color) !important; background: var(--background-color) !important; }
-.dataframe th { color: var(--text-color) !important; background: var(--secondary-background-color) !important; }
-.aum-card { background: linear-gradient(135deg, #1a472a 0%, #2d6a4f 100%); border-radius: 12px; padding: 20px 24px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.1); }
-.aum-card .label { font-size: 0.85rem; color: rgba(255,255,255,0.75); margin-bottom: 4px; }
-.aum-card .value { font-size: 1.6rem; font-weight: 700; color: #fff; }
-.aum-card-kfin { background: linear-gradient(135deg, #1a3a5c 0%, #2d6494 100%); border-radius: 12px; padding: 20px 24px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.1); }
-.aum-card-kfin .label { font-size: 0.85rem; color: rgba(255,255,255,0.75); margin-bottom: 4px; }
-.aum-card-kfin .value { font-size: 1.6rem; font-weight: 700; color: #fff; }
-.notif-badge { display:inline-block; background:#ef4444; color:#fff; border-radius:999px; font-size:0.7rem; font-weight:700; padding:1px 7px; margin-left:6px; vertical-align:middle; }
-.search-card { background: var(--secondary-background-color); border:1px solid var(--border-color); border-radius:8px; padding:10px 14px; margin-bottom:6px; }
-.search-tag { display:inline-block; font-size:0.7rem; font-weight:600; background: var(--accent-color); color: var(--accent-text); border-radius:4px; padding:1px 6px; margin-right:6px; }
-</style>
-""", unsafe_allow_html=True)
 
 init_db()
 start_amfi_sync()
@@ -974,112 +974,234 @@ if result_bucket:
     st.toast(f"{'✅' if status == 'ok' else '⚠️'} AMFI: {msg}")
     result_bucket.clear()
 
-# ==================== SIDEBAR / NAV ====================
-if "dark_mode" not in st.session_state: st.session_state["dark_mode"] = False
+# -------------------- THEME (single source of truth) --------------------
+if "dark_mode" not in st.session_state:
+    st.session_state["dark_mode"] = False
 dark = st.session_state["dark_mode"]
-_bg = "#0e1117" if dark else "#ffffff"
-_sbg = "#1a1f2e" if dark else "#f0f2f6"
-_text = "#fafafa" if dark else "#1a1a2e"
-_muted = "#9aa0b0" if dark else "#6b7280"
-_border = "#2d3748" if dark else "#e2e8f0"
-_accent = "#4f8ef7" if dark else "#2563eb"
 
+_bg   = "#0e1117" if dark else "#ffffff"
+_sbg  = "#161b22" if dark else "#f6f8fa"
+_text = "#e6edf3" if dark else "#1a1a2e"
+_muted= "#8b949e" if dark else "#6b7280"
+_border="#30363d" if dark else "#d0d7de"
+_accent="#58a6ff" if dark else "#2563eb"
+
+# One consolidated CSS injection – no var(--text-color) conflicts
 st.markdown(f"""
 <style>
-.stApp {{ background-color: {_bg} !important; }}
-section[data-testid="stSidebar"] {{ background-color: {_sbg} !important; }}
-.stMarkdown, p, span, div, label {{ color: {_text} !important; }}
-[data-testid="stMetricLabel"], [data-testid="stMetricValue"] {{ color: {_text} !important; }}
-.dataframe {{ color: {_text} !important; background: {_sbg} !important; }}
-.dataframe th {{ color: {_text} !important; background: {_border} !important; }}
-.stAlert {{ color: {_text} !important; }}
-.aum-card {{ background: linear-gradient(135deg, #1a472a 0%, #2d6a4f 100%); border-radius: 12px; padding: 20px 24px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.1); }}
-.aum-card .label {{ font-size:0.85rem; color:rgba(255,255,255,0.75); margin-bottom:4px; }}
-.aum-card .value {{ font-size:1.6rem; font-weight:700; color:#fff; }}
-.aum-card-kfin {{ background: linear-gradient(135deg, #1a3a5c 0%, #2d6494 100%); border-radius: 12px; padding: 20px 24px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.1); }}
-.aum-card-kfin .label {{ font-size:0.85rem; color:rgba(255,255,255,0.75); margin-bottom:4px; }}
-.aum-card-kfin .value {{ font-size:1.6rem; font-weight:700; color:#fff; }}
-.notif-badge {{ display:inline-block; background:#ef4444; color:#fff; border-radius:999px; font-size:0.7rem; font-weight:700; padding:1px 7px; margin-left:6px; vertical-align:middle; }}
-.search-card {{ background:{_sbg}; border:1px solid {_border}; border-radius:8px; padding:10px 14px; margin-bottom:6px; }}
-.search-tag {{ display:inline-block; font-size:0.7rem; font-weight:600; background:{_accent}22; color:{_accent}; border-radius:4px; padding:1px 6px; margin-right:6px; }}
+    .stApp {{
+        background-color: {_bg} !important;
+    }}
+    section[data-testid="stSidebar"] {{
+        background-color: {_sbg} !important;
+    }}
+    section[data-testid="stSidebar"] * {{
+        color: {_text} !important;
+    }}
+    .stMarkdown, p, span, div, label,
+    [data-testid="stMetricLabel"], [data-testid="stMetricValue"],
+    .streamlit-expanderContent, .stAlert,
+    .stButton > button, .stTabs button {{
+        color: {_text} !important;
+    }}
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input,
+    .stSelectbox > div > div > div,
+    .stRadio > div {{
+        background-color: {_sbg} !important;
+        color: {_text} !important;
+        border-color: {_border} !important;
+    }}
+    .stDataFrame, .dataframe {{
+        color: {_text} !important;
+        background: {_sbg} !important;
+    }}
+    .dataframe th, .dataframe td {{
+        color: {_text} !important;
+        background: {_sbg} !important;
+        border-color: {_border} !important;
+    }}
+    .main .block-container {{
+        padding-top: 0.75rem !important;
+        padding-bottom: 1rem !important;
+        max-width: 100% !important;
+    }}
+    .aum-card {{
+        background: linear-gradient(135deg, #1a472a 0%, #2d6a4f 100%);
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 8px;
+        border: 1px solid rgba(255,255,255,0.1);
+    }}
+    .aum-card .label {{
+        font-size: 0.85rem;
+        color: rgba(255,255,255,0.75);
+        margin-bottom: 4px;
+    }}
+    .aum-card .value {{
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #fff;
+    }}
+    .aum-card-kfin {{
+        background: linear-gradient(135deg, #1a3a5c 0%, #2d6494 100%);
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 8px;
+        border: 1px solid rgba(255,255,255,0.1);
+    }}
+    .aum-card-kfin .label {{
+        font-size: 0.85rem;
+        color: rgba(255,255,255,0.75);
+        margin-bottom: 4px;
+    }}
+    .aum-card-kfin .value {{
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #fff;
+    }}
+    .notif-badge {{
+        display:inline-block;
+        background:#ef4444;
+        color:#fff;
+        border-radius:999px;
+        font-size:0.7rem;
+        font-weight:700;
+        padding:1px 7px;
+        margin-left:6px;
+        vertical-align:middle;
+    }}
+    .search-card {{
+        background:{_sbg};
+        border:1px solid {_border};
+        border-radius:8px;
+        padding:10px 14px;
+        margin-bottom:6px;
+    }}
+    .search-tag {{
+        display:inline-block;
+        font-size:0.7rem;
+        font-weight:600;
+        background:{_accent}22;
+        color:{_accent};
+        border-radius:4px;
+        padding:1px 6px;
+        margin-right:6px;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
-with st.sidebar:
-    t_col, d_col = st.columns([3, 1])
-    t_col.markdown(f"### MFD Intelligence")
-    if d_col.button("🌙" if not dark else "☀️", help="Toggle dark/light mode"):
+# -------------------- COMPACT HEADER --------------------
+hdr1, hdr2, hdr3 = st.columns([6, 1, 3])
+with hdr1:
+    st.markdown("#### 📊 MFD Portfolio Intelligence")
+with hdr2:
+    if st.button("🌙" if not dark else "☀️", help="Toggle dark/light mode", use_container_width=True):
         st.session_state["dark_mode"] = not st.session_state["dark_mode"]
         st.rerun()
-    st.divider()
-    search_q = st.text_input("🔍 Global Search", placeholder="Client, folio, scheme…", key="global_search_q")
-    if search_q and len(search_q.strip()) >= 2:
-        with st.spinner("Searching…"):
-            sr = global_search(search_q)
-            if not sr:
-                st.caption("No results found.")
-            else:
-                if "clients" in sr:
-                    st.markdown(f"**👤 Clients** ({len(sr['clients'])})")
-                    for r in sr["clients"][:5]: st.markdown(
-                        f'<div class="search-card"><span class="search-tag">Client</span><b>{r["name"]}</b><br><small style="color:{_muted}">{r["pan"] or "—"}</small></div>',
-                        unsafe_allow_html=True)
-                if "folios" in sr:
-                    st.markdown(f"**📂 Folios / Schemes** ({len(sr['folios'])})")
-                    for r in sr["folios"][:5]: st.markdown(
-                        f'<div class="search-card"><span class="search-tag">Folio</span><b>{r["folio_no"]}</b><br><small style="color:{_muted}">{r["scheme_name"][:40]} — {r["client_name"] or "?"}</small></div>',
-                        unsafe_allow_html=True)
-                if "aum" in sr:
-                    st.markdown(f"**📦 AUM Records** ({len(sr['aum'])})")
-                    for r in sr["aum"][:4]: st.markdown(
-                        f'<div class="search-card"><span class="search-tag">AUM</span><b>{r["inv_name"]}</b><br><small style="color:{_muted}">{r["scheme_name"][:40]}</small></div>',
-                        unsafe_allow_html=True)
-    st.divider()
-    mode = st.radio("Navigate", ["📊 Dashboard", "👤 Client View", "💰 Earnings", "⚙️ Admin Panel"],
-                    label_visibility="collapsed")
-    st.divider()
-    notifs = load_notifications()
-    n_sips, n_unmatched, n_pending = len(notifs["sips_due"]), notifs["unmatched_aum"], len(notifs["pending_brokerage"])
-    total_n = n_sips + (1 if n_unmatched > 0 else 0) + (1 if n_pending > 0 else 0)
-    notif_label = "🔔 Notifications"
-    if total_n: notif_label += f' <span class="notif-badge">{total_n}</span>'
-    st.markdown(notif_label, unsafe_allow_html=True)
-    with st.expander("View Alerts", expanded=(total_n > 0)):
-        if n_sips:
-            st.markdown(f"**📅 SIPs due in 7 days** ({n_sips})")
-            for s in notifs["sips_due"][:10]: st.caption(f"• {s['client']} — {s['date']} — {s['scheme'][:35]}")
+with hdr3:
+    search_q = st.text_input(
+        "🔍 Global Search", placeholder="Client, folio, scheme…",
+        key="global_search_q", label_visibility="collapsed"
+    )
+
+# Navigation tabs (no heavy dividers)
+nav_cols = st.columns([1, 1, 1, 1])
+nav_options = ["📊 Dashboard", "👤 Client View", "💰 Earnings", "⚙️ Admin Panel"]
+nav_keys = ["nav_dash", "nav_client", "nav_earn", "nav_admin"]
+if "nav_mode" not in st.session_state:
+    st.session_state["nav_mode"] = "📊 Dashboard"
+
+for i, (opt, key) in enumerate(zip(nav_options, nav_keys)):
+    with nav_cols[i]:
+        btn_type = "primary" if st.session_state["nav_mode"] == opt else "secondary"
+        label = opt.split(' ')[1]
+        if st.button(label, key=key, type=btn_type, use_container_width=True):
+            st.session_state["nav_mode"] = opt
+            st.rerun()
+
+# Handle global search results inline
+if search_q and len(search_q.strip()) >= 2:
+    with st.spinner("Searching…"):
+        sr = global_search(search_q)
+        if not sr:
+            st.caption("No results found.")
         else:
-            st.caption("✅ No SIPs due in next 7 days.")
-        if n_unmatched:
-            st.markdown(f"**⚠️ Unmatched AUM folios:** {n_unmatched}")
-            st.caption("Folios in AUM file with no client/holding match.")
-        else:
-            st.caption("✅ All AUM folios matched.")
-        if n_pending:
-            st.markdown(f"**⏳ Brokerage not entered this month** ({n_pending})")
-            for a in notifs["pending_brokerage"][:8]: st.caption(f"• {a}")
-        else:
-            st.caption("✅ All AMC brokerage entered for this month.")
-    st.divider()
-    if st.button("🔄 Refresh Data", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
+            if "clients" in sr:
+                st.markdown(f"**👤 Clients** ({len(sr['clients'])})")
+                for r in sr["clients"][:5]: st.markdown(
+                    f'<div class="search-card"><span class="search-tag">Client</span><b>{r["name"]}</b><br><small style="color:{_muted}">{r["pan"] or "—"}</small></div>',
+                    unsafe_allow_html=True)
+            if "folios" in sr:
+                st.markdown(f"**📂 Folios / Schemes** ({len(sr['folios'])})")
+                for r in sr["folios"][:5]: st.markdown(
+                    f'<div class="search-card"><span class="search-tag">Folio</span><b>{r["folio_no"]}</b><br><small style="color:{_muted}">{r["scheme_name"][:40]} — {r["client_name"] or "?"}</small></div>',
+                    unsafe_allow_html=True)
+            if "aum" in sr:
+                st.markdown(f"**📦 AUM Records** ({len(sr['aum'])})")
+                for r in sr["aum"][:4]: st.markdown(
+                    f'<div class="search-card"><span class="search-tag">AUM</span><b>{r["inv_name"]}</b><br><small style="color:{_muted}">{r["scheme_name"][:40]}</small></div>',
+                    unsafe_allow_html=True)
+
+mode = st.session_state.get("nav_mode", "📊 Dashboard")
 
 df_active = load_active_holdings()
 active_amcs_raw = load_active_amcs()
 
 # ==================== 📊 DASHBOARD ====================
 if mode == "📊 Dashboard":
-    st.header("📊 Portfolio Overview")
-    rta_filter = st.selectbox("🔍 RTA Filter", ["All", "CAMS", "KFinTech", "Unknown"], key="dash_rta")
-    df_filtered = df_active[df_active["rta"] == rta_filter] if rta_filter != "All" else df_active
+    st.header("📊 Portfolio Overview")    # ---- Dashboard-only: Refresh + Notifications ----
+    c_refresh, c_notif = st.columns([1, 5])
+    with c_refresh:
+        if st.button("🔄 Refresh Data", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+    with c_notif:
+        notifs = load_notifications()
+        n_sips = len(notifs["sips_due"])
+        n_unmatched = notifs["unmatched_aum"]
+        n_pending = len(notifs["pending_brokerage"])
+        total_n = n_sips + (1 if n_unmatched > 0 else 0) + (1 if n_pending > 0 else 0)
+
+        if total_n > 0:
+            parts = []
+            if n_sips:      parts.append(f"📅 {n_sips} SIPs due")
+            if n_unmatched: parts.append(f"⚠️ {n_unmatched} unmatched folios")
+            if n_pending:   parts.append(f"⏳ {n_pending} pending brokerage")
+            st.caption(" | ".join(parts) + f' <span class="notif-badge">{total_n}</span>', unsafe_allow_html=True)
+        else:
+            st.caption("✅ All caught up — no pending alerts.")
+
+    # ---- Notification Details Expander (Dashboard only) ----
+    if total_n > 0:
+        with st.expander("🔔 View Notification Details", expanded=False):
+            if n_sips:
+                st.markdown(f"**📅 SIPs due in next 7 days** ({n_sips})")
+                for s in notifs["sips_due"][:10]:
+                    st.caption(f"• {s['client']} — {s['date']} — {s['scheme'][:35]}")
+            else:
+                st.caption("✅ No SIPs due in next 7 days.")
+
+            if n_unmatched:
+                st.markdown(f"**⚠️ Unmatched AUM folios:** {n_unmatched}")
+            else:
+                st.caption("✅ All AUM folios matched.")
+
+            if n_pending:
+                st.markdown(f"**⏳ Brokerage not entered this month** ({n_pending})")
+                for a in notifs["pending_brokerage"][:8]:
+                    st.caption(f"• {a}")
+            else:
+                st.caption("✅ All AMC brokerage entered for this month.")
+
+    # ---- Metrics (no RTA filter) ----
     with get_conn() as conn:
         total_brokerage = conn.execute("SELECT COALESCE(SUM(amount), 0) FROM monthly_brokerage").fetchone()[0]
         total_clients = conn.execute("SELECT COUNT(*) FROM clients").fetchone()[0]
     aum_data = load_combined_total_aum()
     total_aum, cams_aum, kfin_aum = aum_data["total"], aum_data["cams"], aum_data["kfintech"]
-    sip_count = len(df_filtered)
-    sip_total = df_filtered["sip_amount"].sum() if not df_filtered.empty else 0
+    sip_count = len(df_active)
+    sip_total = df_active["sip_amount"].sum() if not df_active.empty else 0
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("👥 Clients", total_clients)
     m2.metric("📈 Active SIPs", sip_count)
@@ -1103,29 +1225,29 @@ if mode == "📊 Dashboard":
         with aum_col4:
             with get_conn() as conn:
                 aum_schemes = conn.execute(
-                    "SELECT COUNT(DISTINCT scheme_name) FROM (SELECT scheme_name FROM cams_aum UNION SELECT scheme_name FROM kfintech_aum)").fetchone()[
-                    0]
+                    "SELECT COUNT(DISTINCT scheme_name) FROM (SELECT scheme_name FROM cams_aum UNION SELECT scheme_name FROM kfintech_aum)").fetchone()[0]
                 aum_folios = conn.execute(
-                    "SELECT COUNT(DISTINCT folio_no) FROM (SELECT folio_no FROM cams_aum UNION SELECT folio_no FROM kfintech_aum)").fetchone()[
-                    0]
+                    "SELECT COUNT(DISTINCT folio_no) FROM (SELECT folio_no FROM cams_aum UNION SELECT folio_no FROM kfintech_aum)").fetchone()[0]
             st.markdown(
                 f"""<div class="aum-card" style="background: linear-gradient(135deg, #5c1a3a 0%, #942d64 100%);"><div class="label">📂 Schemes × Folios</div><div class="value">{aum_schemes} × {aum_folios}</div></div>""",
                 unsafe_allow_html=True)
     else:
         st.info("📦 Upload CAMS or KFinTech AUM Report in Admin Panel → Import RTA Data to see Total AUM.")
     st.divider()
-    if df_filtered.empty:
-        st.warning(f"📭 No Active Holdings Found for RTA: {rta_filter}")
+    if df_active.empty:
+        st.warning("📭 No Active Holdings Found.")
     else:
         c1, c2 = st.columns(2)
-        amc_grp = df_filtered.groupby("amc")["sip_amount"].sum().reset_index()
+        amc_grp = df_active.groupby("amc")["sip_amount"].sum().reset_index()
         with c1:
             fig = px.pie(amc_grp, values="sip_amount", names="amc", hole=0.4,
-                         title=f"SIP Distribution by AMC ({rta_filter})")
+                         title="SIP Distribution by AMC (All)")
+            fig = theme_plotly(fig, dark)
             st.plotly_chart(fig, use_container_width=True)
         with c2:
             fig = px.bar(amc_grp, x="amc", y="sip_amount", labels={"amc": "AMC", "sip_amount": "Monthly SIP (Rs)"},
-                         title=f"Monthly SIP by AMC ({rta_filter})")
+                         title="Monthly SIP by AMC (All)")
+            fig = theme_plotly(fig, dark)
             st.plotly_chart(fig, use_container_width=True)
         if total_aum > 0:
             st.subheader("📦 AUM by AMC")
@@ -1139,7 +1261,6 @@ if mode == "📊 Dashboard":
                         ON UPPER(TRIM(a.amc_code)) = UPPER(TRIM(m.amc_code))
                     GROUP BY COALESCE(m.amc_name, a.amc_code)
                 """, conn)
-
                 kfin_aum_by_amc = pd.read_sql("""
                     SELECT 
                         COALESCE(m.amc_name, a.amc_code) as amc_name,
@@ -1149,10 +1270,8 @@ if mode == "📊 Dashboard":
                         ON UPPER(TRIM(a.amc_code)) = UPPER(TRIM(m.amc_code))
                     GROUP BY COALESCE(m.amc_name, a.amc_code)
                 """, conn)
-
             cams_aum_by_amc["source"], kfin_aum_by_amc["source"] = "CAMS", "KFinTech"
             combined_aum = pd.concat([cams_aum_by_amc, kfin_aum_by_amc], ignore_index=True)
-
             if not combined_aum.empty:
                 fig_aum = px.bar(
                     combined_aum,
@@ -1163,15 +1282,16 @@ if mode == "📊 Dashboard":
                     title="Total AUM Distribution by AMC & RTA",
                     color_discrete_map={"CAMS": "#2d6a4f", "KFinTech": "#2d6494"}
                 )
+                fig_aum = theme_plotly(fig_aum, dark)
                 fig_aum.update_layout(xaxis_tickangle=-45)
                 st.plotly_chart(fig_aum, use_container_width=True)
         csv = amc_grp.to_csv(index=False).encode()
-        st.download_button("⬇️ Export AMC Summary (CSV)", csv, f"amc_summary_{rta_filter}.csv", "text/csv")
+        st.download_button("⬇️ Export AMC Summary (CSV)", csv, "amc_summary_all.csv", "text/csv")
+
 
 # ==================== 👤 CLIENT VIEW ====================
 elif mode == "👤 Client View":
     st.header("👤 Client Portfolio")
-    rta_filter = st.selectbox("🔍 RTA Filter", ["All", "CAMS", "KFinTech", "Unknown"], key="client_rta")
     clients = load_clients()
     if clients.empty:
         st.warning("No clients imported.")
@@ -1180,7 +1300,6 @@ elif mode == "👤 Client View":
         if sel:
             code = clients.loc[clients["name"] == sel, "client_code"].iloc[0]
             c_holdings = df_active[df_active["client_code"] == code].copy()
-            if rta_filter != "All": c_holdings = c_holdings[c_holdings["rta"] == rta_filter]
             client_aum_df = load_combined_client_aum(code)
             total_invested = client_aum_df["rupee_bal"].sum() if not client_aum_df.empty else 0.0
             cams_aum_df, kfin_aum_df = load_client_aum(code), load_client_kfintech_aum(code)
@@ -1233,6 +1352,7 @@ elif mode == "👤 Client View":
                         fig_pie = px.pie(client_aum_df, values="rupee_bal", names="scheme_name", hole=0.4,
                                          title="Portfolio Allocation",
                                          color_discrete_sequence=px.colors.qualitative.Set3)
+                        fig_pie = theme_plotly(fig_pie, dark)
                         fig_pie.update_layout(height=350)
                         st.plotly_chart(fig_pie, use_container_width=True)
             if has_sips:
@@ -1267,42 +1387,36 @@ elif mode == "👤 Client View":
             if all_client_brok.empty:
                 st.info("No RTA brokerage data found for this client's folios.")
             else:
-                if rta_filter != "All": all_client_brok = all_client_brok[all_client_brok["rta"] == rta_filter]
-                if all_client_brok.empty:
-                    st.info(f"No {rta_filter} brokerage data found for this client's folios.")
-                else:
-                    months_avail = sorted(all_client_brok["accrual_month"].unique(), reverse=True)
-                    sel_month = st.selectbox("📅 Filter by Accrual Month", ["All"] + months_avail,
-                                             key=f"brok_filter_{code}")
-                    view_df = all_client_brok if sel_month == "All" else all_client_brok[
-                        all_client_brok["accrual_month"] == sel_month]
-                    total_brok = view_df["brokerage"].sum()
-                    month_grp = view_df.groupby("accrual_month")["brokerage"].sum().reset_index()
-                    bm1, bm2 = st.columns(2)
-                    bm1.metric("💰 Total Brokerage", format_brokerage(total_brok))
-                    bm2.metric("📅 Months Shown", len(month_grp) if sel_month == "All" else 1)
-                    disp = view_df[
-                        ["accrual_month", "amc_name", "scheme_name", "folio_no", "trxn_type", "transaction_amount",
-                         "brokerage", "rate_pct", "rta"]].copy()
-                    disp["transaction_amount"] = disp["transaction_amount"].apply(
-                        lambda x: format_currency(x, decimals=0))
-                    disp["brokerage"] = disp["brokerage"].apply(format_brokerage)
-                    disp["rate_pct"] = disp["rate_pct"].apply(lambda x: f"{float(x):.4f}%" if x else "-")
-                    disp.columns = ["Month", "AMC", "Scheme", "Folio", "Txn Type", "Txn Amount", "Brokerage", "Rate",
-                                    "RTA"]
-                    st.dataframe(disp, use_container_width=True, hide_index=True)
-                    brok_csv = view_df.to_csv(index=False).encode()
-                    st.download_button("⬇️ Export Client Brokerage (CSV)", brok_csv, f"{sel}_brokerage.csv", "text/csv")
+                months_avail = sorted(all_client_brok["accrual_month"].unique(), reverse=True)
+                sel_month = st.selectbox("📅 Filter by Accrual Month", ["All"] + months_avail,
+                                         key=f"brok_filter_{code}")
+                view_df = all_client_brok if sel_month == "All" else all_client_brok[
+                    all_client_brok["accrual_month"] == sel_month]
+                total_brok = view_df["brokerage"].sum()
+                month_grp = view_df.groupby("accrual_month")["brokerage"].sum().reset_index()
+                bm1, bm2 = st.columns(2)
+                bm1.metric("💰 Total Brokerage", format_brokerage(total_brok))
+                bm2.metric("📅 Months Shown", len(month_grp) if sel_month == "All" else 1)
+                disp = view_df[
+                    ["accrual_month", "amc_name", "scheme_name", "folio_no", "trxn_type", "transaction_amount",
+                     "brokerage", "rate_pct", "rta"]].copy()
+                disp["transaction_amount"] = disp["transaction_amount"].apply(
+                    lambda x: format_currency(x, decimals=0))
+                disp["brokerage"] = disp["brokerage"].apply(format_brokerage)
+                disp["rate_pct"] = disp["rate_pct"].apply(lambda x: f"{float(x):.4f}%" if x else "-")
+                disp.columns = ["Month", "AMC", "Scheme", "Folio", "Txn Type", "Txn Amount", "Brokerage", "Rate",
+                                "RTA"]
+                st.dataframe(disp, use_container_width=True, hide_index=True)
+                brok_csv = view_df.to_csv(index=False).encode()
+                st.download_button("⬇️ Export Client Brokerage (CSV)", brok_csv, f"{sel}_brokerage.csv", "text/csv")
+
 
 # ==================== 💰 EARNINGS ====================
 elif mode == "💰 Earnings":
     st.header("💰 Brokerage Earnings")
-    rta_filter = st.selectbox("🔍 RTA Filter", ["All", "CAMS", "KFinTech", "Unknown"], key="earnings_rta")
     client_amcs = sorted(df_active["amc"].unique().tolist()) if not df_active.empty else []
-    if rta_filter != "All": client_amcs = [amc for amc in client_amcs if
-                                           df_active[df_active["amc"] == amc]["rta"].iloc[0] == rta_filter]
     if not client_amcs:
-        st.info(f"No active SIPs to record brokerage for ({rta_filter} RTA).")
+        st.info("No active SIPs to record brokerage for.")
     else:
         current_month, current_year = datetime.now().strftime("%b"), datetime.now().year
         st.subheader("📝 Record / Update Brokerage")
@@ -1468,8 +1582,6 @@ elif mode == "💰 Earnings":
                 if key:
                     file_map[key] = file_map.get(key, 0.0) + float(r["total_file"] or 0)
 
-        # Now build breakdown_data — all references to file_all are safe because we don't use it directly below
-        # Instead, we only use file_map (which is in scope)
         cams_months_list = load_cams_months()
 
         breakdown_data = []
@@ -1487,7 +1599,6 @@ elif mode == "💰 Earnings":
             diff = manual_val - file_val
             match_status = "✅ Match" if abs(diff) < 10 else ("⚠️ Gap" if diff != 0 else "—")
 
-            # Count months with file data: check if this AMC appears in any accrual month
             months_with_file = 0
             if not file_all.empty:
                 amc_in_file = (
@@ -1495,8 +1606,7 @@ elif mode == "💰 Earnings":
                         (file_all["amc_code"] == amc)
                 )
                 if amc_in_file.any():
-                    # To count distinct months, we'd need to re-query, but for now, approximate as 1 if present
-                    months_with_file = 1  # Simplified; full count would require joining back to raw cams_brokerage
+                    months_with_file = 1
 
             breakdown_data.append({
                 "AMC": amc,
@@ -1544,6 +1654,7 @@ elif mode == "💰 Earnings":
             csv = export_df.to_csv(index=False).encode()
             st.download_button("⬇️ Export AMC Breakdown (CSV)", csv,
                                f"amc_breakdown_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv")
+
 
 # ==================== ⚙️ ADMIN PANEL ====================
 elif mode == "⚙️ Admin Panel":
@@ -1634,8 +1745,7 @@ elif mode == "⚙️ Admin Panel":
             if cams_report_type == "WBR2 — Transaction Report (R2)":
                 st.markdown("#### WBR2 — Transaction Report")
                 st.caption(
-                    "CAMS transaction file (R2). Required columns: `FOLIO_NO`, `TRXNNO`, `AMOUNT`, `UNITS`, `PURPRICE`, `TRADDATE`."
-                )
+                    "CAMS transaction file (R2). Required columns: `FOLIO_NO`, `TRXNNO`, `AMOUNT`, `UNITS`, `PURPRICE`, `TRADDATE`.")
                 r2_file = st.file_uploader("R2 CSV file", type=["csv", "txt", "tsv"], key="r2_file")
                 replace_r2 = st.checkbox(
                     "Replace ALL existing transaction data", key="replace_r2",
@@ -1681,8 +1791,7 @@ elif mode == "⚙️ Admin Panel":
             elif cams_report_type == "WBR9 — Folio Master (R9)":
                 st.markdown("#### WBR9 — Investor Folio Master")
                 st.caption(
-                    "CAMS folio master file (R9). Required columns: `FOLIOCHK`, `INV_NAME`, `SCH_NAME`, `RUPEE_BAL`, `PAN_NO`."
-                )
+                    "CAMS folio master file (R9). Required columns: `FOLIOCHK`, `INV_NAME`, `SCH_NAME`, `RUPEE_BAL`, `PAN_NO`.")
                 r9_file = st.file_uploader("R9 CSV file", type=["csv", "txt", "tsv"], key="r9_file")
                 replace_r9 = st.checkbox(
                     "Replace ALL existing folio master data", key="replace_r9",
@@ -1735,8 +1844,7 @@ elif mode == "⚙️ Admin Panel":
                 st.markdown("#### WBR49 — SIP Details / Master")
                 st.caption(
                     "CAMS SIP master file (R49). Required columns: `FOLIO_NO`, `AUTO_TRNO`, `AUTO_AMOUNT`, "
-                    "`FROM_DATE`, `TO_DATE`."
-                )
+                    "`FROM_DATE`, `TO_DATE`.")
                 r49_file = st.file_uploader("R49 CSV file", type=["csv", "txt", "tsv"], key="r49_file")
                 replace_r49 = st.checkbox(
                     "Replace ALL existing SIP master data", key="replace_r49",
@@ -1845,8 +1953,7 @@ elif mode == "⚙️ Admin Panel":
             if kf_report_type == "MFSD201 — Transaction Report":
                 st.markdown("#### MFSD201 — Transaction Report")
                 st.caption(
-                    "KFinTech transaction file (MFSD201). Required columns: `td_acno`, `td_trno`, `td_amt`, `td_units`, `td_pop`, `td_trdt`."
-                )
+                    "KFinTech transaction file (MFSD201). Required columns: `td_acno`, `td_trno`, `td_amt`, `td_units`, `td_pop`, `td_trdt`.")
                 kf_r2_file = st.file_uploader("MFSD201 CSV file", type=["csv", "txt", "tsv"], key="kf_r2_file")
                 replace_kf_r2 = st.checkbox(
                     "Replace ALL existing KFinTech transaction data", key="replace_kf_r2",
@@ -1892,8 +1999,7 @@ elif mode == "⚙️ Admin Panel":
             elif kf_report_type == "MFSD211 — Folio Master":
                 st.markdown("#### MFSD211 — Investor Folio Master")
                 st.caption(
-                    "KFinTech folio master file (MFSD211). Required columns: `Folio`, `Investor Name`, `Fund Description`, `PAN Number`."
-                )
+                    "KFinTech folio master file (MFSD211). Required columns: `Folio`, `Investor Name`, `Fund Description`, `PAN Number`.")
                 kf_r9_file = st.file_uploader("MFSD211 CSV file", type=["csv", "txt", "tsv"], key="kf_r9_file")
                 replace_kf_r9 = st.checkbox(
                     "Replace ALL existing KFinTech folio master data", key="replace_kf_r9",
@@ -1939,8 +2045,7 @@ elif mode == "⚙️ Admin Panel":
             else:
                 st.markdown("#### MFSD243 — SIP Details / Master")
                 st.caption(
-                    "KFinTech SIP master file (MFSD243). Required columns: `Folio`, `RegSlno`, `Amount`, `Start Date`, `End Date`."
-                )
+                    "KFinTech SIP master file (MFSD243). Required columns: `Folio`, `RegSlno`, `Amount`, `Start Date`, `End Date`.")
                 kf_r49_file = st.file_uploader("MFSD243 CSV file", type=["csv", "txt", "tsv"], key="kf_r49_file")
                 replace_kf_r49 = st.checkbox(
                     "Replace ALL existing KFinTech SIP master data", key="replace_kf_r49",
@@ -2009,7 +2114,7 @@ elif mode == "⚙️ Admin Panel":
                 if replace_aum:
                     st.warning("Replace mode: ALL existing CAMS AUM data will be deleted.", icon="⚠️")
                 else:
-                    st.info("ℹ️ Append mode: duplicate (folio + scheme + date) rows skipped.", icon="ℹ️")
+                    st.info("Append mode: duplicate (folio + scheme + date) rows skipped.", icon="ℹ️")
                 if st.button("📤 Upload CAMS AUM") and aum_file:
                     with st.spinner("Parsing CAMS AUM…"):
                         ok, msg, preview = data_maneger.parse_cams_aum(aum_file, replace_aum)
@@ -2031,7 +2136,7 @@ elif mode == "⚙️ Admin Panel":
                 if replace_kfin:
                     st.warning("Replace mode: ALL existing KFinTech AUM data will be deleted.", icon="⚠️")
                 else:
-                    st.info("ℹ️ Append mode: duplicate (folio + scheme + date) rows skipped.", icon="ℹ️")
+                    st.info("Append mode: duplicate (folio + scheme + date) rows skipped.", icon="ℹ️")
                 if st.button("📤 Upload KFinTech AUM") and kfin_file:
                     with st.spinner("Parsing KFinTech AUM…"):
                         ok, msg, preview = data_maneger.parse_kfintech_aum(kfin_file, replace_kfin)
@@ -2127,7 +2232,6 @@ elif mode == "⚙️ Admin Panel":
             unmapped = [c for c in cams_codes if c not in current_map]
             if unmapped: st.warning(f"{len(unmapped)} code(s) not yet mapped: {', '.join(unmapped)}")
             updated_map: dict[str, str] = {}
-            # Split into two separate lines so 'cols_per_row' is defined before it is used
             cols_per_row = 2
             rows_needed = -(-len(cams_codes) // cols_per_row)
             for row_i in range(rows_needed):
@@ -2164,13 +2268,11 @@ elif mode == "⚙️ Admin Panel":
                 "Holdings": conn.execute("SELECT COUNT(*) FROM holdings").fetchone()[0],
                 "Schemes": conn.execute("SELECT COUNT(*) FROM amc_schemes").fetchone()[0],
                 "Brokerage": conn.execute("SELECT COUNT(*) FROM monthly_brokerage").fetchone()[0],
-
                 "CAMS Transactions": conn.execute("SELECT COUNT(*) FROM cams_transactions").fetchone()[0],
                 "CAMS Folio Master": conn.execute("SELECT COUNT(*) FROM cams_folio_master").fetchone()[0],
                 "CAMS SIP Master": conn.execute("SELECT COUNT(*) FROM cams_sip_master").fetchone()[0],
                 "CAMS AUM rows": conn.execute("SELECT COUNT(*) FROM cams_aum").fetchone()[0],
                 "CAMS Brokerage rows": conn.execute("SELECT COUNT(*) FROM cams_brokerage").fetchone()[0],
-
                 "KFinTech Transactions": conn.execute("SELECT COUNT(*) FROM kfintech_transactions").fetchone()[0],
                 "KFinTech Folio Master": conn.execute("SELECT COUNT(*) FROM kfintech_folio_master").fetchone()[0],
                 "KFinTech SIP Master": conn.execute("SELECT COUNT(*) FROM kfintech_sip_master").fetchone()[0],
@@ -2194,7 +2296,6 @@ elif mode == "⚙️ Admin Panel":
                 "SELECT amc, rta FROM amc_config WHERE amc IN (SELECT DISTINCT amc FROM holdings)").fetchall()
             for amc, rta in db_overrides: amc_rta_map[amc] = rta
             updated_rtas = {}
-            # Split into two separate lines
             cols_per_row = 2
             rows_needed = -(-len(amc_rta_map) // cols_per_row)
             for row_i in range(rows_needed):
