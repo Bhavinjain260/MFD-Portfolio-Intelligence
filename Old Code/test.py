@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.WARNING, format="%(levelname)s | %(message)s")
 log = logging.getLogger(__name__)
 
 # ==================== CONSTANTS ====================
-DB_PATH = "mfd_local.db"
+DB_PATH = "../mfd_local.db"
 AMFI_TEXT_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
