@@ -20,6 +20,7 @@ import plotly.express as px
 import requests
 import streamlit as st
 from streamlit.runtime.scriptrunner import add_script_run_ctx
+
 import data_maneger
 
 warnings.filterwarnings("ignore")
@@ -480,7 +481,8 @@ CREATE TABLE IF NOT EXISTS kfintech_sip_master (
                 pass
             try:
                 conn.execute(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS ux_kfintech_aum ON kfintech_aum (folio_no, scheme_name, rep_date)")
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ux_kfintech_aum ON kfintech_aum (folio_no, scheme_name, "
+                    "rep_date)")
             except sqlite3.OperationalError:
                 pass
 
@@ -489,10 +491,12 @@ CREATE TABLE IF NOT EXISTS kfintech_sip_master (
                     "CREATE UNIQUE INDEX IF NOT EXISTS ux_monthly_brokerage ON monthly_brokerage (amc, month, year)")
             except sqlite3.OperationalError:
                 conn.execute(
-                    """DELETE FROM monthly_brokerage WHERE id NOT IN (SELECT MAX(id) FROM monthly_brokerage GROUP BY amc, month, year)""")
+                    """DELETE FROM monthly_brokerage WHERE id NOT IN (SELECT MAX(id) FROM monthly_brokerage GROUP BY 
+                    amc, month, year)""")
                 try:
                     conn.execute(
-                        "CREATE UNIQUE INDEX IF NOT EXISTS ux_monthly_brokerage ON monthly_brokerage (amc, month, year)")
+                        "CREATE UNIQUE INDEX IF NOT EXISTS ux_monthly_brokerage ON monthly_brokerage (amc, month, year)"
+                    )
                 except sqlite3.OperationalError:
                     pass
 
@@ -660,8 +664,6 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-
-
 # ==================== AUM DATA LOADERS ====================
 @st.cache_data(ttl=60, show_spinner=False)
 def load_total_aum() -> float:
@@ -675,8 +677,6 @@ def load_total_kfintech_aum() -> float:
     with get_conn() as conn:
         result = conn.execute("SELECT COALESCE(SUM(rupee_bal), 0) FROM kfintech_aum").fetchone()
         return float(result[0]) if result else 0.0
-
-
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -1376,7 +1376,7 @@ elif mode == "💰 Earnings":
             else:
                 manual = 0.0
                 status = "⏳ Pending"
-            total_cams_sum += cams_val;
+            total_cams_sum += cams_val
             total_kf_sum += kfintech_val
             diff = manual - total_file_val if (manual and total_file_val) else None
             diff_str = format_brokerage(diff) if diff is not None else "—"
@@ -1411,7 +1411,7 @@ elif mode == "💰 Earnings":
                 month_df["total_brokerage"] = month_df["cams_brokerage"]
             elif not month_df_kf.empty:
                 month_df = month_df_kf
-                month_df["cams_brokerage"] = 0;
+                month_df["cams_brokerage"] = 0
                 month_df["total_brokerage"] = month_df["kfintech_brokerage"]
             else:
                 month_df = pd.DataFrame()
@@ -1674,7 +1674,7 @@ elif mode == "⚙️ Admin Panel":
                 if st.button("Clear All CAMS Transactions"):
                     with get_conn() as conn: conn.execute("DELETE FROM cams_transactions")
                     st.warning("All CAMS transaction data deleted.")
-                    st.cache_data.clear();
+                    st.cache_data.clear()
                     st.rerun()
 
             # ---------- WBR9 — Folio Master ----------
@@ -1722,7 +1722,7 @@ elif mode == "⚙️ Admin Panel":
                     st.dataframe(folio_summary, use_container_width=True, hide_index=True)
                     with get_conn() as conn:
                         total_fm_aum = \
-                        conn.execute("SELECT COALESCE(SUM(rupee_bal),0) FROM cams_folio_master").fetchone()[0]
+                            conn.execute("SELECT COALESCE(SUM(rupee_bal),0) FROM cams_folio_master").fetchone()[0]
                     st.metric("Grand Total AUM (Folio Master)", format_aum(total_fm_aum))
                 if st.button("Clear All Folio Master Data"):
                     with get_conn() as conn: conn.execute("DELETE FROM cams_folio_master")
@@ -1734,12 +1734,14 @@ elif mode == "⚙️ Admin Panel":
             else:
                 st.markdown("#### WBR49 — SIP Details / Master")
                 st.caption(
-                    "CAMS SIP master file (R49). Required columns: `FOLIO_NO`, `AUTO_TRNO`, `AUTO_AMOUNT`, `FROM_DATE`, `TO_DATE`."
+                    "CAMS SIP master file (R49). Required columns: `FOLIO_NO`, `AUTO_TRNO`, `AUTO_AMOUNT`, "
+                    "`FROM_DATE`, `TO_DATE`."
                 )
                 r49_file = st.file_uploader("R49 CSV file", type=["csv", "txt", "tsv"], key="r49_file")
                 replace_r49 = st.checkbox(
                     "Replace ALL existing SIP master data", key="replace_r49",
-                    help="Checked: deletes all cams_sip_master rows, then reinserts.\nUnchecked: inserts only new (sip_reg_no + folio) combos."
+                    help="Checked: deletes all cams_sip_master rows, then reinserts.\nUnchecked: inserts only new ("
+                         "sip_reg_no + folio) combos."
                 )
                 if replace_r49:
                     st.warning("Replace mode: ALL existing CAMS SIP master data will be deleted.", icon="⚠️")
@@ -1775,7 +1777,7 @@ elif mode == "⚙️ Admin Panel":
                 if st.button("Clear All SIP Master Data"):
                     with get_conn() as conn: conn.execute("DELETE FROM cams_sip_master")
                     st.warning("All CAMS SIP master data deleted.")
-                    st.cache_data.clear();
+                    st.cache_data.clear()
                     st.rerun()
 
             st.divider()
@@ -1883,7 +1885,7 @@ elif mode == "⚙️ Admin Panel":
                 if st.button("Clear All KFinTech Transactions"):
                     with get_conn() as conn: conn.execute("DELETE FROM kfintech_transactions")
                     st.warning("All KFinTech transaction data deleted.")
-                    st.cache_data.clear();
+                    st.cache_data.clear()
                     st.rerun()
 
             # ---------- MFSD211 — KFinTech Folio Master ----------
@@ -1978,7 +1980,7 @@ elif mode == "⚙️ Admin Panel":
                 if st.button("Clear All KFinTech SIP Master Data"):
                     with get_conn() as conn: conn.execute("DELETE FROM kfintech_sip_master")
                     st.warning("All KFinTech SIP master data deleted.")
-                    st.cache_data.clear();
+                    st.cache_data.clear()
                     st.rerun()
             st.divider()
 
@@ -2075,8 +2077,8 @@ elif mode == "⚙️ Admin Panel":
                 st.metric("KFinTech Grand Total", format_aum(load_total_kfintech_aum()))
                 if st.button("⚠️ Clear KFinTech AUM"):
                     with get_conn() as conn: conn.execute("DELETE FROM kfintech_aum")
-                    st.warning("KFinTech AUM data deleted.");
-                    st.cache_data.clear();
+                    st.warning("KFinTech AUM data deleted.")
+                    st.cache_data.clear()
                     st.rerun()
             st.divider()
             combined = load_combined_total_aum()
