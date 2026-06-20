@@ -238,6 +238,147 @@ def init_db() -> None:
         upload_batch    TEXT,
         UNIQUE(sip_reg_no, folio_no)
     );
+    
+    CREATE TABLE IF NOT EXISTS kfintech_transactions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_code    TEXT,
+    fund_code       TEXT,
+    folio_no        TEXT,
+    scheme_code     TEXT,
+    div_opt         TEXT,
+    scheme_name     TEXT,
+    pur_red         TEXT,
+    trxn_no         TEXT,
+    inv_name        TEXT,
+    trxn_mode       TEXT,
+    trxn_status     TEXT,
+    branch          TEXT,
+    trade_date      TEXT,
+    post_date       TEXT,
+    nav             REAL,
+    units           REAL,
+    amount          REAL,
+    load_amount     REAL,
+    agent_code      TEXT,
+    broker_code     TEXT,
+    broker_pct      REAL,
+    broker_comm     REAL,
+    stt             REAL DEFAULT 0,
+    pan             TEXT,
+    sip_reg_no      TEXT,
+    sip_reg_date    TEXT,
+    chq_bank        TEXT,
+    chq_date        TEXT,
+    trxn_type       TEXT,
+    trdesc          TEXT,
+    pur_date        TEXT,
+    pur_amt         REAL,
+    pur_units       REAL,
+    trflag          TEXT,
+    sfund_date      TEXT,
+    ih_no           TEXT,
+    branch_code     TEXT,
+    inward_no       TEXT,
+    remarks         TEXT,
+    guard_pan       TEXT,
+    can             TEXT,
+    exch_org_trtype TEXT,
+    elec_trxn_flag  TEXT,
+    cleared         TEXT,
+    inv_state       TEXT,
+    rep_date        TEXT,
+    upload_batch    TEXT,
+    UNIQUE(trxn_no, folio_no)
+);
+CREATE TABLE IF NOT EXISTS kfintech_folio_master (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_code     TEXT,
+    fund_code        TEXT,
+    folio_no         TEXT,
+    div_opt          TEXT,
+    scheme_name      TEXT,
+    inv_name         TEXT,
+    joint1_name      TEXT,
+    joint2_name      TEXT,
+    address1         TEXT,
+    address2         TEXT,
+    address3         TEXT,
+    city             TEXT,
+    pincode          TEXT,
+    state            TEXT,
+    country          TEXT,
+    dob              TEXT,
+    email            TEXT,
+    mobile           TEXT,
+    pan_no           TEXT,
+    tax_status       TEXT,
+    occ_code         TEXT,
+    occ_desc         TEXT,
+    holding_nature   TEXT,
+    mapin_id         TEXT,
+    bank_name        TEXT,
+    branch           TEXT,
+    ac_type          TEXT,
+    ac_no            TEXT,
+    bank_address1    TEXT,
+    bank_address2    TEXT,
+    bank_address3    TEXT,
+    bank_city        TEXT,
+    bank_state       TEXT,
+    broker_code      TEXT,
+    aadhaar1         TEXT,
+    aadhaar2         TEXT,
+    aadhaar3         TEXT,
+    guardian_aadhaar TEXT,
+    rep_date         TEXT,
+    upload_batch     TEXT,
+    UNIQUE(folio_no, scheme_name)
+);
+CREATE TABLE IF NOT EXISTS kfintech_sip_master (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    zone            TEXT,
+    branch          TEXT,
+    location        TEXT,
+    ih_no           TEXT,
+    folio_no        TEXT,
+    inv_name        TEXT,
+    reg_date        TEXT,
+    from_date       TEXT,
+    to_date         TEXT,
+    installments    INTEGER,
+    sip_amount      REAL,
+    scheme          TEXT,
+    plan            TEXT,
+    agent_code      TEXT,
+    agent_name      TEXT,
+    subbroker       TEXT,
+    scheme_name     TEXT,
+    pan             TEXT,
+    sip_type        TEXT,
+    sip_mode        TEXT,
+    fund_code       TEXT,
+    product_code    TEXT,
+    frequency       TEXT,
+    trtype          TEXT,
+    to_scheme       TEXT,
+    to_plan         TEXT,
+    terminate_date  TEXT,
+    status          TEXT,
+    to_product_code TEXT,
+    to_scheme_name  TEXT,
+    ecs_no          TEXT,
+    ecs_bank        TEXT,
+    ecs_ac_no       TEXT,
+    ecs_holder      TEXT,
+    reg_sl_no       TEXT,
+    inv_dp_id       TEXT,
+    inv_client_id   TEXT,
+    dp_inv_name     TEXT,
+    modify_flag     TEXT,
+    umrn_code       TEXT,
+    upload_batch    TEXT,
+    UNIQUE(folio_no, reg_sl_no)
+);
 
 
             """)
@@ -1343,6 +1484,420 @@ def parse_cams_sip_master(file, replace: bool) -> tuple[bool, str, dict]:
     return True, msg, preview
 
 
+def parse_kfintech_transactions(file, replace: bool) -> tuple[bool, str, dict]:
+    import logging
+    log = logging.getLogger(__name__)
+    df = None
+    for sep in (",", "\t"):
+        try:
+            file.seek(0)
+            _df = pd.read_csv(file, sep=sep, quotechar="'", dtype=str,
+                              encoding="utf-8", encoding_errors="replace")
+            if len(_df.columns) > 10:
+                df = _df
+                break
+        except Exception:
+            continue
+    if df is None:
+        return False, "Could not parse KFinTech transaction file (MFSD201)", {}
+
+    df.columns = [c.strip().replace('\u200b', '').replace('\ufeff', '').upper().strip("'")
+                  for c in df.columns]
+
+    required = ["TD_ACNO", "TD_TRNO", "TD_AMT"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        return False, f"Missing columns: {missing}. Found: {list(df.columns)[:20]}", {}
+
+    batch_id = f"KF_R2_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+    def _sf(val) -> float:
+        try:
+            return float(str(val).replace(",", "").strip()) if str(val).strip() not in (
+                "", "None", "NaN", "nan") else 0.0
+        except Exception:
+            return 0.0
+
+    rows, skipped = [], 0
+    for _, row in df.iterrows():
+        try:
+            rows.append((
+                clean_str(row.get("FMCODE", "")),
+                clean_str(row.get("TD_FUND", "")),
+                clean_str(row.get("TD_ACNO", "")),
+                clean_str(row.get("SCHPLN", "")),
+                clean_str(row.get("DIVOPT", "")),
+                clean_str(row.get("FUNDDESC", "")),
+                clean_str(row.get("TD_PURRED", "")),
+                clean_str(row.get("TD_TRNO", "")),
+                clean_str(row.get("INVNAME", "")).strip(),
+                clean_str(row.get("TRNMODE", "")),
+                clean_str(row.get("TRNSTAT", "")),
+                clean_str(row.get("TD_BRANCH", "")),
+                parse_date_safe(row.get("TD_TRDT", "")),
+                parse_date_safe(row.get("TD_PRDT", "")),
+                _sf(row.get("TD_POP", 0)),
+                _sf(row.get("TD_UNITS", 0)),
+                _sf(row.get("TD_AMT", 0)),
+                _sf(row.get("LOAD1", 0)),
+                clean_str(row.get("TD_AGENT", "")),
+                clean_str(row.get("TD_BROKER", "")),
+                _sf(row.get("BROKPER", 0)),
+                _sf(row.get("BROKCOMM", 0)),
+                _sf(row.get("STT", 0)),
+                clean_str(row.get("PAN1", "")).upper(),
+                clean_str(row.get("SIPREGSLNO", "")),
+                parse_date_safe(row.get("SIPREGDT", "")),
+                clean_str(row.get("CHQBANK", "")),
+                parse_date_safe(row.get("CHQDATE", "")),
+                clean_str(row.get("TD_TRTYPE", "")),
+                clean_str(row.get("TRDESC", "")),
+                parse_date_safe(row.get("PURDATE", "")),
+                _sf(row.get("PURAMT", 0)),
+                _sf(row.get("PURUNITS", 0)),
+                clean_str(row.get("TRFLAG", "")),
+                parse_date_safe(row.get("SFUNDDT", "")),
+                clean_str(row.get("IHNO", "")),
+                clean_str(row.get("BRANCHCODE", "")),
+                clean_str(row.get("INWARDNO", "")),
+                clean_str(row.get("NCTREMARKS", "")),
+                clean_str(row.get("GUARDPANNO", "")).upper(),
+                clean_str(row.get("CAN", "")),
+                clean_str(row.get("EXCHORGTRTYPE", "")),
+                clean_str(row.get("ELECTRXNFLAG", "")),
+                clean_str(row.get("CLEARED", "")),
+                clean_str(row.get("INVSTATE", "")),
+                parse_date_safe(row.get("CRDATE", "")),
+                batch_id,
+            ))
+        except Exception as exc:
+            log.warning("Skipped KFinTech R2 row: %s", exc)
+            skipped += 1
+
+    if not rows:
+        return False, "0 KFinTech transaction rows parsed", {}
+
+    inserted = dupes = 0
+    with get_conn() as conn:
+        if replace:
+            conn.execute("DELETE FROM kfintech_transactions")
+            conn.executemany(
+                "INSERT OR IGNORE INTO kfintech_transactions "
+                "(product_code,fund_code,folio_no,scheme_code,div_opt,scheme_name,pur_red,trxn_no,inv_name,"
+                "trxn_mode,trxn_status,branch,trade_date,post_date,nav,units,amount,load_amount,agent_code,"
+                "broker_code,broker_pct,broker_comm,stt,pan,sip_reg_no,sip_reg_date,chq_bank,chq_date,trxn_type,"
+                "trdesc,pur_date,pur_amt,pur_units,trflag,sfund_date,ih_no,branch_code,inward_no,remarks,"
+                "guard_pan,can,exch_org_trtype,elec_trxn_flag,cleared,inv_state,rep_date,upload_batch) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                rows)
+            inserted = len(rows)
+        else:
+            before = conn.execute("SELECT COUNT(*) FROM kfintech_transactions").fetchone()[0]
+            conn.executemany(
+                "INSERT OR IGNORE INTO kfintech_transactions "
+                "(product_code,fund_code,folio_no,scheme_code,div_opt,scheme_name,pur_red,trxn_no,inv_name,"
+                "trxn_mode,trxn_status,branch,trade_date,post_date,nav,units,amount,load_amount,agent_code,"
+                "broker_code,broker_pct,broker_comm,stt,pan,sip_reg_no,sip_reg_date,chq_bank,chq_date,trxn_type,"
+                "trdesc,pur_date,pur_amt,pur_units,trflag,sfund_date,ih_no,branch_code,inward_no,remarks,"
+                "guard_pan,can,exch_org_trtype,elec_trxn_flag,cleared,inv_state,rep_date,upload_batch) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                rows)
+            after = conn.execute("SELECT COUNT(*) FROM kfintech_transactions").fetchone()[0]
+            inserted = after - before
+            dupes = len(rows) - inserted
+
+    total_amt = sum(r[16] for r in rows)
+    preview = {
+        "rows": inserted, "skipped": skipped, "duplicates": dupes,
+        "total_amount": total_amt,
+        "schemes": len({r[5] for r in rows}),
+        "folios": len({r[2] for r in rows}),
+    }
+    msg = f"Imported {inserted} KFinTech transactions | Rs {total_amt:,.2f} total"
+    if skipped: msg += f" | Skipped {skipped}"
+    if dupes: msg += f" | {dupes} duplicates"
+    return True, msg, preview
+
+
+def parse_kfintech_folio_master(file, replace: bool) -> tuple[bool, str, dict]:
+    import logging
+    log = logging.getLogger(__name__)
+    df = None
+    for sep in (",", "\t"):
+        try:
+            file.seek(0)
+            _df = pd.read_csv(file, sep=sep, quotechar="'", dtype=str,
+                              encoding="utf-8", encoding_errors="replace")
+            if len(_df.columns) > 10:
+                df = _df
+                break
+        except Exception:
+            continue
+    if df is None:
+        return False, "Could not parse KFinTech folio master file (MFSD211)", {}
+
+    df.columns = [c.strip().replace('\u200b', '').replace('\ufeff', '').upper().strip("'")
+                  for c in df.columns]
+
+    required = ["FOLIO", "INVESTOR NAME"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        return False, f"Missing columns: {missing}. Found: {list(df.columns)[:20]}", {}
+
+    batch_id = f"KF_R9_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+    def _sf(val) -> float:
+        try:
+            return float(str(val).replace(",", "").strip()) if str(val).strip() not in (
+                "", "None", "NaN", "nan") else 0.0
+        except Exception:
+            return 0.0
+
+    rows, skipped = [], 0
+    for _, row in df.iterrows():
+        folio = clean_str(row.get("FOLIO", ""))
+        if not folio:
+            skipped += 1
+            continue
+        try:
+            rows.append((
+                clean_str(row.get("PRODUCT CODE", "")),
+                clean_str(row.get("FUND", "")),
+                folio,
+                clean_str(row.get("DIVIDEND OPTION", "")),
+                clean_str(row.get("FUND DESCRIPTION", "")),
+                clean_str(row.get("INVESTOR NAME", "")).strip(),
+                clean_str(row.get("JOINT NAME 1", "")),
+                clean_str(row.get("JOINT NAME 2", "")),
+                clean_str(row.get("ADDRESS #1", "")),
+                clean_str(row.get("ADDRESS #2", "")),
+                clean_str(row.get("ADDRESS #3", "")),
+                clean_str(row.get("CITY", "")),
+                clean_str(row.get("PINCODE", "")),
+                clean_str(row.get("STATE", "")),
+                clean_str(row.get("COUNTRY", "")),
+                parse_date_safe(row.get("DATE OF BIRTH", "")),
+                clean_str(row.get("EMAIL", "")).lower(),
+                clean_str(row.get("MOBILE NUMBER", "")),
+                clean_str(row.get("PAN NUMBER", "")).upper(),
+                clean_str(row.get("TAX STATUS", "")),
+                clean_str(row.get("OCC CODE", "")),
+                clean_str(row.get("OCCUPATION DESCRIPTION", "")),
+                clean_str(row.get("MODE OF HOLDING DESCRIPTION", "")),
+                clean_str(row.get("MAPIN ID", "")),
+                clean_str(row.get("BANK NAME", "")),
+                clean_str(row.get("BRANCH", "")),
+                clean_str(row.get("ACCOUNT TYPE", "")),
+                clean_str(row.get("BANKACCNO", "")),
+                clean_str(row.get("BANK ADDRESS #1", "")),
+                clean_str(row.get("BANK ADDRESS #2", "")),
+                clean_str(row.get("BANK ADDRESS #3", "")),
+                clean_str(row.get("BANK CITY", "")),
+                clean_str(row.get("BANK STATE", "")),
+                clean_str(row.get("BROKER CODE", "")),
+                clean_str(row.get("HOLDER 1 AADHAAR INFO", "")),
+                clean_str(row.get("HOLDER 2 AADHAAR INFO", "")),
+                clean_str(row.get("HOLDER 3 AADHAAR INFO", "")),
+                clean_str(row.get("GUARDIAN AADHAAR INFO", "")),
+                parse_date_safe(row.get("REPORT DATE", "")),
+                batch_id,
+            ))
+        except Exception as exc:
+            log.warning("Skipped KFinTech R9 row: %s", exc)
+            skipped += 1
+
+    if not rows:
+        return False, "0 KFinTech folio master rows parsed", {}
+
+    inserted = dupes = 0
+    with get_conn() as conn:
+        if replace:
+            conn.execute("DELETE FROM kfintech_folio_master")
+            conn.executemany(
+                "INSERT OR IGNORE INTO kfintech_folio_master "
+                "(product_code,fund_code,folio_no,div_opt,scheme_name,inv_name,joint1_name,joint2_name,"
+                "address1,address2,address3,city,pincode,state,country,dob,email,mobile,pan_no,tax_status,"
+                "occ_code,occ_desc,holding_nature,mapin_id,bank_name,branch,ac_type,ac_no,bank_address1,"
+                "bank_address2,bank_address3,bank_city,bank_state,broker_code,aadhaar1,aadhaar2,aadhaar3,"
+                "guardian_aadhaar,rep_date,upload_batch) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                rows)
+            inserted = len(rows)
+        else:
+            before = conn.execute("SELECT COUNT(*) FROM kfintech_folio_master").fetchone()[0]
+            conn.executemany(
+                "INSERT OR IGNORE INTO kfintech_folio_master "
+                "(product_code,fund_code,folio_no,div_opt,scheme_name,inv_name,joint1_name,joint2_name,"
+                "address1,address2,address3,city,pincode,state,country,dob,email,mobile,pan_no,tax_status,"
+                "occ_code,occ_desc,holding_nature,mapin_id,bank_name,branch,ac_type,ac_no,bank_address1,"
+                "bank_address2,bank_address3,bank_city,bank_state,broker_code,aadhaar1,aadhaar2,aadhaar3,"
+                "guardian_aadhaar,rep_date,upload_batch) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                rows)
+            after = conn.execute("SELECT COUNT(*) FROM kfintech_folio_master").fetchone()[0]
+            inserted = after - before
+            dupes = len(rows) - inserted
+
+    preview = {
+        "rows": inserted, "skipped": skipped, "duplicates": dupes,
+        "unique_folios": len({r[2] for r in rows}),
+        "unique_investors": len({r[5] for r in rows}),
+    }
+    msg = f"Imported {inserted} KFinTech folio records"
+    if skipped: msg += f" | Skipped {skipped}"
+    if dupes: msg += f" | {dupes} duplicates"
+    return True, msg, preview
+
+
+def parse_kfintech_sip_master(file, replace: bool) -> tuple[bool, str, dict]:
+    import logging
+    log = logging.getLogger(__name__)
+    df = None
+    for sep in (",", "\t"):
+        try:
+            file.seek(0)
+            _df = pd.read_csv(file, sep=sep, quotechar="'", dtype=str,
+                              encoding="utf-8", encoding_errors="replace")
+            if len(_df.columns) > 5:
+                df = _df
+                break
+        except Exception:
+            continue
+    if df is None:
+        return False, "Could not parse KFinTech SIP master file (MFSD243)", {}
+
+    df.columns = [c.strip().replace('\u200b', '').replace('\ufeff', '').upper().strip("'")
+                  for c in df.columns]
+
+    required = ["FOLIO", "REGSLNO", "AMOUNT"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        return False, f"Missing columns: {missing}. Found: {list(df.columns)[:20]}", {}
+
+    batch_id = f"KF_R49_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+    def _sf(val) -> float:
+        try:
+            return float(str(val).replace(",", "").strip()) if str(val).strip() not in (
+                "", "None", "NaN", "nan") else 0.0
+        except Exception:
+            return 0.0
+
+    def _sip_status(terminate_str: str, to_str: str) -> str:
+        if terminate_str and str(terminate_str).strip() not in ("", "None", "NaN"):
+            return "Ceased"
+        try:
+            end = pd.to_datetime(to_str, dayfirst=True, errors="coerce")
+            if pd.notna(end) and end.date() < datetime.now().date():
+                return "Completed"
+        except Exception:
+            pass
+        return "Active"
+
+    rows, skipped = [], 0
+    for _, row in df.iterrows():
+        folio = clean_str(row.get("FOLIO", ""))
+        reg_sl = clean_str(row.get("REGSLNO", ""))
+        if not folio or not reg_sl:
+            skipped += 1
+            continue
+        try:
+            status = _sip_status(row.get("TERMINATEDATE", ""), row.get("END DATE", ""))
+            rows.append((
+                clean_str(row.get("ZONE", "")),
+                clean_str(row.get("BRANCH", "")),
+                clean_str(row.get("LOCATION", "")),
+                clean_str(row.get("IHNO", "")),
+                folio,
+                clean_str(row.get("INVESTOR NAME", "")).strip(),
+                parse_date_safe(row.get("REGISTRATIONDATE", "")),
+                parse_date_safe(row.get("START DATE", "")),
+                parse_date_safe(row.get("END DATE", "")),
+                int(_sf(row.get("NO OF INSTALLMENTS", 0))),
+                _sf(row.get("AMOUNT", 0)),
+                clean_str(row.get("SCHEME", "")),
+                clean_str(row.get("PLAN", "")),
+                clean_str(row.get("AGENTCODE", "")),
+                clean_str(row.get("AGENTNAME", "")),
+                clean_str(row.get("SUBBROKER", "")),
+                clean_str(row.get("SCHEME NAME", "")),
+                clean_str(row.get("PAN", "")).upper(),
+                clean_str(row.get("SIPTYPE", "")),
+                clean_str(row.get("SIP MODE", "")),
+                clean_str(row.get("FUND CODE", "")),
+                clean_str(row.get("PRODUCT CODE", "")),
+                clean_str(row.get("FREQUENCY", "")),
+                clean_str(row.get("TRTYPE", "")),
+                clean_str(row.get("TO SCHEME", "")),
+                clean_str(row.get("TO PLAN", "")),
+                parse_date_safe(row.get("TERMINATEDATE", "")),
+                status,
+                clean_str(row.get("TOPRODUCTCODE", "")),
+                clean_str(row.get("TOSCHEMENAME", "")),
+                clean_str(row.get("ECSNO", "")),
+                clean_str(row.get("ECSBANKNAME", "")),
+                clean_str(row.get("ECSAcno", "")),
+                clean_str(row.get("ECSHOLDERNAME", "")),
+                reg_sl,
+                clean_str(row.get("INVDPID", "")),
+                clean_str(row.get("INVCLIENTID", "")),
+                clean_str(row.get("DP_INVNAME", "")),
+                clean_str(row.get("MODIFYFLAG", "")),
+                clean_str(row.get("UMRNCODE", "")),
+                batch_id,
+            ))
+        except Exception as exc:
+            log.warning("Skipped KFinTech R49 row: %s", exc)
+            skipped += 1
+
+    if not rows:
+        return False, "0 KFinTech SIP master rows parsed", {}
+
+    inserted = dupes = 0
+    with get_conn() as conn:
+        if replace:
+            conn.execute("DELETE FROM kfintech_sip_master")
+            conn.executemany(
+                "INSERT OR IGNORE INTO kfintech_sip_master "
+                "(zone,branch,location,ih_no,folio_no,inv_name,reg_date,from_date,to_date,installments,"
+                "sip_amount,scheme,plan,agent_code,agent_name,subbroker,scheme_name,pan,sip_type,sip_mode,"
+                "fund_code,product_code,frequency,trtype,to_scheme,to_plan,terminate_date,status,"
+                "to_product_code,to_scheme_name,ecs_no,ecs_bank,ecs_ac_no,ecs_holder,reg_sl_no,"
+                "inv_dp_id,inv_client_id,dp_inv_name,modify_flag,umrn_code,upload_batch) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                rows)
+            inserted = len(rows)
+        else:
+            before = conn.execute("SELECT COUNT(*) FROM kfintech_sip_master").fetchone()[0]
+            conn.executemany(
+                "INSERT OR IGNORE INTO kfintech_sip_master "
+                "(zone,branch,location,ih_no,folio_no,inv_name,reg_date,from_date,to_date,installments,"
+                "sip_amount,scheme,plan,agent_code,agent_name,subbroker,scheme_name,pan,sip_type,sip_mode,"
+                "fund_code,product_code,frequency,trtype,to_scheme,to_plan,terminate_date,status,"
+                "to_product_code,to_scheme_name,ecs_no,ecs_bank,ecs_ac_no,ecs_holder,reg_sl_no,"
+                "inv_dp_id,inv_client_id,dp_inv_name,modify_flag,umrn_code,upload_batch) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                rows)
+            after = conn.execute("SELECT COUNT(*) FROM kfintech_sip_master").fetchone()[0]
+            inserted = after - before
+            dupes = len(rows) - inserted
+
+    sc = {}
+    for r in rows:
+        sc[r[27]] = sc.get(r[27], 0) + 1
+
+    preview = {
+        "rows": inserted, "skipped": skipped, "duplicates": dupes,
+        "active": sc.get("Active", 0),
+        "ceased": sc.get("Ceased", 0),
+        "completed": sc.get("Completed", 0),
+    }
+    msg = f"Imported {inserted} KFinTech SIPs | Active: {sc.get('Active', 0)} | Ceased: {sc.get('Ceased', 0)} | Completed: {sc.get('Completed', 0)}"
+    if skipped: msg += f" | Skipped {skipped}"
+    if dupes: msg += f" | {dupes} duplicates"
+    return True, msg, preview
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def load_combined_total_aum() -> dict:
     cams, kfin = load_total_aum(), load_total_kfintech_aum()
@@ -2283,7 +2838,6 @@ elif mode == "⚙️ Admin Panel":
                         if preview.get("months"): st.info(f"Accrual months in file: **{', '.join(preview['months'])}**")
                     st.cache_data.clear()
             st.divider()
-            st.divider()
             st.subheader("CAMS Reports")
             st.caption("Upload CAMS reports: WBR2 (Transactions), WBR9 (Folio Master), WBR49 (SIP Details)")
 
@@ -2304,7 +2858,7 @@ elif mode == "⚙️ Admin Panel":
                 r2_file = st.file_uploader("R2 CSV file", type=["csv", "txt", "tsv"], key="r2_file")
                 replace_r2 = st.checkbox(
                     "Replace ALL existing transaction data", key="replace_r2",
-                    help="Checked: deletes all cams_transactions rows, then reinserts.\\nUnchecked: inserts only new transactions (matched on trxn_no + folio)."
+                    help="Checked: deletes all cams_transactions rows, then reinserts.\nUnchecked: inserts only new transactions (matched on trxn_no + folio)."
                 )
                 if replace_r2:
                     st.warning("Replace mode: ALL existing CAMS transaction data will be deleted.", icon="⚠️")
@@ -2339,8 +2893,7 @@ elif mode == "⚙️ Admin Panel":
                 if st.button("Clear All CAMS Transactions"):
                     with get_conn() as conn: conn.execute("DELETE FROM cams_transactions")
                     st.warning("All CAMS transaction data deleted.")
-                    st.cache_data.clear();
-                    st.rerun()
+                    st.cache_data.clear(); st.rerun()
 
             # ---------- WBR9 — Folio Master ----------
             elif cams_report_type == "WBR9 — Folio Master (R9)":
@@ -2351,7 +2904,7 @@ elif mode == "⚙️ Admin Panel":
                 r9_file = st.file_uploader("R9 CSV file", type=["csv", "txt", "tsv"], key="r9_file")
                 replace_r9 = st.checkbox(
                     "Replace ALL existing folio master data", key="replace_r9",
-                    help="Checked: deletes all cams_folio_master rows, then reinserts.\\nUnchecked: inserts only new (folio + scheme) combos."
+                    help="Checked: deletes all cams_folio_master rows, then reinserts.\nUnchecked: inserts only new (folio + scheme) combos."
                 )
                 if replace_r9:
                     st.warning("Replace mode: ALL existing folio master data will be deleted.", icon="⚠️")
@@ -2386,9 +2939,7 @@ elif mode == "⚙️ Admin Panel":
                     folio_summary["Total AUM (Rs)"] = folio_summary["Total AUM (Rs)"].apply(format_aum)
                     st.dataframe(folio_summary, use_container_width=True, hide_index=True)
                     with get_conn() as conn:
-                        total_fm_aum = \
-                            conn.execute("SELECT COALESCE(SUM(rupee_bal),0) FROM cams_folio_master").fetchone()[
-                                0]
+                        total_fm_aum = conn.execute("SELECT COALESCE(SUM(rupee_bal),0) FROM cams_folio_master").fetchone()[0]
                     st.metric("Grand Total AUM (Folio Master)", format_aum(total_fm_aum))
                 if st.button("Clear All Folio Master Data"):
                     with get_conn() as conn: conn.execute("DELETE FROM cams_folio_master")
@@ -2405,7 +2956,7 @@ elif mode == "⚙️ Admin Panel":
                 r49_file = st.file_uploader("R49 CSV file", type=["csv", "txt", "tsv"], key="r49_file")
                 replace_r49 = st.checkbox(
                     "Replace ALL existing SIP master data", key="replace_r49",
-                    help="Checked: deletes all cams_sip_master rows, then reinserts.\\nUnchecked: inserts only new (sip_reg_no + folio) combos."
+                    help="Checked: deletes all cams_sip_master rows, then reinserts.\nUnchecked: inserts only new (sip_reg_no + folio) combos."
                 )
                 if replace_r49:
                     st.warning("Replace mode: ALL existing CAMS SIP master data will be deleted.", icon="⚠️")
@@ -2441,8 +2992,9 @@ elif mode == "⚙️ Admin Panel":
                 if st.button("Clear All SIP Master Data"):
                     with get_conn() as conn: conn.execute("DELETE FROM cams_sip_master")
                     st.warning("All CAMS SIP master data deleted.")
-                    st.cache_data.clear();
-                    st.rerun()
+                    st.cache_data.clear(); st.rerun()
+
+            st.divider()
             st.markdown("#### Existing CAMS Brokerage Summary")
             with get_conn() as conn:
                 cams_summary = pd.read_sql(
@@ -2462,6 +3014,7 @@ elif mode == "⚙️ Admin Panel":
 
             st.divider()
             st.markdown("#### KFinTech (Karvy) Brokerage File")
+
             st.caption(
                 "Upload tab-separated KFinTech brokerage report. Required columns: `Account Number`, `Brokerage (in Rs.)`, `Fund`.")
             kf_brok_file = st.file_uploader("KFinTech Brokerage CSV / TSV", type=["csv", "txt", "tsv"],
@@ -2488,7 +3041,161 @@ elif mode == "⚙️ Admin Panel":
                         pm4.metric("⏭️ Invalid skipped", preview.get("skipped", 0))
                         if preview.get("months"): st.info(f"Accrual months in file: **{', '.join(preview['months'])}**")
                     st.cache_data.clear()
+
+            # ==================== KFINTECH REPORTS ====================
             st.divider()
+            st.subheader("KFinTech Reports")
+            st.caption("Upload KFinTech reports: MFSD201 (Transactions), MFSD211 (Folio Master), MFSD243 (SIP Details)")
+
+            kf_report_type = st.radio(
+                "Report type",
+                ["MFSD201 — Transaction Report", "MFSD211 — Folio Master", "MFSD243 — SIP Master"],
+                horizontal=True,
+                key="kf_report_toggle"
+            )
+            st.divider()
+
+            # ---------- MFSD201 — KFinTech Transactions ----------
+            if kf_report_type == "MFSD201 — Transaction Report":
+                st.markdown("#### MFSD201 — Transaction Report")
+                st.caption(
+                    "KFinTech transaction file (MFSD201). Required columns: `td_acno`, `td_trno`, `td_amt`, `td_units`, `td_pop`, `td_trdt`."
+                )
+                kf_r2_file = st.file_uploader("MFSD201 CSV file", type=["csv", "txt", "tsv"], key="kf_r2_file")
+                replace_kf_r2 = st.checkbox(
+                    "Replace ALL existing KFinTech transaction data", key="replace_kf_r2",
+                    help="Checked: deletes all kfintech_transactions rows, then reinserts.\nUnchecked: inserts only new transactions (matched on trxn_no + folio)."
+                )
+                if replace_kf_r2:
+                    st.warning("Replace mode: ALL existing KFinTech transaction data will be deleted.", icon="⚠️")
+                else:
+                    st.info("Append mode: duplicate (trxn_no + folio) rows are silently skipped.", icon="ℹ️")
+                if st.button("Upload KFinTech Transactions (MFSD201)") and kf_r2_file:
+                    with st.spinner("Parsing KFinTech transactions…"):
+                        ok, msg, preview = parse_kfintech_transactions(kf_r2_file, replace_kf_r2)
+                        (st.success if ok else st.error)(msg)
+                        if ok and preview:
+                            c1, c2, c3, c4 = st.columns(4)
+                            c1.metric("Inserted", preview.get("rows", 0))
+                            c2.metric("Total Amount", format_currency(preview.get("total_amount", 0), decimals=0))
+                            c3.metric("Folios", preview.get("folios", 0))
+                            c4.metric("Schemes", preview.get("schemes", 0))
+                        st.cache_data.clear()
+                st.divider()
+                st.markdown("#### Existing KFinTech Transaction Summary")
+                with get_conn() as conn:
+                    txn_summary = pd.read_sql(
+                        """SELECT trade_date AS "Date", fund_code AS "Fund",
+                           COUNT(*) AS "Transactions",
+                           COUNT(DISTINCT folio_no) AS "Folios",
+                           ROUND(SUM(amount), 2) AS "Total Amount (Rs)"
+                           FROM kfintech_transactions
+                           GROUP BY trade_date, fund_code
+                           ORDER BY trade_date DESC LIMIT 50""", conn)
+                if txn_summary.empty:
+                    st.info("No KFinTech transaction data uploaded yet.")
+                else:
+                    st.dataframe(txn_summary, use_container_width=True, hide_index=True)
+                if st.button("Clear All KFinTech Transactions"):
+                    with get_conn() as conn: conn.execute("DELETE FROM kfintech_transactions")
+                    st.warning("All KFinTech transaction data deleted.")
+                    st.cache_data.clear(); st.rerun()
+
+            # ---------- MFSD211 — KFinTech Folio Master ----------
+            elif kf_report_type == "MFSD211 — Folio Master":
+                st.markdown("#### MFSD211 — Investor Folio Master")
+                st.caption(
+                    "KFinTech folio master file (MFSD211). Required columns: `Folio`, `Investor Name`, `Fund Description`, `PAN Number`."
+                )
+                kf_r9_file = st.file_uploader("MFSD211 CSV file", type=["csv", "txt", "tsv"], key="kf_r9_file")
+                replace_kf_r9 = st.checkbox(
+                    "Replace ALL existing KFinTech folio master data", key="replace_kf_r9",
+                    help="Checked: deletes all kfintech_folio_master rows, then reinserts.\nUnchecked: inserts only new (folio + scheme) combos."
+                )
+                if replace_kf_r9:
+                    st.warning("Replace mode: ALL existing KFinTech folio master data will be deleted.", icon="⚠️")
+                else:
+                    st.info("Append mode: duplicate (folio + scheme_name) rows are silently skipped.", icon="ℹ️")
+                if st.button("Upload KFinTech Folio Master (MFSD211)") and kf_r9_file:
+                    with st.spinner("Parsing KFinTech folio master…"):
+                        ok, msg, preview = parse_kfintech_folio_master(kf_r9_file, replace_kf_r9)
+                        (st.success if ok else st.error)(msg)
+                        if ok and preview:
+                            c1, c2, c3, c4 = st.columns(4)
+                            c1.metric("Inserted", preview.get("rows", 0))
+                            c2.metric("Unique Folios", preview.get("unique_folios", 0))
+                            c3.metric("Investors", preview.get("unique_investors", 0))
+                            c4.metric("Skipped", preview.get("skipped", 0))
+                        st.cache_data.clear()
+                st.divider()
+                st.markdown("#### Existing KFinTech Folio Master Summary")
+                with get_conn() as conn:
+                    folio_summary = pd.read_sql(
+                        """SELECT fund_code AS "Fund",
+                           COUNT(DISTINCT folio_no) AS "Folios",
+                           COUNT(DISTINCT pan_no) AS "Investors",
+                           COUNT(*) AS "Scheme Records"
+                           FROM kfintech_folio_master
+                           GROUP BY fund_code
+                           ORDER BY 2 DESC""", conn)
+                if folio_summary.empty:
+                    st.info("No KFinTech folio master data uploaded yet.")
+                else:
+                    st.dataframe(folio_summary, use_container_width=True, hide_index=True)
+                if st.button("Clear All KFinTech Folio Master Data"):
+                    with get_conn() as conn: conn.execute("DELETE FROM kfintech_folio_master")
+                    st.warning("All KFinTech folio master data deleted.")
+                    st.cache_data.clear()
+                    st.rerun()
+
+            # ---------- MFSD243 — KFinTech SIP Master ----------
+            else:
+                st.markdown("#### MFSD243 — SIP Details / Master")
+                st.caption(
+                    "KFinTech SIP master file (MFSD243). Required columns: `Folio`, `RegSlno`, `Amount`, `Start Date`, `End Date`."
+                )
+                kf_r49_file = st.file_uploader("MFSD243 CSV file", type=["csv", "txt", "tsv"], key="kf_r49_file")
+                replace_kf_r49 = st.checkbox(
+                    "Replace ALL existing KFinTech SIP master data", key="replace_kf_r49",
+                    help="Checked: deletes all kfintech_sip_master rows, then reinserts.\nUnchecked: inserts only new (reg_sl_no + folio) combos."
+                )
+                if replace_kf_r49:
+                    st.warning("Replace mode: ALL existing KFinTech SIP master data will be deleted.", icon="⚠️")
+                else:
+                    st.info("Append mode: duplicate (reg_sl_no + folio) rows are silently skipped.", icon="ℹ️")
+                if st.button("Upload KFinTech SIP Master (MFSD243)") and kf_r49_file:
+                    with st.spinner("Parsing KFinTech SIP master…"):
+                        ok, msg, preview = parse_kfintech_sip_master(kf_r49_file, replace_kf_r49)
+                        (st.success if ok else st.error)(msg)
+                        if ok and preview:
+                            c1, c2, c3, c4 = st.columns(4)
+                            c1.metric("Inserted", preview.get("rows", 0))
+                            c2.metric("Active SIPs", preview.get("active", 0))
+                            c3.metric("Ceased", preview.get("ceased", 0))
+                            c4.metric("Completed", preview.get("completed", 0))
+                        st.cache_data.clear()
+                st.divider()
+                st.markdown("#### Existing KFinTech SIP Master Summary")
+                with get_conn() as conn:
+                    sip_summary = pd.read_sql(
+                        """SELECT fund_code AS "Fund",
+                           status AS "Status",
+                           COUNT(*) AS "SIPs",
+                           COUNT(DISTINCT folio_no) AS "Folios",
+                           ROUND(SUM(sip_amount), 2) AS "Total SIP Amount (Rs)"
+                           FROM kfintech_sip_master
+                           GROUP BY fund_code, status
+                           ORDER BY fund_code, status""", conn)
+                if sip_summary.empty:
+                    st.info("No KFinTech SIP master data uploaded yet.")
+                else:
+                    st.dataframe(sip_summary, use_container_width=True, hide_index=True)
+                if st.button("Clear All KFinTech SIP Master Data"):
+                    with get_conn() as conn: conn.execute("DELETE FROM kfintech_sip_master")
+                    st.warning("All KFinTech SIP master data deleted.")
+                    st.cache_data.clear(); st.rerun()
+            st.divider()
+
             st.markdown("#### Existing KFinTech Brokerage Summary")
             with get_conn() as conn:
                 kf_summary = pd.read_sql(
@@ -2676,8 +3383,11 @@ elif mode == "⚙️ Admin Panel":
                 "CAMS AUM rows": conn.execute("SELECT COUNT(*) FROM cams_aum").fetchone()[0],
                 "CAMS Brokerage rows": conn.execute("SELECT COUNT(*) FROM cams_brokerage").fetchone()[0],
 
-                "KFinTech Brokerage rows": conn.execute("SELECT COUNT(*) FROM kfintech_brokerage").fetchone()[0],
+                "KFinTech Transactions": conn.execute("SELECT COUNT(*) FROM kfintech_transactions").fetchone()[0],
+                "KFinTech Folio Master": conn.execute("SELECT COUNT(*) FROM kfintech_folio_master").fetchone()[0],
+                "KFinTech SIP Master": conn.execute("SELECT COUNT(*) FROM kfintech_sip_master").fetchone()[0],
                 "KFinTech AUM rows": conn.execute("SELECT COUNT(*) FROM kfintech_aum").fetchone()[0],
+                "KFinTech Brokerage rows": conn.execute("SELECT COUNT(*) FROM kfintech_brokerage").fetchone()[0],
             }
         for k, v in stats.items(): st.metric(k, v)
         if st.button("⚠️ Clear All Holdings"):
