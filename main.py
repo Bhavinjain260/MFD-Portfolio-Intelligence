@@ -48,7 +48,7 @@ PAGE_SIZE = 20
 CAMS_AMCS = frozenset([
     "360 ONE", "ADITYA BIRLA SUN LIFE", "ANGEL ONE", "BANDHAN", "DSP",
     "FRANKLIN TEMPLETON", "HDFC", "HELIOS", "HSBC", "ICICI PRUDENTIAL",
-    "JIO BLACKROCK", "KOTAK", "MAHINDRA MANULIFE", "NAVI", "PPFAS",
+    "JIO BLACKROCK", "KOTAK", "MAHINDRA MANULIFE", "NAVI", "PARAG PARIKH", "PPFAS",
     "SBI", "SHRIRAM", "TATA", "UNIFI", "UNION", "WHITEOAK", "ZERODHA"
 ])
 KFIN_AMCS = frozenset([
@@ -63,7 +63,8 @@ KFIN_AMCS = frozenset([
 # ==================== DB HELPERS ====================
 @contextmanager
 def get_conn():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    # Add a timeout to handle concurrent write locks gracefully
+    conn = sqlite3.connect(DB_PATH, timeout=20, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     try:
         yield conn
@@ -128,20 +129,7 @@ def init_db() -> None:
                     notes     TEXT,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
-                CREATE TABLE IF NOT EXISTS cams_aum (
-                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                    folio_no        TEXT,
-                    inv_name        TEXT,
-                    scheme_name     TEXT,
-                    amc_code        TEXT,
-                    pan_no          TEXT,
-                    email           TEXT,
-                    rep_date        TEXT,
-                    units           REAL,
-                    rupee_bal       REAL,
-                    upload_batch    TEXT,
-                    UNIQUE(folio_no, scheme_name, rep_date)
-                );
+            
                 CREATE TABLE IF NOT EXISTS kfintech_aum (
                     id              INTEGER PRIMARY KEY AUTOINCREMENT,
                     folio_no        TEXT,
@@ -457,23 +445,7 @@ CREATE TABLE IF NOT EXISTS kfintech_sip_master (
                     rupee_bal       REAL,
                     upload_batch    TEXT
                 );
-                CREATE TABLE IF NOT EXISTS kfintech_aum (
-                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                    folio_no        TEXT,
-                    inv_name        TEXT,
-                    scheme_name     TEXT,
-                    amc_code        TEXT,
-                    product_code    TEXT,
-                    scheme_code     TEXT,
-                    dividend_opt    TEXT,
-                    email           TEXT,
-                    rep_date        TEXT,
-                    units           REAL,
-                    rupee_bal       REAL,
-                    nav             REAL,
-                    aum             REAL,
-                    upload_batch    TEXT
-                );
+                
             """)
 
             try:
@@ -501,6 +473,16 @@ CREATE TABLE IF NOT EXISTS kfintech_sip_master (
                     )
                 except sqlite3.OperationalError:
                     pass
+                # Add these to the end of init_db()
+                conn.executescript("""
+                    CREATE INDEX IF NOT EXISTS idx_clients_name ON clients(name);
+                    CREATE INDEX IF NOT EXISTS idx_clients_pan ON clients(pan);
+                    CREATE INDEX IF NOT EXISTS idx_holdings_folio ON holdings(folio_no);
+                    CREATE INDEX IF NOT EXISTS idx_holdings_scheme ON holdings(scheme_name);
+                    CREATE INDEX IF NOT EXISTS idx_cams_aum_folio ON cams_aum(folio_no);
+                    CREATE INDEX IF NOT EXISTS idx_cams_aum_scheme ON cams_aum(scheme_name);
+                """)
+                # Note: For true performance on leading-wildcard LIKE '%q%', consider migrating to SQLite FTS5 in the future.
 
 
 # ==================== PURE HELPERS ====================
@@ -586,17 +568,29 @@ def get_next_sip_date(day) -> str:
     if pd.isna(day) or not day: return "N/A"
     try:
         day = int(day)
-        today = datetime.now()
+        today = datetime.now().date()
+
+        # Try current month
         try:
             candidate = today.replace(day=day)
-            if candidate.date() >= today.date(): return candidate.strftime("%d %b %Y")
+            if candidate >= today: return candidate.strftime("%d %b %Y")
         except ValueError:
             pass
-        next_month_first = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+        # Calculate next month safely
+        if today.month == 12:
+            next_month = today.replace(year=today.year + 1, month=1, day=1)
+        else:
+            next_month = today.replace(month=today.month + 1, day=1)
+
         try:
-            return next_month_first.replace(day=day).strftime("%d %b %Y")
+            return next_month.replace(day=day).strftime("%d %b %Y")
         except ValueError:
-            last_day = (next_month_first.replace(month=next_month_first.month % 12 + 1, day=1) - timedelta(days=1))
+            # Fallback to last day of next month
+            if next_month.month == 12:
+                last_day = next_month.replace(year=next_month.year + 1, month=1, day=1) - timedelta(days=1)
+            else:
+                last_day = next_month.replace(month=next_month.month + 1, day=1) - timedelta(days=1)
             return last_day.strftime("%d %b %Y")
     except Exception:
         return "N/A"
@@ -760,6 +754,12 @@ def load_combined_client_aum(client_code: str) -> pd.DataFrame:
     for col in all_cols:
         if col not in cams_df.columns: cams_df[col] = None
         if col not in kfin_df.columns: kfin_df[col] = None
+
+    # Coerce rupee_bal to numeric to prevent silent 0s on None/strings
+    if 'rupee_bal' in cams_df.columns:
+        cams_df['rupee_bal'] = pd.to_numeric(cams_df['rupee_bal'], errors='coerce').fillna(0.0)
+    if 'rupee_bal' in kfin_df.columns:
+        kfin_df['rupee_bal'] = pd.to_numeric(kfin_df['rupee_bal'], errors='coerce').fillna(0.0)
     return pd.concat([cams_df, kfin_df], ignore_index=True) if not (cams_df.empty and kfin_df.empty) else pd.DataFrame()
 
 
@@ -807,6 +807,8 @@ def load_cams_by_client(client_code: str) -> pd.DataFrame:
         if cams_matched.empty: return pd.DataFrame()
         holdings_df = pd.read_sql("SELECT folio_no, scheme_name, amc, rta FROM holdings", conn)
         holdings_df["folio_base"] = holdings_df["folio_no"].apply(normalize_folio)
+        # Drop duplicates on folio_base to prevent Cartesian product during merge
+        holdings_df = holdings_df.drop_duplicates(subset=["folio_base"])
         merged = cams_matched.merge(holdings_df[["folio_base", "scheme_name", "amc", "rta"]], on="folio_base",
                                     how="left")
         amc_map = load_amc_code_map()
@@ -835,6 +837,7 @@ def load_kfintech_by_client(client_code: str) -> pd.DataFrame:
         if kf_matched.empty: return pd.DataFrame()
         holdings_df = pd.read_sql("SELECT folio_no, scheme_name, amc, rta FROM holdings", conn)
         holdings_df["folio_base"] = holdings_df["folio_no"].apply(normalize_folio)
+        holdings_df = holdings_df.drop_duplicates(subset=["folio_base"])  # <--- ADD THIS
         merged = kf_matched.merge(holdings_df[["folio_base", "scheme_name", "amc", "rta"]], on="folio_base", how="left")
         amc_map = load_amc_code_map()
         merged["amc_name"] = merged["amc_code"].map(amc_map).fillna(merged["amc"])
@@ -871,13 +874,28 @@ def load_amc_code_map() -> dict[str, str]:
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def load_distinct_cams_amc_codes() -> list[str]:
+def load_distinct_all_amc_codes() -> list[str]:
     with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT amc_code FROM cams_brokerage WHERE amc_code != '' ORDER BY amc_code").fetchall()
-        kf_rows = conn.execute(
-            "SELECT DISTINCT amc_code FROM kfintech_brokerage WHERE amc_code != '' ORDER BY amc_code").fetchall()
-        return sorted(list(set([r[0] for r in rows] + [r[0] for r in kf_rows])))
+        codes = set()
+        # Scan all CAMS tables
+        for tbl, col in [("cams_brokerage", "amc_code"), ("cams_aum", "amc_code"),
+                         ("cams_transactions", "amc_code"), ("cams_folio_master", "amc_code")]:
+            try:
+                rows = conn.execute(f"SELECT DISTINCT {col} FROM {tbl} WHERE {col} != ''").fetchall()
+                codes.update(r[0].strip() for r in rows if r[0])
+            except:
+                pass
+
+        # Scan all KFinTech tables (note: KFinTech uses 'fund_code' in some tables)
+        for tbl, col in [("kfintech_brokerage", "amc_code"), ("kfintech_aum", "amc_code"),
+                         ("kfintech_transactions", "fund_code"), ("kfintech_folio_master", "fund_code")]:
+            try:
+                rows = conn.execute(f"SELECT DISTINCT {col} FROM {tbl} WHERE {col} != ''").fetchall()
+                codes.update(r[0].strip() for r in rows if r[0])
+            except:
+                pass
+
+        return sorted(list(codes))
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -892,10 +910,14 @@ def load_active_holdings() -> pd.DataFrame:
     if not enabled: return pd.DataFrame()
     enabled_norm = {normalize_amc(a) for a in enabled}
     with get_conn() as conn:
-        df = pd.read_sql("SELECT * FROM holdings WHERE status='Active'", conn)
+        # Filter directly in SQL using a JOIN with amc_config
+        query = """
+            SELECT h.* FROM holdings h
+            JOIN amc_config ac ON TRIM(UPPER(h.amc)) = TRIM(UPPER(ac.amc))
+            WHERE h.status = 'Active' AND ac.is_enabled = 1
+        """
+        df = pd.read_sql(query, conn)
         if df.empty: return df
-        df["norm_amc"] = df["amc"].apply(normalize_amc)
-        df = df[df["norm_amc"].isin(enabled_norm)].drop(columns=["norm_amc"]).reset_index(drop=True)
         df["rta"] = df["amc"].apply(get_rta)
         return df
 
@@ -920,19 +942,52 @@ def load_notifications() -> dict:
         holdings = pd.read_sql(
             "SELECT h.client_code, c.name, h.scheme_name, h.sip_day FROM holdings h JOIN clients c ON h.client_code = c.client_code WHERE h.status='Active'",
             conn)
-        for _, row in holdings.iterrows():
-            nxt = get_next_sip_date(row["sip_day"])
-            if nxt == "N/A": continue
-            try:
-                dt = datetime.strptime(nxt, "%d %b %Y").date()
-                if today <= dt <= week_ahead: notes["sips_due"].append(
-                    {"client": row["name"], "scheme": row["scheme_name"], "date": nxt})
-            except Exception:
-                pass
-        aum_folios = conn.execute(
-            "SELECT COUNT(DISTINCT folio_no) FROM cams_aum WHERE folio_no NOT IN (SELECT folio_no FROM holdings) AND (pan_no IS NULL OR pan_no = '' OR pan_no NOT IN (SELECT pan FROM clients WHERE pan != ''))").fetchone()[
-            0]
-        notes["unmatched_aum"] = int(aum_folios or 0)
+        # Vectorize the calculation using pandas
+        if not holdings.empty:
+            today = datetime.now().date()
+            week_ahead = today + timedelta(days=7)
+
+            def calc_next_sip_dt(row):
+                day = int(row['sip_day'])
+                try:
+                    candidate = today.replace(day=day)
+                    if candidate >= today: return candidate
+                except ValueError:
+                    pass
+
+                next_m = today.replace(year=today.year + 1, month=1, day=1) if today.month == 12 else today.replace(
+                    month=today.month + 1, day=1)
+                try:
+                    return next_m.replace(day=day)
+                except ValueError:
+                    last_m = next_m.replace(year=next_m.year + 1, month=1,
+                                            day=1) if next_m.month == 12 else next_m.replace(month=next_m.month + 1,
+                                                                                             day=1)
+                    return last_m - timedelta(days=1)
+
+            holdings['next_sip_dt'] = holdings.apply(calc_next_sip_dt, axis=1)
+            due_sips = holdings[(holdings['next_sip_dt'] >= today) & (holdings['next_sip_dt'] <= week_ahead)]
+
+            for _, row in due_sips.iterrows():
+                notes["sips_due"].append({
+                    "client": row["name"], "scheme": row["scheme_name"],
+                    "date": row["next_sip_dt"].strftime("%d %b %Y")
+                })
+
+        # Check CAMS (via PAN) and KFinTech (via Email) separately and sum them
+        cams_unmatched = conn.execute("""
+            SELECT COUNT(DISTINCT folio_no) FROM cams_aum 
+            WHERE folio_no NOT IN (SELECT folio_no FROM holdings) 
+            AND (pan_no IS NULL OR pan_no = '' OR pan_no NOT IN (SELECT pan FROM clients WHERE pan IS NOT NULL AND pan != ''))
+        """).fetchone()[0]
+
+        kfin_unmatched = conn.execute("""
+            SELECT COUNT(DISTINCT folio_no) FROM kfintech_aum 
+            WHERE folio_no NOT IN (SELECT folio_no FROM holdings) 
+            AND (email IS NULL OR email = '' OR email NOT IN (SELECT email FROM clients WHERE email IS NOT NULL AND email != ''))
+        """).fetchone()[0]
+
+        notes["unmatched_aum"] = int(cams_unmatched or 0) + int(kfin_unmatched or 0)
         current_month, current_year = datetime.now().strftime("%b"), datetime.now().year
         active_amc_list = [r[0] for r in
                            conn.execute("SELECT DISTINCT amc FROM holdings WHERE status='Active'").fetchall()]
@@ -979,12 +1034,12 @@ if "dark_mode" not in st.session_state:
     st.session_state["dark_mode"] = False
 dark = st.session_state["dark_mode"]
 
-_bg   = "#0e1117" if dark else "#ffffff"
-_sbg  = "#161b22" if dark else "#f6f8fa"
+_bg = "#0e1117" if dark else "#ffffff"
+_sbg = "#161b22" if dark else "#f6f8fa"
 _text = "#e6edf3" if dark else "#1a1a2e"
-_muted= "#8b949e" if dark else "#6b7280"
-_border="#30363d" if dark else "#d0d7de"
-_accent="#58a6ff" if dark else "#2563eb"
+_muted = "#8b949e" if dark else "#6b7280"
+_border = "#30363d" if dark else "#d0d7de"
+_accent = "#58a6ff" if dark else "#2563eb"
 
 # One consolidated CSS injection – no var(--text-color) conflicts
 st.markdown(f"""
@@ -1092,18 +1147,18 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # -------------------- COMPACT HEADER --------------------
-hdr1, hdr2, hdr3 = st.columns([6, 1, 3])
+hdr1, hdr2 = st.columns([6, 1])
 with hdr1:
     st.markdown("#### 📊 MFD Portfolio Intelligence")
 with hdr2:
     if st.button("🌙" if not dark else "☀️", help="Toggle dark/light mode", use_container_width=True):
         st.session_state["dark_mode"] = not st.session_state["dark_mode"]
         st.rerun()
-with hdr3:
-    search_q = st.text_input(
-        "🔍 Global Search", placeholder="Client, folio, scheme…",
-        key="global_search_q", label_visibility="collapsed"
-    )
+# with hdr3:
+#     search_q = st.text_input(
+#         "🔍 Global Search", placeholder="Client, folio, scheme…",
+#         key="global_search_q", label_visibility="collapsed"
+#     )
 
 # Navigation tabs (no heavy dividers)
 nav_cols = st.columns([1, 1, 1, 1])
@@ -1121,27 +1176,27 @@ for i, (opt, key) in enumerate(zip(nav_options, nav_keys)):
             st.rerun()
 
 # Handle global search results inline
-if search_q and len(search_q.strip()) >= 2:
-    with st.spinner("Searching…"):
-        sr = global_search(search_q)
-        if not sr:
-            st.caption("No results found.")
-        else:
-            if "clients" in sr:
-                st.markdown(f"**👤 Clients** ({len(sr['clients'])})")
-                for r in sr["clients"][:5]: st.markdown(
-                    f'<div class="search-card"><span class="search-tag">Client</span><b>{r["name"]}</b><br><small style="color:{_muted}">{r["pan"] or "—"}</small></div>',
-                    unsafe_allow_html=True)
-            if "folios" in sr:
-                st.markdown(f"**📂 Folios / Schemes** ({len(sr['folios'])})")
-                for r in sr["folios"][:5]: st.markdown(
-                    f'<div class="search-card"><span class="search-tag">Folio</span><b>{r["folio_no"]}</b><br><small style="color:{_muted}">{r["scheme_name"][:40]} — {r["client_name"] or "?"}</small></div>',
-                    unsafe_allow_html=True)
-            if "aum" in sr:
-                st.markdown(f"**📦 AUM Records** ({len(sr['aum'])})")
-                for r in sr["aum"][:4]: st.markdown(
-                    f'<div class="search-card"><span class="search-tag">AUM</span><b>{r["inv_name"]}</b><br><small style="color:{_muted}">{r["scheme_name"][:40]}</small></div>',
-                    unsafe_allow_html=True)
+# if search_q and len(search_q.strip()) >= 2:
+#     with st.spinner("Searching…"):
+#         sr = global_search(search_q)
+#         if not sr:
+#             st.caption("No results found.")
+#         else:
+#             if "clients" in sr:
+#                 st.markdown(f"**👤 Clients** ({len(sr['clients'])})")
+#                 for r in sr["clients"][:5]: st.markdown(
+#                     f'<div class="search-card"><span class="search-tag">Client</span><b>{r["name"]}</b><br><small style="color:{_muted}">{r["pan"] or "—"}</small></div>',
+#                     unsafe_allow_html=True)
+#             if "folios" in sr:
+#                 st.markdown(f"**📂 Folios / Schemes** ({len(sr['folios'])})")
+#                 for r in sr["folios"][:5]: st.markdown(
+#                     f'<div class="search-card"><span class="search-tag">Folio</span><b>{r["folio_no"]}</b><br><small style="color:{_muted}">{r["scheme_name"][:40]} — {r["client_name"] or "?"}</small></div>',
+#                     unsafe_allow_html=True)
+#             if "aum" in sr:
+#                 st.markdown(f"**📦 AUM Records** ({len(sr['aum'])})")
+#                 for r in sr["aum"][:4]: st.markdown(
+#                     f'<div class="search-card"><span class="search-tag">AUM</span><b>{r["inv_name"]}</b><br><small style="color:{_muted}">{r["scheme_name"][:40]}</small></div>',
+#                     unsafe_allow_html=True)
 
 mode = st.session_state.get("nav_mode", "📊 Dashboard")
 
@@ -1150,7 +1205,7 @@ active_amcs_raw = load_active_amcs()
 
 # ==================== 📊 DASHBOARD ====================
 if mode == "📊 Dashboard":
-    st.header("📊 Portfolio Overview")    # ---- Dashboard-only: Refresh + Notifications ----
+    st.header("📊 Portfolio Overview")  # ---- Dashboard-only: Refresh + Notifications ----
     c_refresh, c_notif = st.columns([1, 5])
     with c_refresh:
         if st.button("🔄 Refresh Data", use_container_width=True):
@@ -1225,9 +1280,11 @@ if mode == "📊 Dashboard":
         with aum_col4:
             with get_conn() as conn:
                 aum_schemes = conn.execute(
-                    "SELECT COUNT(DISTINCT scheme_name) FROM (SELECT scheme_name FROM cams_aum UNION SELECT scheme_name FROM kfintech_aum)").fetchone()[0]
+                    "SELECT COUNT(DISTINCT scheme_name) FROM (SELECT scheme_name FROM cams_aum UNION SELECT scheme_name FROM kfintech_aum)").fetchone()[
+                    0]
                 aum_folios = conn.execute(
-                    "SELECT COUNT(DISTINCT folio_no) FROM (SELECT folio_no FROM cams_aum UNION SELECT folio_no FROM kfintech_aum)").fetchone()[0]
+                    "SELECT COUNT(DISTINCT folio_no) FROM (SELECT folio_no FROM cams_aum UNION SELECT folio_no FROM kfintech_aum)").fetchone()[
+                    0]
             st.markdown(
                 f"""<div class="aum-card" style="background: linear-gradient(135deg, #5c1a3a 0%, #942d64 100%);"><div class="label">📂 Schemes × Folios</div><div class="value">{aum_schemes} × {aum_folios}</div></div>""",
                 unsafe_allow_html=True)
@@ -1250,41 +1307,172 @@ if mode == "📊 Dashboard":
             fig = theme_plotly(fig, dark)
             st.plotly_chart(fig, use_container_width=True)
         if total_aum > 0:
-            st.subheader("📦 AUM by AMC")
+            st.subheader("📦 AUM Breakdown")
+
+            # Radio button to toggle the view
+            view_by = st.radio(
+                "View AUM by:",
+                ["AMC", "Schemes", "Clients"],
+                horizontal=True,
+                key="aum_view_by_radio"
+            )
+
             with get_conn() as conn:
-                cams_aum_by_amc = pd.read_sql("""
-                    SELECT 
-                        COALESCE(m.amc_name, a.amc_code) as amc_name,
-                        SUM(a.rupee_bal) as aum
+                if view_by == "AMC":
+                    query = """
+                        SELECT COALESCE(m.amc_name, a.amc_code) as Name, SUM(a.rupee_bal) as AUM 
+                        FROM cams_aum a LEFT JOIN amc_code_map m ON UPPER(TRIM(a.amc_code)) = UPPER(TRIM(m.amc_code)) 
+                        GROUP BY COALESCE(m.amc_name, a.amc_code)
+                        UNION ALL
+                        SELECT COALESCE(m.amc_name, a.amc_code) as Name, SUM(a.rupee_bal) as AUM 
+                        FROM kfintech_aum a LEFT JOIN amc_code_map m ON UPPER(TRIM(a.amc_code)) = UPPER(TRIM(m.amc_code)) 
+                        GROUP BY COALESCE(m.amc_name, a.amc_code)
+                    """
+                elif view_by == "Schemes":
+                    query = """
+                        SELECT scheme_name as Name, SUM(rupee_bal) as AUM 
+                        FROM cams_aum GROUP BY scheme_name
+                        UNION ALL
+                        SELECT scheme_name as Name, SUM(rupee_bal) as AUM 
+                        FROM kfintech_aum GROUP BY scheme_name
+                    """
+                else:  # Clients
+                    query = """
+                    SELECT c.name as Name, SUM(a.rupee_bal) as AUM
                     FROM cams_aum a
-                    LEFT JOIN amc_code_map m
-                        ON UPPER(TRIM(a.amc_code)) = UPPER(TRIM(m.amc_code))
-                    GROUP BY COALESCE(m.amc_name, a.amc_code)
-                """, conn)
-                kfin_aum_by_amc = pd.read_sql("""
-                    SELECT 
-                        COALESCE(m.amc_name, a.amc_code) as amc_name,
-                        SUM(a.rupee_bal) as aum
+                    JOIN clients c ON (
+                        TRIM(LOWER(SUBSTR(a.folio_no, 1, INSTR(a.folio_no || '/', '/') - 1))) IN 
+                            (SELECT TRIM(LOWER(SUBSTR(folio_no, 1, INSTR(folio_no || '/', '/') - 1))) FROM holdings WHERE client_code = c.client_code)
+                        OR TRIM(UPPER(a.pan_no)) = TRIM(UPPER(c.pan))
+                        OR TRIM(LOWER(a.email)) = TRIM(LOWER(c.email))
+                    )
+                    GROUP BY c.name
+                    UNION ALL
+                    SELECT c.name as Name, SUM(a.rupee_bal) as AUM
                     FROM kfintech_aum a
-                    LEFT JOIN amc_code_map m
-                        ON UPPER(TRIM(a.amc_code)) = UPPER(TRIM(m.amc_code))
-                    GROUP BY COALESCE(m.amc_name, a.amc_code)
-                """, conn)
-            cams_aum_by_amc["source"], kfin_aum_by_amc["source"] = "CAMS", "KFinTech"
-            combined_aum = pd.concat([cams_aum_by_amc, kfin_aum_by_amc], ignore_index=True)
-            if not combined_aum.empty:
-                fig_aum = px.bar(
-                    combined_aum,
-                    x="amc_name",
-                    y="aum",
-                    color="source",
-                    labels={"amc_name": "AMC", "aum": "AUM (Rs)", "source": "RTA"},
-                    title="Total AUM Distribution by AMC & RTA",
-                    color_discrete_map={"CAMS": "#2d6a4f", "KFinTech": "#2d6494"}
+                    JOIN clients c ON (
+                        TRIM(LOWER(SUBSTR(a.folio_no, 1, INSTR(a.folio_no || '/', '/') - 1))) IN 
+                            (SELECT TRIM(LOWER(SUBSTR(folio_no, 1, INSTR(folio_no || '/', '/') - 1))) FROM holdings WHERE client_code = c.client_code)
+                        OR TRIM(LOWER(a.email)) = TRIM(LOWER(c.email))
+                    )
+                    GROUP BY c.name
+                    """
+
+                df_aum_raw = pd.read_sql(query, conn)
+
+            if not df_aum_raw.empty:
+                df_aum_raw['Name'] = df_aum_raw['Name'].fillna('Unknown')
+
+                # Combine CAMS and KFinTech
+                df_summary = df_aum_raw.groupby('Name', as_index=False)['AUM'].sum()
+                df_summary = df_summary.sort_values(by='AUM', ascending=False).reset_index(drop=True)
+
+                # Calculate total before formatting
+                total_list_aum = df_summary['AUM'].sum()
+
+                # Format for display
+                df_summary['AUM_Display'] = df_summary['AUM'].apply(format_aum)
+
+                # Rename columns based on the selected view
+                name_col = 'AMC Name' if view_by == "AMC" else (
+                    'Scheme Name' if view_by == "Schemes" else 'Client Name')
+                display_df = df_summary[['Name', 'AUM_Display']].rename(
+                    columns={'Name': name_col, 'AUM_Display': 'Total AUM'})
+
+                # Display the main summary table
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
+                st.metric(f"📊 Total {view_by} AUM", format_aum(total_list_aum))
+
+                # ==========================================
+                # 🚀 NEW: DRILL-DOWN SECTION
+                # ==========================================
+                st.divider()
+                st.subheader(f"🔍 Drill Down: {view_by}")
+
+                # Get clean list of names for the dropdown
+                entity_names = df_summary['Name'].tolist()
+                singular_name = "AMC" if view_by == "AMC" else view_by[:-1]  # AMC, Scheme, Client
+
+                selected_entity = st.selectbox(
+                    f"Select a {singular_name} to view underlying details:",
+                    entity_names,
+                    key=f"drilldown_select_{view_by}"
                 )
-                fig_aum = theme_plotly(fig_aum, dark)
-                fig_aum.update_layout(xaxis_tickangle=-45)
-                st.plotly_chart(fig_aum, use_container_width=True)
+
+                if selected_entity:
+                    with st.spinner("Fetching details..."):
+                        with get_conn() as conn:
+                            if view_by == "AMC":
+                                # AMC -> Schemes
+                                drill_query = """
+                                    SELECT scheme_name as "Scheme Name", SUM(rupee_bal) as AUM
+                                    FROM (
+                                        SELECT a.scheme_name, a.rupee_bal, COALESCE(m.amc_name, a.amc_code) as amc_display
+                                        FROM cams_aum a LEFT JOIN amc_code_map m ON UPPER(TRIM(a.amc_code)) = UPPER(TRIM(m.amc_code))
+                                        UNION ALL
+                                        SELECT a.scheme_name, a.rupee_bal, COALESCE(m.amc_name, a.amc_code) as amc_display
+                                        FROM kfintech_aum a LEFT JOIN amc_code_map m ON UPPER(TRIM(a.amc_code)) = UPPER(TRIM(m.amc_code))
+                                    )
+                                    WHERE amc_display = ?
+                                    GROUP BY scheme_name
+                                    ORDER BY AUM DESC
+                                """
+                                drill_df = pd.read_sql(drill_query, conn, params=(selected_entity,))
+
+                            elif view_by == "Schemes":
+                                # Scheme -> Clients
+                                drill_query = """
+                                    SELECT c.name as "Client Name", SUM(a.rupee_bal) as AUM
+                                    FROM (
+                                        SELECT folio_no, rupee_bal, scheme_name FROM cams_aum
+                                        UNION ALL
+                                        SELECT folio_no, rupee_bal, scheme_name FROM kfintech_aum
+                                    ) a
+                                    JOIN holdings h ON TRIM(LOWER(SUBSTR(a.folio_no, 1, INSTR(a.folio_no || '/', '/') - 1))) = 
+                 TRIM(LOWER(SUBSTR(h.folio_no, 1, INSTR(h.folio_no || '/', '/') - 1)))
+                                    JOIN clients c ON h.client_code = c.client_code
+                                    WHERE a.scheme_name = ?
+                                    GROUP BY c.name
+                                    ORDER BY AUM DESC
+                                """
+                                drill_df = pd.read_sql(drill_query, conn, params=(selected_entity,))
+
+                            else:
+                                # Client -> Schemes (Includes AMC Name for better context!)
+                                drill_query = """
+                                    SELECT 
+                                        COALESCE(m.amc_name, a.amc_code) as "AMC Name", 
+                                        a.scheme_name as "Scheme Name", 
+                                        SUM(a.rupee_bal) as AUM
+                                    FROM (
+                                        SELECT folio_no, scheme_name, rupee_bal, amc_code FROM cams_aum
+                                        UNION ALL
+                                        SELECT folio_no, scheme_name, rupee_bal, amc_code FROM kfintech_aum
+                                    ) a
+                                    JOIN holdings h ON TRIM(LOWER(SUBSTR(a.folio_no, 1, INSTR(a.folio_no || '/', '/') - 1))) = 
+                 TRIM(LOWER(SUBSTR(h.folio_no, 1, INSTR(h.folio_no || '/', '/') - 1)))
+                                    JOIN clients c ON h.client_code = c.client_code
+                                    LEFT JOIN amc_code_map m ON UPPER(TRIM(a.amc_code)) = UPPER(TRIM(m.amc_code))
+                                    WHERE c.name = ?
+                                    GROUP BY COALESCE(m.amc_name, a.amc_code), a.scheme_name
+                                    ORDER BY AUM DESC
+                                """
+                                drill_df = pd.read_sql(drill_query, conn, params=(selected_entity,))
+
+                        if not drill_df.empty:
+                            # Calculate total for this specific drill-down
+                            drill_total = drill_df['AUM'].sum()
+
+                            # Format AUM column
+                            drill_df['AUM'] = drill_df['AUM'].apply(format_aum)
+
+                            # Display the drill-down table
+                            st.dataframe(drill_df, use_container_width=True, hide_index=True)
+                            st.caption(f"💰 Total AUM for **{selected_entity}**: {format_aum(drill_total)}")
+                        else:
+                            st.info(f"No underlying AUM data found for {selected_entity}.")
+            else:
+                st.info(f"No AUM data found for {view_by}.")
         csv = amc_grp.to_csv(index=False).encode()
         st.download_button("⬇️ Export AMC Summary (CSV)", csv, "amc_summary_all.csv", "text/csv")
 
@@ -1599,14 +1787,18 @@ elif mode == "💰 Earnings":
             diff = manual_val - file_val
             match_status = "✅ Match" if abs(diff) < 10 else ("⚠️ Gap" if diff != 0 else "—")
 
-            months_with_file = 0
-            if not file_all.empty:
-                amc_in_file = (
-                        (file_all["amc_name"] == amc) |
-                        (file_all["amc_code"] == amc)
-                )
-                if amc_in_file.any():
-                    months_with_file = 1
+            # Precompute actual distinct months before the loop
+            file_months_map = {}
+            with get_conn() as conn:
+                for row in conn.execute(
+                        "SELECT amc_code, COUNT(DISTINCT accrual_month) FROM cams_brokerage GROUP BY amc_code").fetchall():
+                    file_months_map[row[0]] = file_months_map.get(row[0], 0) + row[1]
+                for row in conn.execute(
+                        "SELECT amc_code, COUNT(DISTINCT accrual_month) FROM kfintech_brokerage GROUP BY amc_code").fetchall():
+                    file_months_map[row[0]] = file_months_map.get(row[0], 0) + row[1]
+
+            # Inside the loop:
+            months_with_file = file_months_map.get(amc, 0)
 
             breakdown_data.append({
                 "AMC": amc,
@@ -1659,8 +1851,10 @@ elif mode == "💰 Earnings":
 # ==================== ⚙️ ADMIN PANEL ====================
 elif mode == "⚙️ Admin Panel":
     st.header("⚙️ Admin Panel")
-    tab_bse, tab_rta, tab_amc, tab_map, tab_db, tab_rta_map = st.tabs(
-        ["📥 Import BSE Data", "🗂️ Import RTA Data", "🏢 AMC Config", "🔗 AMC Code Map", "🗄️ DB Info", "📦 RTA Mapping"])
+    tab_bse, tab_rta, tab_amc, tab_map, tab_db, tab_rta_map, tab_raw = st.tabs(
+        ["📥 Import BSE Data", "🗂️ Import RTA Data", "🏢 AMC Config", "🔗 AMC Code Map", "🗄️ DB Info", "📦 RTA Mapping",
+         "📄 Raw Data"]
+    )
 
     with tab_bse:
         # ---- Client Master ----
@@ -1700,421 +1894,41 @@ elif mode == "⚙️ Admin Panel":
 
     with tab_rta:
         st.subheader("🗂️ RTA Data Upload")
-        st.caption("Upload brokerage and AUM reports from CAMS and KFinTech (Karvy).")
-        rta_section = st.radio("Select data type", ["📂 Brokerage Data", "📦 AUM Data"], horizontal=True,
-                               key="rta_section_toggle")
+        st.caption("Upload AUM, Transaction, Folio Master, SIP, and Brokerage reports from CAMS and KFinTech.")
+
+        # Top-level selection: RTA Provider
+        provider = st.radio(
+            "Select RTA Provider",
+            ["🟦 CAMS", "🟩 KFinTech (Karvy)"],
+            horizontal=True,
+            key="rta_provider_toggle"
+        )
         st.divider()
-        if rta_section == "📂 Brokerage Data":
-            st.markdown("#### CAMS Brokerage File")
-            st.caption(
-                "Upload tab-separated CAMS brokerage report. Required columns: `FOLIO_NO`, `BRKAGE_AMT`, `AMC_CODE`.")
-            cams_file = st.file_uploader("CAMS Brokerage CSV / TSV", type=["csv", "txt", "tsv"], key="cams_file")
-            replace_cams = st.checkbox("Replace ALL existing CAMS brokerage data", key="replace_cams",
-                                       help="Checked: deletes all existing CAMS brokerage rows, then reinserts.\nUnchecked: only inserts transactions not already present (matched on trxn_no + folio + accrual_month).")
-            if replace_cams:
-                st.warning("Replace mode: ALL existing CAMS brokerage data will be deleted and reimported.",
-                           icon="⚠️")
-            else:
-                st.info("Append mode: duplicate transactions (same trxn_no + folio + month) are silently skipped.",
-                        icon="ℹ️")
-            if st.button("📤 Upload CAMS Brokerage") and cams_file:
-                with st.spinner("Parsing brokerage…"):
-                    ok, msg, preview = data_maneger.parse_cams_brokerage(cams_file, replace_cams)
-                    (st.success if ok else st.error)(msg)
-                    if ok and preview:
-                        pm1, pm2, pm3, pm4 = st.columns(4)
-                        pm1.metric("📄 Inserted", preview.get("rows", 0))
-                        pm2.metric("💰 Total Brokerage", format_brokerage(preview.get("total_brokerage", 0)))
-                        pm3.metric("🔁 Duplicates skipped", preview.get("duplicates", 0))
-                        pm4.metric("⏭️ Invalid skipped", preview.get("skipped", 0))
-                        if preview.get("months"): st.info(f"Accrual months in file: **{', '.join(preview['months'])}**")
-                    st.cache_data.clear()
-            st.divider()
-            st.subheader("CAMS Reports")
-            st.caption("Upload CAMS reports: WBR2 (Transactions), WBR9 (Folio Master), WBR49 (SIP Details)")
 
-            cams_report_type = st.radio(
-                "Report type",
-                ["WBR2 — Transaction Report (R2)", "WBR9 — Folio Master (R9)", "WBR49 — SIP Master (R49)"],
+        # ==========================================
+        # 🟦 CAMS SECTION
+        # ==========================================
+        if provider == "🟦 CAMS":
+            cams_data_type = st.radio(
+                "Select CAMS Data Type",
+                ["📦 AUM", "💱 Transaction", "📑 Folio Master", "🔄 SIP", "💰 Brokerage"],
                 horizontal=True,
-                key="cams_report_toggle"
+                key="cams_data_type_toggle"
             )
             st.divider()
 
-            # ---------- WBR2 — Transactions ----------
-            if cams_report_type == "WBR2 — Transaction Report (R2)":
-                st.markdown("#### WBR2 — Transaction Report")
-                st.caption(
-                    "CAMS transaction file (R2). Required columns: `FOLIO_NO`, `TRXNNO`, `AMOUNT`, `UNITS`, `PURPRICE`, `TRADDATE`.")
-                r2_file = st.file_uploader("R2 CSV file", type=["csv", "txt", "tsv"], key="r2_file")
-                replace_r2 = st.checkbox(
-                    "Replace ALL existing transaction data", key="replace_r2",
-                    help="Checked: deletes all cams_transactions rows, then reinserts.\nUnchecked: inserts only new transactions (matched on trxn_no + folio)."
-                )
-                if replace_r2:
-                    st.warning("Replace mode: ALL existing CAMS transaction data will be deleted.", icon="⚠️")
-                else:
-                    st.info("Append mode: duplicate (trxn_no + folio) rows are silently skipped.", icon="ℹ️")
-                if st.button("Upload Transactions (R2)") and r2_file:
-                    with st.spinner("Parsing transactions…"):
-                        ok, msg, preview = data_maneger.parse_cams_transactions(r2_file, replace_r2)
-                        (st.success if ok else st.error)(msg)
-                        if ok and preview:
-                            c1, c2, c3, c4 = st.columns(4)
-                            c1.metric("Inserted", preview.get("rows", 0))
-                            c2.metric("Total Amount", format_currency(preview.get("total_amount", 0), decimals=0))
-                            c3.metric("Folios", preview.get("folios", 0))
-                            c4.metric("Schemes", preview.get("schemes", 0))
-                        st.cache_data.clear()
-                st.divider()
-                st.markdown("#### Existing Transaction Summary")
-                with get_conn() as conn:
-                    txn_summary = pd.read_sql(
-                        """SELECT trade_date AS "Date", amc_code AS "AMC",
-                           COUNT(*) AS "Transactions",
-                           COUNT(DISTINCT folio_no) AS "Folios",
-                           ROUND(SUM(amount), 2) AS "Total Amount (Rs)"
-                           FROM cams_transactions
-                           GROUP BY trade_date, amc_code
-                           ORDER BY trade_date DESC LIMIT 50""", conn)
-                if txn_summary.empty:
-                    st.info("No CAMS transaction data uploaded yet.")
-                else:
-                    st.dataframe(txn_summary, use_container_width=True, hide_index=True)
-                if st.button("Clear All CAMS Transactions"):
-                    with get_conn() as conn: conn.execute("DELETE FROM cams_transactions")
-                    st.warning("All CAMS transaction data deleted.")
-                    st.cache_data.clear()
-                    st.rerun()
-
-            # ---------- WBR9 — Folio Master ----------
-            elif cams_report_type == "WBR9 — Folio Master (R9)":
-                st.markdown("#### WBR9 — Investor Folio Master")
-                st.caption(
-                    "CAMS folio master file (R9). Required columns: `FOLIOCHK`, `INV_NAME`, `SCH_NAME`, `RUPEE_BAL`, `PAN_NO`.")
-                r9_file = st.file_uploader("R9 CSV file", type=["csv", "txt", "tsv"], key="r9_file")
-                replace_r9 = st.checkbox(
-                    "Replace ALL existing folio master data", key="replace_r9",
-                    help="Checked: deletes all cams_folio_master rows, then reinserts.\nUnchecked: inserts only new (folio + scheme) combos."
-                )
-                if replace_r9:
-                    st.warning("Replace mode: ALL existing folio master data will be deleted.", icon="⚠️")
-                else:
-                    st.info("Append mode: duplicate (folio + scheme_name) rows are silently skipped.", icon="ℹ️")
-                if st.button("Upload Folio Master (R9)") and r9_file:
-                    with st.spinner("Parsing folio master…"):
-                        ok, msg, preview = data_maneger.parse_cams_folio_master(r9_file, replace_r9)
-                        (st.success if ok else st.error)(msg)
-                        if ok and preview:
-                            c1, c2, c3, c4 = st.columns(4)
-                            c1.metric("Inserted", preview.get("rows", 0))
-                            c2.metric("Total AUM", format_aum(preview.get("total_aum", 0)))
-                            c3.metric("Unique Folios", preview.get("unique_folios", 0))
-                            c4.metric("Investors", preview.get("unique_investors", 0))
-                        st.cache_data.clear()
-                st.divider()
-                st.markdown("#### Existing Folio Master Summary")
-                with get_conn() as conn:
-                    folio_summary = pd.read_sql(
-                        """SELECT amc_code AS "AMC",
-                           COUNT(DISTINCT folio_no) AS "Folios",
-                           COUNT(DISTINCT pan_no) AS "Investors",
-                           COUNT(*) AS "Scheme Records",
-                           ROUND(SUM(rupee_bal), 2) AS "Total AUM (Rs)"
-                           FROM cams_folio_master
-                           GROUP BY amc_code
-                           ORDER BY 5 DESC""", conn)
-                if folio_summary.empty:
-                    st.info("No CAMS folio master data uploaded yet.")
-                else:
-                    folio_summary["Total AUM (Rs)"] = folio_summary["Total AUM (Rs)"].apply(format_aum)
-                    st.dataframe(folio_summary, use_container_width=True, hide_index=True)
-                    with get_conn() as conn:
-                        total_fm_aum = \
-                            conn.execute("SELECT COALESCE(SUM(rupee_bal),0) FROM cams_folio_master").fetchone()[0]
-                    st.metric("Grand Total AUM (Folio Master)", format_aum(total_fm_aum))
-                if st.button("Clear All Folio Master Data"):
-                    with get_conn() as conn: conn.execute("DELETE FROM cams_folio_master")
-                    st.warning("All CAMS folio master data deleted.")
-                    st.cache_data.clear()
-                    st.rerun()
-
-            # ---------- WBR49 — SIP Master ----------
-            else:
-                st.markdown("#### WBR49 — SIP Details / Master")
-                st.caption(
-                    "CAMS SIP master file (R49). Required columns: `FOLIO_NO`, `AUTO_TRNO`, `AUTO_AMOUNT`, "
-                    "`FROM_DATE`, `TO_DATE`.")
-                r49_file = st.file_uploader("R49 CSV file", type=["csv", "txt", "tsv"], key="r49_file")
-                replace_r49 = st.checkbox(
-                    "Replace ALL existing SIP master data", key="replace_r49",
-                    help="Checked: deletes all cams_sip_master rows, then reinserts.\nUnchecked: inserts only new ("
-                         "sip_reg_no + folio) combos."
-                )
-                if replace_r49:
-                    st.warning("Replace mode: ALL existing CAMS SIP master data will be deleted.", icon="⚠️")
-                else:
-                    st.info("Append mode: duplicate (sip_reg_no + folio) rows are silently skipped.", icon="ℹ️")
-                if st.button("Upload SIP Master (R49)") and r49_file:
-                    with st.spinner("Parsing SIP master…"):
-                        ok, msg, preview = data_maneger.parse_cams_sip_master(r49_file, replace_r49)
-                        (st.success if ok else st.error)(msg)
-                        if ok and preview:
-                            c1, c2, c3, c4 = st.columns(4)
-                            c1.metric("Inserted", preview.get("rows", 0))
-                            c2.metric("Active SIPs", preview.get("active", 0))
-                            c3.metric("Ceased", preview.get("ceased", 0))
-                            c4.metric("Completed", preview.get("completed", 0))
-                        st.cache_data.clear()
-                st.divider()
-                st.markdown("#### Existing SIP Master Summary")
-                with get_conn() as conn:
-                    sip_summary = pd.read_sql(
-                        """SELECT amc_code AS "AMC",
-                           status AS "Status",
-                           COUNT(*) AS "SIPs",
-                           COUNT(DISTINCT folio_no) AS "Folios",
-                           ROUND(SUM(sip_amount), 2) AS "Total SIP Amount (Rs)"
-                           FROM cams_sip_master
-                           GROUP BY amc_code, status
-                           ORDER BY amc_code, status""", conn)
-                if sip_summary.empty:
-                    st.info("No CAMS SIP master data uploaded yet.")
-                else:
-                    st.dataframe(sip_summary, use_container_width=True, hide_index=True)
-                if st.button("Clear All SIP Master Data"):
-                    with get_conn() as conn: conn.execute("DELETE FROM cams_sip_master")
-                    st.warning("All CAMS SIP master data deleted.")
-                    st.cache_data.clear()
-                    st.rerun()
-
-            st.divider()
-            st.markdown("#### Existing CAMS Brokerage Summary")
-            with get_conn() as conn:
-                cams_summary = pd.read_sql(
-                    """SELECT accrual_month AS "Month", COUNT(*) AS "Rows", COUNT(DISTINCT folio_no) AS "Folios", 
-                    ROUND(SUM(brkage_amt), 2) AS "Total Brokerage (Rs)", upload_batch AS "Batch" FROM cams_brokerage 
-                    GROUP BY accrual_month, upload_batch ORDER BY accrual_month DESC""",
-                    conn)
-            if cams_summary.empty:
-                st.info("No CAMS brokerage data uploaded yet.")
-            else:
-                st.dataframe(cams_summary, use_container_width=True, hide_index=True)
-            if st.button("⚠️ Clear All CAMS Brokerage Data"):
-                with get_conn() as conn: conn.execute("DELETE FROM cams_brokerage")
-                st.warning("All CAMS brokerage data deleted.")
-                st.cache_data.clear()
-                st.rerun()
-
-            st.divider()
-            st.markdown("#### KFinTech (Karvy) Brokerage File")
-
-            st.caption(
-                "Upload tab-separated KFinTech brokerage report. Required columns: `Account Number`, `Brokerage (in Rs.)`, `Fund`.")
-            kf_brok_file = st.file_uploader("KFinTech Brokerage CSV / TSV", type=["csv", "txt", "tsv"],
-                                            key="kf_brok_file")
-            replace_kf_brok = st.checkbox("Replace ALL existing KFinTech brokerage data", key="replace_kf_brok",
-                                          help="Checked: deletes all existing KFinTech brokerage rows, "
-                                               "then reinserts.\nUnchecked: only inserts transactions not already "
-                                               "present (matched on trxn_no + folio + accrual_month).")
-            if replace_kf_brok:
-                st.warning("Replace mode: ALL existing KFinTech brokerage data will be deleted and reimported.",
-                           icon="⚠️")
-            else:
-                st.info("Append mode: duplicate transactions (same trxn_no + folio + month) are silently skipped.",
-                        icon="ℹ️")
-            if st.button("📤 Upload KFinTech Brokerage") and kf_brok_file:
-                with st.spinner("Parsing KFinTech brokerage…"):
-                    ok, msg, preview = data_maneger.parse_kfintech_brokerage(kf_brok_file, replace_kf_brok)
-                    (st.success if ok else st.error)(msg)
-                    if ok and preview:
-                        pm1, pm2, pm3, pm4 = st.columns(4)
-                        pm1.metric("📄 Inserted", preview.get("rows", 0))
-                        pm2.metric("💰 Total Brokerage", format_brokerage(preview.get("total_brokerage", 0)))
-                        pm3.metric("🔁 Duplicates skipped", preview.get("duplicates", 0))
-                        pm4.metric("⏭️ Invalid skipped", preview.get("skipped", 0))
-                        if preview.get("months"): st.info(f"Accrual months in file: **{', '.join(preview['months'])}**")
-                    st.cache_data.clear()
-
-            # ==================== KFINTECH REPORTS ====================
-            st.divider()
-            st.subheader("KFinTech Reports")
-            st.caption("Upload KFinTech reports: MFSD201 (Transactions), MFSD211 (Folio Master), MFSD243 (SIP Details)")
-
-            kf_report_type = st.radio(
-                "Report type",
-                ["MFSD201 — Transaction Report", "MFSD211 — Folio Master", "MFSD243 — SIP Master"],
-                horizontal=True,
-                key="kf_report_toggle"
-            )
-            st.divider()
-
-            # ---------- MFSD201 — KFinTech Transactions ----------
-            if kf_report_type == "MFSD201 — Transaction Report":
-                st.markdown("#### MFSD201 — Transaction Report")
-                st.caption(
-                    "KFinTech transaction file (MFSD201). Required columns: `td_acno`, `td_trno`, `td_amt`, `td_units`, `td_pop`, `td_trdt`.")
-                kf_r2_file = st.file_uploader("MFSD201 CSV file", type=["csv", "txt", "tsv"], key="kf_r2_file")
-                replace_kf_r2 = st.checkbox(
-                    "Replace ALL existing KFinTech transaction data", key="replace_kf_r2",
-                    help="Checked: deletes all kfintech_transactions rows, then reinserts.\nUnchecked: inserts only new transactions (matched on trxn_no + folio)."
-                )
-                if replace_kf_r2:
-                    st.warning("Replace mode: ALL existing KFinTech transaction data will be deleted.", icon="⚠️")
-                else:
-                    st.info("Append mode: duplicate (trxn_no + folio) rows are silently skipped.", icon="ℹ️")
-                if st.button("Upload KFinTech Transactions (MFSD201)") and kf_r2_file:
-                    with st.spinner("Parsing KFinTech transactions…"):
-                        ok, msg, preview = data_maneger.parse_kfintech_transactions(kf_r2_file, replace_kf_r2)
-                        (st.success if ok else st.error)(msg)
-                        if ok and preview:
-                            c1, c2, c3, c4 = st.columns(4)
-                            c1.metric("Inserted", preview.get("rows", 0))
-                            c2.metric("Total Amount", format_currency(preview.get("total_amount", 0), decimals=0))
-                            c3.metric("Folios", preview.get("folios", 0))
-                            c4.metric("Schemes", preview.get("schemes", 0))
-                        st.cache_data.clear()
-                st.divider()
-                st.markdown("#### Existing KFinTech Transaction Summary")
-                with get_conn() as conn:
-                    txn_summary = pd.read_sql(
-                        """SELECT trade_date AS "Date", fund_code AS "Fund",
-                           COUNT(*) AS "Transactions",
-                           COUNT(DISTINCT folio_no) AS "Folios",
-                           ROUND(SUM(amount), 2) AS "Total Amount (Rs)"
-                           FROM kfintech_transactions
-                           GROUP BY trade_date, fund_code
-                           ORDER BY trade_date DESC LIMIT 50""", conn)
-                if txn_summary.empty:
-                    st.info("No KFinTech transaction data uploaded yet.")
-                else:
-                    st.dataframe(txn_summary, use_container_width=True, hide_index=True)
-                if st.button("Clear All KFinTech Transactions"):
-                    with get_conn() as conn: conn.execute("DELETE FROM kfintech_transactions")
-                    st.warning("All KFinTech transaction data deleted.")
-                    st.cache_data.clear()
-                    st.rerun()
-
-            # ---------- MFSD211 — KFinTech Folio Master ----------
-            elif kf_report_type == "MFSD211 — Folio Master":
-                st.markdown("#### MFSD211 — Investor Folio Master")
-                st.caption(
-                    "KFinTech folio master file (MFSD211). Required columns: `Folio`, `Investor Name`, `Fund Description`, `PAN Number`.")
-                kf_r9_file = st.file_uploader("MFSD211 CSV file", type=["csv", "txt", "tsv"], key="kf_r9_file")
-                replace_kf_r9 = st.checkbox(
-                    "Replace ALL existing KFinTech folio master data", key="replace_kf_r9",
-                    help="Checked: deletes all kfintech_folio_master rows, then reinserts.\nUnchecked: inserts only new (folio + scheme) combos."
-                )
-                if replace_kf_r9:
-                    st.warning("Replace mode: ALL existing KFinTech folio master data will be deleted.", icon="⚠️")
-                else:
-                    st.info("Append mode: duplicate (folio + scheme_name) rows are silently skipped.", icon="ℹ️")
-                if st.button("Upload KFinTech Folio Master (MFSD211)") and kf_r9_file:
-                    with st.spinner("Parsing KFinTech folio master…"):
-                        ok, msg, preview = data_maneger.parse_kfintech_folio_master(kf_r9_file, replace_kf_r9)
-                        (st.success if ok else st.error)(msg)
-                        if ok and preview:
-                            c1, c2, c3, c4 = st.columns(4)
-                            c1.metric("Inserted", preview.get("rows", 0))
-                            c2.metric("Unique Folios", preview.get("unique_folios", 0))
-                            c3.metric("Investors", preview.get("unique_investors", 0))
-                            c4.metric("Skipped", preview.get("skipped", 0))
-                        st.cache_data.clear()
-                st.divider()
-                st.markdown("#### Existing KFinTech Folio Master Summary")
-                with get_conn() as conn:
-                    folio_summary = pd.read_sql(
-                        """SELECT fund_code AS "Fund",
-                           COUNT(DISTINCT folio_no) AS "Folios",
-                           COUNT(DISTINCT pan_no) AS "Investors",
-                           COUNT(*) AS "Scheme Records"
-                           FROM kfintech_folio_master
-                           GROUP BY fund_code
-                           ORDER BY 2 DESC""", conn)
-                if folio_summary.empty:
-                    st.info("No KFinTech folio master data uploaded yet.")
-                else:
-                    st.dataframe(folio_summary, use_container_width=True, hide_index=True)
-                if st.button("Clear All KFinTech Folio Master Data"):
-                    with get_conn() as conn: conn.execute("DELETE FROM kfintech_folio_master")
-                    st.warning("All KFinTech folio master data deleted.")
-                    st.cache_data.clear()
-                    st.rerun()
-
-            # ---------- MFSD243 — KFinTech SIP Master ----------
-            else:
-                st.markdown("#### MFSD243 — SIP Details / Master")
-                st.caption(
-                    "KFinTech SIP master file (MFSD243). Required columns: `Folio`, `RegSlno`, `Amount`, `Start Date`, `End Date`.")
-                kf_r49_file = st.file_uploader("MFSD243 CSV file", type=["csv", "txt", "tsv"], key="kf_r49_file")
-                replace_kf_r49 = st.checkbox(
-                    "Replace ALL existing KFinTech SIP master data", key="replace_kf_r49",
-                    help="Checked: deletes all kfintech_sip_master rows, then reinserts.\nUnchecked: inserts only new (reg_sl_no + folio) combos."
-                )
-                if replace_kf_r49:
-                    st.warning("Replace mode: ALL existing KFinTech SIP master data will be deleted.", icon="⚠️")
-                else:
-                    st.info("Append mode: duplicate (reg_sl_no + folio) rows are silently skipped.", icon="ℹ️")
-                if st.button("Upload KFinTech SIP Master (MFSD243)") and kf_r49_file:
-                    with st.spinner("Parsing KFinTech SIP master…"):
-                        ok, msg, preview = data_maneger.parse_kfintech_sip_master(kf_r49_file, replace_kf_r49)
-                        (st.success if ok else st.error)(msg)
-                        if ok and preview:
-                            c1, c2, c3, c4 = st.columns(4)
-                            c1.metric("Inserted", preview.get("rows", 0))
-                            c2.metric("Active SIPs", preview.get("active", 0))
-                            c3.metric("Ceased", preview.get("ceased", 0))
-                            c4.metric("Completed", preview.get("completed", 0))
-                        st.cache_data.clear()
-                st.divider()
-                st.markdown("#### Existing KFinTech SIP Master Summary")
-                with get_conn() as conn:
-                    sip_summary = pd.read_sql(
-                        """SELECT fund_code AS "Fund",
-                           status AS "Status",
-                           COUNT(*) AS "SIPs",
-                           COUNT(DISTINCT folio_no) AS "Folios",
-                           ROUND(SUM(sip_amount), 2) AS "Total SIP Amount (Rs)"
-                           FROM kfintech_sip_master
-                           GROUP BY fund_code, status
-                           ORDER BY fund_code, status""", conn)
-                if sip_summary.empty:
-                    st.info("No KFinTech SIP master data uploaded yet.")
-                else:
-                    st.dataframe(sip_summary, use_container_width=True, hide_index=True)
-                if st.button("Clear All KFinTech SIP Master Data"):
-                    with get_conn() as conn: conn.execute("DELETE FROM kfintech_sip_master")
-                    st.warning("All KFinTech SIP master data deleted.")
-                    st.cache_data.clear()
-                    st.rerun()
-            st.divider()
-
-            st.markdown("#### Existing KFinTech Brokerage Summary")
-            with get_conn() as conn:
-                kf_summary = pd.read_sql(
-                    """SELECT accrual_month AS "Month", COUNT(*) AS "Rows", COUNT(DISTINCT folio_no) AS "Folios", ROUND(SUM(brkage_amt), 2) AS "Total Brokerage (Rs)", upload_batch AS "Batch" FROM kfintech_brokerage GROUP BY accrual_month, upload_batch ORDER BY accrual_month DESC""",
-                    conn)
-            if kf_summary.empty:
-                st.info("No KFinTech brokerage data uploaded yet.")
-            else:
-                st.dataframe(kf_summary, use_container_width=True, hide_index=True)
-            if st.button("⚠️ Clear All KFinTech Brokerage Data"):
-                with get_conn() as conn: conn.execute("DELETE FROM kfintech_brokerage")
-                st.warning("All KFinTech brokerage data deleted.")
-                st.cache_data.clear()
-                st.rerun()
-        else:
-            col_cams, col_kfin = st.columns(2)
-            with col_cams:
+            # ---------- CAMS AUM ----------
+            if cams_data_type == "📦 AUM":
                 st.markdown("#### CAMS AUM Report")
                 st.caption("Required columns: `FOLIOCHK`, `RUPEE_BAL`, `SCH_NAME`, `AMC_CODE`, `CLOS_BAL`.")
-                aum_file = st.file_uploader("CAMS AUM CSV / TSV", type=["csv", "txt", "tsv"], key="aum_file")
-                replace_aum = st.checkbox("Replace existing CAMS AUM", key="replace_aum",
+                aum_file = st.file_uploader("CAMS AUM CSV / TSV", type=["csv", "txt", "tsv"], key="cams_aum_file")
+                replace_aum = st.checkbox("Replace existing CAMS AUM", key="replace_cams_aum",
                                           help="Checked: deletes all CAMS AUM rows, reinserts.\nUnchecked: skips rows already present (folio + scheme + rep_date).")
                 if replace_aum:
                     st.warning("Replace mode: ALL existing CAMS AUM data will be deleted.", icon="⚠️")
                 else:
                     st.info("Append mode: duplicate (folio + scheme + date) rows skipped.", icon="ℹ️")
+
                 if st.button("📤 Upload CAMS AUM") and aum_file:
                     with st.spinner("Parsing CAMS AUM…"):
                         ok, msg, preview = data_maneger.parse_cams_aum(aum_file, replace_aum)
@@ -2125,18 +1939,225 @@ elif mode == "⚙️ Admin Panel":
                             am2.metric("📦 Total AUM", format_aum(preview.get("total_aum", 0)))
                             am3.metric("🔁 Duplicates", preview.get("duplicates", 0))
                             am4.metric("⏭️ Skipped", preview.get("skipped", 0))
-                        st.cache_data.clear()
-            with col_kfin:
+                    st.cache_data.clear()
+
+                st.divider()
+                st.markdown("#### Existing CAMS AUM Summary")
+                with get_conn() as conn:
+                    aum_summary = pd.read_sql(
+                        """SELECT rep_date AS "Report Date", amc_code AS "AMC Code", COUNT(*) AS "Folios", ROUND(SUM(rupee_bal), 2) AS "Total AUM (Rs)" FROM cams_aum GROUP BY rep_date, amc_code ORDER BY rep_date DESC, 4 DESC""",
+                        conn)
+                    if aum_summary.empty:
+                        st.info("No CAMS AUM data uploaded yet.")
+                    else:
+                        aum_summary["Total AUM (Rs)"] = aum_summary["Total AUM (Rs)"].apply(format_aum)
+                        st.dataframe(aum_summary, use_container_width=True, hide_index=True)
+                        st.metric("CAMS Grand Total", format_aum(load_total_aum()))
+                        if st.button("⚠️ Clear CAMS AUM", key="clear_cams_aum"):
+                            with get_conn() as conn: conn.execute("DELETE FROM cams_aum")
+                            st.warning("CAMS AUM data deleted.")
+                            st.cache_data.clear()
+                            st.rerun()
+
+            # ---------- CAMS TRANSACTION (WBR2) ----------
+            elif cams_data_type == "💱 Transaction":
+                st.markdown("#### WBR2 — Transaction Report")
+                st.caption(
+                    "CAMS transaction file (R2). Required columns: `FOLIO_NO`, `TRXNNO`, `AMOUNT`, `UNITS`, `PURPRICE`, `TRADDATE`.")
+                r2_file = st.file_uploader("R2 CSV file", type=["csv", "txt", "tsv"], key="cams_r2_file")
+                replace_r2 = st.checkbox("Replace ALL existing transaction data", key="replace_cams_r2",
+                                         help="Checked: deletes all cams_transactions rows, then reinserts.\nUnchecked: inserts only new transactions (matched on trxn_no + folio).")
+                if replace_r2:
+                    st.warning("Replace mode: ALL existing CAMS transaction data will be deleted.", icon="⚠️")
+                else:
+                    st.info("Append mode: duplicate (trxn_no + folio) rows are silently skipped.", icon="ℹ️")
+
+                if st.button("Upload Transactions (R2)") and r2_file:
+                    with st.spinner("Parsing transactions…"):
+                        ok, msg, preview = data_maneger.parse_cams_transactions(r2_file, replace_r2)
+                        (st.success if ok else st.error)(msg)
+                        if ok and preview:
+                            c1, c2, c3, c4 = st.columns(4)
+                            c1.metric("Inserted", preview.get("rows", 0))
+                            c2.metric("Total Amount", format_currency(preview.get("total_amount", 0), decimals=0))
+                            c3.metric("Folios", preview.get("folios", 0))
+                            c4.metric("Schemes", preview.get("schemes", 0))
+                    st.cache_data.clear()
+
+                st.divider()
+                st.markdown("#### Existing Transaction Summary")
+                with get_conn() as conn:
+                    txn_summary = pd.read_sql(
+                        """SELECT trade_date AS "Date", amc_code AS "AMC", COUNT(*) AS "Transactions", COUNT(DISTINCT folio_no) AS "Folios", ROUND(SUM(amount), 2) AS "Total Amount (Rs)" FROM cams_transactions GROUP BY trade_date, amc_code ORDER BY trade_date DESC LIMIT 50""",
+                        conn)
+                    if txn_summary.empty:
+                        st.info("No CAMS transaction data uploaded yet.")
+                    else:
+                        st.dataframe(txn_summary, use_container_width=True, hide_index=True)
+                        if st.button("Clear All CAMS Transactions", key="clear_cams_txn"):
+                            with get_conn() as conn: conn.execute("DELETE FROM cams_transactions")
+                            st.warning("All CAMS transaction data deleted.")
+                            st.cache_data.clear()
+                            st.rerun()
+
+            # ---------- CAMS FOLIO MASTER (WBR9) ----------
+            elif cams_data_type == "📑 Folio Master":
+                st.markdown("#### WBR9 — Investor Folio Master")
+                st.caption(
+                    "CAMS folio master file (R9). Required columns: `FOLIOCHK`, `INV_NAME`, `SCH_NAME`, `RUPEE_BAL`, `PAN_NO`.")
+                r9_file = st.file_uploader("R9 CSV file", type=["csv", "txt", "tsv"], key="cams_r9_file")
+                replace_r9 = st.checkbox("Replace ALL existing folio master data", key="replace_cams_r9",
+                                         help="Checked: deletes all cams_folio_master rows, then reinserts.\nUnchecked: inserts only new (folio + scheme) combos.")
+                if replace_r9:
+                    st.warning("Replace mode: ALL existing folio master data will be deleted.", icon="⚠️")
+                else:
+                    st.info("Append mode: duplicate (folio + scheme_name) rows are silently skipped.", icon="ℹ️")
+
+                if st.button("Upload Folio Master (R9)") and r9_file:
+                    with st.spinner("Parsing folio master…"):
+                        ok, msg, preview = data_maneger.parse_cams_folio_master(r9_file, replace_r9)
+                        (st.success if ok else st.error)(msg)
+                        if ok and preview:
+                            c1, c2, c3, c4 = st.columns(4)
+                            c1.metric("Inserted", preview.get("rows", 0))
+                            c2.metric("Total AUM", format_aum(preview.get("total_aum", 0)))
+                            c3.metric("Unique Folios", preview.get("unique_folios", 0))
+                            c4.metric("Investors", preview.get("unique_investors", 0))
+                    st.cache_data.clear()
+
+                st.divider()
+                st.markdown("#### Existing Folio Master Summary")
+                with get_conn() as conn:
+                    folio_summary = pd.read_sql(
+                        """SELECT amc_code AS "AMC", COUNT(DISTINCT folio_no) AS "Folios", COUNT(DISTINCT pan_no) AS "Investors", COUNT(*) AS "Scheme Records", ROUND(SUM(rupee_bal), 2) AS "Total AUM (Rs)" FROM cams_folio_master GROUP BY amc_code ORDER BY 5 DESC""",
+                        conn)
+                    if folio_summary.empty:
+                        st.info("No CAMS folio master data uploaded yet.")
+                    else:
+                        folio_summary["Total AUM (Rs)"] = folio_summary["Total AUM (Rs)"].apply(format_aum)
+                        st.dataframe(folio_summary, use_container_width=True, hide_index=True)
+                        with get_conn() as conn:
+                            total_fm_aum = \
+                            conn.execute("SELECT COALESCE(SUM(rupee_bal),0) FROM cams_folio_master").fetchone()[0]
+                        st.metric("Grand Total AUM (Folio Master)", format_aum(total_fm_aum))
+                        if st.button("Clear All Folio Master Data", key="clear_cams_fm"):
+                            with get_conn() as conn: conn.execute("DELETE FROM cams_folio_master")
+                            st.warning("All CAMS folio master data deleted.")
+                            st.cache_data.clear()
+                            st.rerun()
+
+            # ---------- CAMS SIP MASTER (WBR49) ----------
+            elif cams_data_type == "🔄 SIP":
+                st.markdown("#### WBR49 — SIP Details / Master")
+                st.caption(
+                    "CAMS SIP master file (R49). Required columns: `FOLIO_NO`, `AUTO_TRNO`, `AUTO_AMOUNT`, `FROM_DATE`, `TO_DATE`.")
+                r49_file = st.file_uploader("R49 CSV file", type=["csv", "txt", "tsv"], key="cams_r49_file")
+                replace_r49 = st.checkbox("Replace ALL existing SIP master data", key="replace_cams_r49",
+                                          help="Checked: deletes all cams_sip_master rows, then reinserts.\nUnchecked: inserts only new (sip_reg_no + folio) combos.")
+                if replace_r49:
+                    st.warning("Replace mode: ALL existing CAMS SIP master data will be deleted.", icon="⚠️")
+                else:
+                    st.info("Append mode: duplicate (sip_reg_no + folio) rows are silently skipped.", icon="ℹ️")
+
+                if st.button("Upload SIP Master (R49)") and r49_file:
+                    with st.spinner("Parsing SIP master…"):
+                        ok, msg, preview = data_maneger.parse_cams_sip_master(r49_file, replace_r49)
+                        (st.success if ok else st.error)(msg)
+                        if ok and preview:
+                            c1, c2, c3, c4 = st.columns(4)
+                            c1.metric("Inserted", preview.get("rows", 0))
+                            c2.metric("Active SIPs", preview.get("active", 0))
+                            c3.metric("Ceased", preview.get("ceased", 0))
+                            c4.metric("Completed", preview.get("completed", 0))
+                    st.cache_data.clear()
+
+                st.divider()
+                st.markdown("#### Existing SIP Master Summary")
+                with get_conn() as conn:
+                    sip_summary = pd.read_sql(
+                        """SELECT amc_code AS "AMC", status AS "Status", COUNT(*) AS "SIPs", COUNT(DISTINCT folio_no) AS "Folios", ROUND(SUM(sip_amount), 2) AS "Total SIP Amount (Rs)" FROM cams_sip_master GROUP BY amc_code, status ORDER BY amc_code, status""",
+                        conn)
+                    if sip_summary.empty:
+                        st.info("No CAMS SIP master data uploaded yet.")
+                    else:
+                        st.dataframe(sip_summary, use_container_width=True, hide_index=True)
+                        if st.button("Clear All SIP Master Data", key="clear_cams_sip"):
+                            with get_conn() as conn: conn.execute("DELETE FROM cams_sip_master")
+                            st.warning("All CAMS SIP master data deleted.")
+                            st.cache_data.clear()
+                            st.rerun()
+
+            # ---------- CAMS BROKERAGE ----------
+            elif cams_data_type == "💰 Brokerage":
+                st.markdown("#### CAMS Brokerage File")
+                st.caption(
+                    "Upload tab-separated CAMS brokerage report. Required columns: `FOLIO_NO`, `BRKAGE_AMT`, `AMC_CODE`.")
+                cams_file = st.file_uploader("CAMS Brokerage CSV / TSV", type=["csv", "txt", "tsv"],
+                                             key="cams_brok_file")
+                replace_cams = st.checkbox("Replace ALL existing CAMS brokerage data", key="replace_cams_brok",
+                                           help="Checked: deletes all existing CAMS brokerage rows, then reinserts.\nUnchecked: only inserts transactions not already present (matched on trxn_no + folio + accrual_month).")
+                if replace_cams:
+                    st.warning("Replace mode: ALL existing CAMS brokerage data will be deleted and reimported.",
+                               icon="⚠️")
+                else:
+                    st.info("Append mode: duplicate transactions (same trxn_no + folio + month) are silently skipped.",
+                            icon="ℹ️")
+
+                if st.button("📤 Upload CAMS Brokerage") and cams_file:
+                    with st.spinner("Parsing brokerage…"):
+                        ok, msg, preview = data_maneger.parse_cams_brokerage(cams_file, replace_cams)
+                        (st.success if ok else st.error)(msg)
+                        if ok and preview:
+                            pm1, pm2, pm3, pm4 = st.columns(4)
+                            pm1.metric("📄 Inserted", preview.get("rows", 0))
+                            pm2.metric("💰 Total Brokerage", format_brokerage(preview.get("total_brokerage", 0)))
+                            pm3.metric("🔁 Duplicates skipped", preview.get("duplicates", 0))
+                            pm4.metric("⏭️ Invalid skipped", preview.get("skipped", 0))
+                            if preview.get("months"): st.info(
+                                f"Accrual months in file: **{', '.join(preview['months'])}**")
+                    st.cache_data.clear()
+
+                st.divider()
+                st.markdown("#### Existing CAMS Brokerage Summary")
+                with get_conn() as conn:
+                    cams_summary = pd.read_sql(
+                        """SELECT accrual_month AS "Month", COUNT(*) AS "Rows", COUNT(DISTINCT folio_no) AS "Folios", ROUND(SUM(brkage_amt), 2) AS "Total Brokerage (Rs)", upload_batch AS "Batch" FROM cams_brokerage GROUP BY accrual_month, upload_batch ORDER BY accrual_month DESC""",
+                        conn)
+                    if cams_summary.empty:
+                        st.info("No CAMS brokerage data uploaded yet.")
+                    else:
+                        st.dataframe(cams_summary, use_container_width=True, hide_index=True)
+                        if st.button("⚠️ Clear All CAMS Brokerage Data", key="clear_cams_brok"):
+                            with get_conn() as conn: conn.execute("DELETE FROM cams_brokerage")
+                            st.warning("All CAMS brokerage data deleted.")
+                            st.cache_data.clear()
+                            st.rerun()
+
+        # ==========================================
+        # 🟩 KFINTECH (KARVY) SECTION
+        # ==========================================
+        else:
+            kfin_data_type = st.radio(
+                "Select KFinTech Data Type",
+                ["📦 AUM", "💱 Transaction", "📑 Folio Master", "🔄 SIP", "💰 Brokerage"],
+                horizontal=True,
+                key="kfin_data_type_toggle"
+            )
+            st.divider()
+
+            # ---------- KFINTECH AUM ----------
+            if kfin_data_type == "📦 AUM":
                 st.markdown("#### KFinTech AUM Report")
                 st.caption(
                     "Expected columns: `Folio Number`, `Fund Description`, `AUM`, `Balance`, `NAV`, `Report Date`.")
                 kfin_file = st.file_uploader("KFinTech AUM CSV / TSV", type=["csv", "txt", "tsv"], key="kfin_aum_file")
-                replace_kfin = st.checkbox("Replace existing KFinTech AUM", key="replace_kfin",
+                replace_kfin = st.checkbox("Replace existing KFinTech AUM", key="replace_kfin_aum",
                                            help="Checked: deletes all KFinTech AUM rows, reinserts.\nUnchecked: skips duplicate (folio + scheme + date) rows.")
                 if replace_kfin:
                     st.warning("Replace mode: ALL existing KFinTech AUM data will be deleted.", icon="⚠️")
                 else:
                     st.info("Append mode: duplicate (folio + scheme + date) rows skipped.", icon="ℹ️")
+
                 if st.button("📤 Upload KFinTech AUM") and kfin_file:
                     with st.spinner("Parsing KFinTech AUM…"):
                         ok, msg, preview = data_maneger.parse_kfintech_aum(kfin_file, replace_kfin)
@@ -2147,54 +2168,194 @@ elif mode == "⚙️ Admin Panel":
                             km2.metric("📦 Total AUM", format_aum(preview.get("total_aum", 0)))
                             km3.metric("🔁 Duplicates", preview.get("duplicates", 0))
                             km4.metric("⏭️ Skipped", preview.get("skipped", 0))
-                        st.cache_data.clear()
-            st.divider()
-            st.markdown("#### Existing AUM Summary")
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown("**CAMS AUM**")
-                with get_conn() as conn:
-                    aum_summary = pd.read_sql(
-                        """SELECT rep_date AS "Report Date", amc_code AS "AMC Code", COUNT(*) AS "Folios", ROUND(SUM(rupee_bal), 2) AS "Total AUM (Rs)" FROM cams_aum GROUP BY rep_date, amc_code ORDER BY rep_date DESC, 4 DESC""",
-                        conn)
-                if aum_summary.empty:
-                    st.info("No CAMS AUM data uploaded yet.")
-                else:
-                    aum_summary["Total AUM (Rs)"] = aum_summary["Total AUM (Rs)"].apply(format_aum)
-                    st.dataframe(aum_summary, use_container_width=True, hide_index=True)
-                st.metric("CAMS Grand Total", format_aum(load_total_aum()))
-                if st.button("⚠️ Clear CAMS AUM"):
-                    with get_conn() as conn: conn.execute("DELETE FROM cams_aum")
-                    st.warning("CAMS AUM data deleted.")
                     st.cache_data.clear()
-                    st.rerun()
-            with c2:
-                st.markdown("**KFinTech AUM**")
+
+                st.divider()
+                st.markdown("#### Existing KFinTech AUM Summary")
                 with get_conn() as conn:
                     kfin_summary = pd.read_sql(
                         """SELECT rep_date AS "Report Date", amc_code AS "AMC Code", COUNT(*) AS "Folios", ROUND(SUM(rupee_bal), 2) AS "Total AUM (Rs)" FROM kfintech_aum GROUP BY rep_date, amc_code ORDER BY rep_date DESC, 4 DESC""",
                         conn)
-                if kfin_summary.empty:
-                    st.info("No KFinTech AUM data uploaded yet.")
+                    if kfin_summary.empty:
+                        st.info("No KFinTech AUM data uploaded yet.")
+                    else:
+                        kfin_summary["Total AUM (Rs)"] = kfin_summary["Total AUM (Rs)"].apply(format_aum)
+                        st.dataframe(kfin_summary, use_container_width=True, hide_index=True)
+                        st.metric("KFinTech Grand Total", format_aum(load_total_kfintech_aum()))
+                        if st.button("⚠️ Clear KFinTech AUM", key="clear_kfin_aum"):
+                            with get_conn() as conn: conn.execute("DELETE FROM kfintech_aum")
+                            st.warning("KFinTech AUM data deleted.")
+                            st.cache_data.clear()
+                            st.rerun()
+
+            # ---------- KFINTECH TRANSACTION (MFSD201) ----------
+            elif kfin_data_type == "💱 Transaction":
+                st.markdown("#### MFSD201 — Transaction Report")
+                st.caption(
+                    "KFinTech transaction file (MFSD201). Required columns: `td_acno`, `td_trno`, `td_amt`, `td_units`, `td_pop`, `td_trdt`.")
+                kf_r2_file = st.file_uploader("MFSD201 CSV file", type=["csv", "txt", "tsv"], key="kfin_r2_file")
+                replace_kf_r2 = st.checkbox("Replace ALL existing KFinTech transaction data", key="replace_kfin_r2",
+                                            help="Checked: deletes all kfintech_transactions rows, then reinserts.\nUnchecked: inserts only new transactions (matched on trxn_no + folio).")
+                if replace_kf_r2:
+                    st.warning("Replace mode: ALL existing KFinTech transaction data will be deleted.", icon="⚠️")
                 else:
-                    kfin_summary["Total AUM (Rs)"] = kfin_summary["Total AUM (Rs)"].apply(format_aum)
-                    st.dataframe(kfin_summary, use_container_width=True, hide_index=True)
-                st.metric("KFinTech Grand Total", format_aum(load_total_kfintech_aum()))
-                if st.button("⚠️ Clear KFinTech AUM"):
-                    with get_conn() as conn: conn.execute("DELETE FROM kfintech_aum")
-                    st.warning("KFinTech AUM data deleted.")
+                    st.info("Append mode: duplicate (trxn_no + folio) rows are silently skipped.", icon="ℹ️")
+
+                if st.button("Upload KFinTech Transactions (MFSD201)") and kf_r2_file:
+                    with st.spinner("Parsing KFinTech transactions…"):
+                        ok, msg, preview = data_maneger.parse_kfintech_transactions(kf_r2_file, replace_kf_r2)
+                        (st.success if ok else st.error)(msg)
+                        if ok and preview:
+                            c1, c2, c3, c4 = st.columns(4)
+                            c1.metric("Inserted", preview.get("rows", 0))
+                            c2.metric("Total Amount", format_currency(preview.get("total_amount", 0), decimals=0))
+                            c3.metric("Folios", preview.get("folios", 0))
+                            c4.metric("Schemes", preview.get("schemes", 0))
                     st.cache_data.clear()
-                    st.rerun()
-            st.divider()
-            combined = load_combined_total_aum()
-            st.metric("📦 Combined Total AUM (CAMS + KFinTech)", format_aum(combined["total"]))
-            if st.button("⚠️ Clear ALL AUM Data"):
+
+                st.divider()
+                st.markdown("#### Existing KFinTech Transaction Summary")
                 with get_conn() as conn:
-                    conn.execute("DELETE FROM cams_aum")
-                    conn.execute("DELETE FROM kfintech_aum")
-                st.warning("All AUM data (CAMS + KFinTech) deleted.")
-                st.cache_data.clear()
-                st.rerun()
+                    txn_summary = pd.read_sql(
+                        """SELECT trade_date AS "Date", fund_code AS "Fund", COUNT(*) AS "Transactions", COUNT(DISTINCT folio_no) AS "Folios", ROUND(SUM(amount), 2) AS "Total Amount (Rs)" FROM kfintech_transactions GROUP BY trade_date, fund_code ORDER BY trade_date DESC LIMIT 50""",
+                        conn)
+                    if txn_summary.empty:
+                        st.info("No KFinTech transaction data uploaded yet.")
+                    else:
+                        st.dataframe(txn_summary, use_container_width=True, hide_index=True)
+                        if st.button("Clear All KFinTech Transactions", key="clear_kfin_txn"):
+                            with get_conn() as conn: conn.execute("DELETE FROM kfintech_transactions")
+                            st.warning("All KFinTech transaction data deleted.")
+                            st.cache_data.clear()
+                            st.rerun()
+
+            # ---------- KFINTECH FOLIO MASTER (MFSD211) ----------
+            elif kfin_data_type == "📑 Folio Master":
+                st.markdown("#### MFSD211 — Investor Folio Master")
+                st.caption(
+                    "KFinTech folio master file (MFSD211). Required columns: `Folio`, `Investor Name`, `Fund Description`, `PAN Number`.")
+                kf_r9_file = st.file_uploader("MFSD211 CSV file", type=["csv", "txt", "tsv"], key="kfin_r9_file")
+                replace_kf_r9 = st.checkbox("Replace ALL existing KFinTech folio master data", key="replace_kfin_r9",
+                                            help="Checked: deletes all kfintech_folio_master rows, then reinserts.\nUnchecked: inserts only new (folio + scheme) combos.")
+                if replace_kf_r9:
+                    st.warning("Replace mode: ALL existing KFinTech folio master data will be deleted.", icon="⚠️")
+                else:
+                    st.info("Append mode: duplicate (folio + scheme_name) rows are silently skipped.", icon="ℹ️")
+
+                if st.button("Upload KFinTech Folio Master (MFSD211)") and kf_r9_file:
+                    with st.spinner("Parsing KFinTech folio master…"):
+                        ok, msg, preview = data_maneger.parse_kfintech_folio_master(kf_r9_file, replace_kf_r9)
+                        (st.success if ok else st.error)(msg)
+                        if ok and preview:
+                            c1, c2, c3, c4 = st.columns(4)
+                            c1.metric("Inserted", preview.get("rows", 0))
+                            c2.metric("Unique Folios", preview.get("unique_folios", 0))
+                            c3.metric("Investors", preview.get("unique_investors", 0))
+                            c4.metric("Skipped", preview.get("skipped", 0))
+                    st.cache_data.clear()
+
+                st.divider()
+                st.markdown("#### Existing KFinTech Folio Master Summary")
+                with get_conn() as conn:
+                    folio_summary = pd.read_sql(
+                        """SELECT fund_code AS "Fund", COUNT(DISTINCT folio_no) AS "Folios", COUNT(DISTINCT pan_no) AS "Investors", COUNT(*) AS "Scheme Records" FROM kfintech_folio_master GROUP BY fund_code ORDER BY 2 DESC""",
+                        conn)
+                    if folio_summary.empty:
+                        st.info("No KFinTech folio master data uploaded yet.")
+                    else:
+                        st.dataframe(folio_summary, use_container_width=True, hide_index=True)
+                        if st.button("Clear All KFinTech Folio Master Data", key="clear_kfin_fm"):
+                            with get_conn() as conn: conn.execute("DELETE FROM kfintech_folio_master")
+                            st.warning("All KFinTech folio master data deleted.")
+                            st.cache_data.clear()
+                            st.rerun()
+
+            # ---------- KFINTECH SIP MASTER (MFSD243) ----------
+            elif kfin_data_type == "🔄 SIP":
+                st.markdown("#### MFSD243 — SIP Details / Master")
+                st.caption(
+                    "KFinTech SIP master file (MFSD243). Required columns: `Folio`, `RegSlno`, `Amount`, `Start Date`, `End Date`.")
+                kf_r49_file = st.file_uploader("MFSD243 CSV file", type=["csv", "txt", "tsv"], key="kfin_r49_file")
+                replace_kf_r49 = st.checkbox("Replace ALL existing KFinTech SIP master data", key="replace_kfin_r49",
+                                             help="Checked: deletes all kfintech_sip_master rows, then reinserts.\nUnchecked: inserts only new (reg_sl_no + folio) combos.")
+                if replace_kf_r49:
+                    st.warning("Replace mode: ALL existing KFinTech SIP master data will be deleted.", icon="⚠️")
+                else:
+                    st.info("Append mode: duplicate (reg_sl_no + folio) rows are silently skipped.", icon="ℹ️")
+
+                if st.button("Upload KFinTech SIP Master (MFSD243)") and kf_r49_file:
+                    with st.spinner("Parsing KFinTech SIP master…"):
+                        ok, msg, preview = data_maneger.parse_kfintech_sip_master(kf_r49_file, replace_kf_r49)
+                        (st.success if ok else st.error)(msg)
+                        if ok and preview:
+                            c1, c2, c3, c4 = st.columns(4)
+                            c1.metric("Inserted", preview.get("rows", 0))
+                            c2.metric("Active SIPs", preview.get("active", 0))
+                            c3.metric("Ceased", preview.get("ceased", 0))
+                            c4.metric("Completed", preview.get("completed", 0))
+                    st.cache_data.clear()
+
+                st.divider()
+                st.markdown("#### Existing KFinTech SIP Master Summary")
+                with get_conn() as conn:
+                    sip_summary = pd.read_sql(
+                        """SELECT fund_code AS "Fund", status AS "Status", COUNT(*) AS "SIPs", COUNT(DISTINCT folio_no) AS "Folios", ROUND(SUM(sip_amount), 2) AS "Total SIP Amount (Rs)" FROM kfintech_sip_master GROUP BY fund_code, status ORDER BY fund_code, status""",
+                        conn)
+                    if sip_summary.empty:
+                        st.info("No KFinTech SIP master data uploaded yet.")
+                    else:
+                        st.dataframe(sip_summary, use_container_width=True, hide_index=True)
+                        if st.button("Clear All KFinTech SIP Master Data", key="clear_kfin_sip"):
+                            with get_conn() as conn: conn.execute("DELETE FROM kfintech_sip_master")
+                            st.warning("All KFinTech SIP master data deleted.")
+                            st.cache_data.clear()
+                            st.rerun()
+
+            # ---------- KFINTECH BROKERAGE ----------
+            elif kfin_data_type == "💰 Brokerage":
+                st.markdown("#### KFinTech (Karvy) Brokerage File")
+                st.caption(
+                    "Upload tab-separated KFinTech brokerage report. Required columns: `Account Number`, `Brokerage (in Rs.)`, `Fund`.")
+                kf_brok_file = st.file_uploader("KFinTech Brokerage CSV / TSV", type=["csv", "txt", "tsv"],
+                                                key="kfin_brok_file")
+                replace_kf_brok = st.checkbox("Replace ALL existing KFinTech brokerage data", key="replace_kfin_brok",
+                                              help="Checked: deletes all existing KFinTech brokerage rows, then reinserts.\nUnchecked: only inserts transactions not already present (matched on trxn_no + folio + accrual_month).")
+                if replace_kf_brok:
+                    st.warning("Replace mode: ALL existing KFinTech brokerage data will be deleted and reimported.",
+                               icon="⚠️")
+                else:
+                    st.info("Append mode: duplicate transactions (same trxn_no + folio + month) are silently skipped.",
+                            icon="ℹ️")
+
+                if st.button("📤 Upload KFinTech Brokerage") and kf_brok_file:
+                    with st.spinner("Parsing KFinTech brokerage…"):
+                        ok, msg, preview = data_maneger.parse_kfintech_brokerage(kf_brok_file, replace_kf_brok)
+                        (st.success if ok else st.error)(msg)
+                        if ok and preview:
+                            pm1, pm2, pm3, pm4 = st.columns(4)
+                            pm1.metric("📄 Inserted", preview.get("rows", 0))
+                            pm2.metric("💰 Total Brokerage", format_brokerage(preview.get("total_brokerage", 0)))
+                            pm3.metric("🔁 Duplicates skipped", preview.get("duplicates", 0))
+                            pm4.metric("⏭️ Invalid skipped", preview.get("skipped", 0))
+                            if preview.get("months"): st.info(
+                                f"Accrual months in file: **{', '.join(preview['months'])}**")
+                    st.cache_data.clear()
+
+                st.divider()
+                st.markdown("#### Existing KFinTech Brokerage Summary")
+                with get_conn() as conn:
+                    kf_summary = pd.read_sql(
+                        """SELECT accrual_month AS "Month", COUNT(*) AS "Rows", COUNT(DISTINCT folio_no) AS "Folios", ROUND(SUM(brkage_amt), 2) AS "Total Brokerage (Rs)", upload_batch AS "Batch" FROM kfintech_brokerage GROUP BY accrual_month, upload_batch ORDER BY accrual_month DESC""",
+                        conn)
+                    if kf_summary.empty:
+                        st.info("No KFinTech brokerage data uploaded yet.")
+                    else:
+                        st.dataframe(kf_summary, use_container_width=True, hide_index=True)
+                        if st.button("⚠️ Clear All KFinTech Brokerage Data", key="clear_kfin_brok"):
+                            with get_conn() as conn: conn.execute("DELETE FROM kfintech_brokerage")
+                            st.warning("All KFinTech brokerage data deleted.")
+                            st.cache_data.clear()
+                            st.rerun()
 
     with tab_amc:
         st.subheader("Enable / Disable AMCs")
@@ -2217,20 +2378,405 @@ elif mode == "⚙️ Admin Panel":
 
     with tab_map:
         st.subheader("🔗 AMC Code → AMC Name Mapping")
-        st.caption("Map short CAMS/KFin codes to full AMC names.")
-        cams_codes = load_distinct_cams_amc_codes()
+        st.caption(
+            "Fetches the live AMFI NAV file, builds a scheme_code → AMC name index, "
+            "then looks up every unmapped Fund Code found in your uploaded RTA files."
+        )
+
+        # ── Existing mappings table ───────────────────────────────────────────
+        with get_conn() as conn:
+            _existing_map_df = pd.read_sql(
+                "SELECT amc_code AS 'AMC Code', amc_name AS 'AMC Name' "
+                "FROM amc_code_map ORDER BY amc_code",
+                conn,
+            )
+        if _existing_map_df.empty:
+            st.info("No mappings yet — run Auto-Map or add manually below.")
+        else:
+            st.markdown(f"**{len(_existing_map_df)} mapped code(s)**")
+            st.dataframe(_existing_map_df, use_container_width=True, hide_index=True)
+            _del_code = st.text_input("Delete a mapping (enter exact AMC Code)", key="del_amc_code_input")
+            if st.button("🗑️ Delete Mapping", key="del_amc_code_btn") and _del_code.strip():
+                with get_conn() as conn:
+                    conn.execute(
+                        "DELETE FROM amc_code_map WHERE TRIM(UPPER(amc_code)) = TRIM(UPPER(?))",
+                        (_del_code.strip(),),
+                    )
+                st.success(f"Deleted `{_del_code.strip()}`")
+                st.cache_data.clear()
+                st.rerun()
+
+        st.markdown("---")
+
+        st.markdown("#### 🪄 Smart Auto-Mapping via AMFI")
+        if st.button("🪄 Auto-Map Fund Codes using AMFI Data", type="primary"):
+            _log_placeholder = st.empty()
+            _logs: list[str] = []
+
+
+            def _log(msg: str) -> None:
+                _logs.append(msg)
+                _log_placeholder.code("\n".join(_logs[-60:]), language="log")
+                print(f"[AUTO-MAP DEBUG] {msg}")
+
+
+            with st.status("Running auto-map with Smart Fallback…", expanded=True) as _status:
+                # ── Step 1: fetch AMFI NAV file ──────────────────────────────
+                _log("📥 **Step 1:** Downloading AMFI NAV file…")
+                try:
+                    _resp = requests.get(AMFI_TEXT_URL, timeout=30)
+                    _resp.raise_for_status()
+                    _lines = _resp.text.splitlines()
+                    _log(f"✅ {len(_lines):,} lines downloaded from AMFI")
+                except Exception as _exc:
+                    _log(f"❌ Download failed: {_exc}")
+                    _status.update(label="❌ AMFI download failed", state="error")
+                    st.stop()
+
+                # ── Step 2: build scheme_code (int) → AMC name ───────────────
+                _log("🔍 **Step 2:** Parsing scheme_code → AMC name index…")
+                _scheme_amc: dict[str, str] = {}
+                _cur_amc = None
+                _amc_count = 0
+                for _line in _lines:
+                    _line = _line.strip()
+                    if not _line: continue
+                    if ";" not in _line:
+                        if "Mutual Fund" in _line or "mutual fund" in _line.lower():
+                            _cur_amc = _line.strip()
+                            _amc_count += 1
+                        continue
+                    _parts = _line.split(";")
+                    if not _parts[0].strip().isdigit() or _cur_amc is None: continue
+                    _scheme_amc[_parts[0].strip()] = _cur_amc
+
+                _log(f"✅ {len(_scheme_amc):,} scheme codes indexed from {_amc_count} AMCs")
+
+                # ── Prepare Known AMC names for Fallback ─────────────────────
+                # Combine CAMS_AMCS and KFIN_AMCS, sort by length descending to match "NIPPON INDIA" before "NIPPON"
+                _all_known_amcs = sorted(list(CAMS_AMCS.union(KFIN_AMCS)), key=len, reverse=True)
+                _log(f"🧠 **Smart Fallback:** Loaded {len(_all_known_amcs)} known AMC names for Scheme Name matching.")
+
+                # ── Step 3: collect unmapped amc_code + their scheme_codes ───
+                _log("🔍 **Step 3:** Scanning DB for unmapped Fund Codes…")
+                from collections import defaultdict as _dd
+
+                _code_schemes: dict[str, set] = _dd(set)
+
+                # Tables that have scheme_code (for primary AMFI matching)
+                _scan_sources = [
+                    ("kfintech_aum", "amc_code", "scheme_code"),
+                    ("cams_brokerage", "amc_code", "scheme_code"),
+                    ("kfintech_brokerage", "amc_code", "scheme_code"),
+                    ("cams_transactions", "amc_code", "scheme_code"),
+                    ("kfintech_transactions", "fund_code", "scheme_code"),
+                    ("cams_folio_master", "amc_code", "scheme_code"),
+                    ("kfintech_folio_master", "fund_code", "scheme_code"),
+                ]
+
+                with get_conn() as conn:
+                    _already_mapped = {
+                        r[0].strip()
+                        for r in conn.execute("SELECT amc_code FROM amc_code_map").fetchall()
+                    }
+                    _log(f"📊 Currently mapped codes: {len(_already_mapped)}")
+
+                    for _tbl, _cc, _sc in _scan_sources:
+                        try:
+                            _cols = [row[1] for row in conn.execute(f"PRAGMA table_info({_tbl})").fetchall()]
+                            if _cc not in _cols or _sc not in _cols:
+                                continue
+
+                            _rows = conn.execute(
+                                f"SELECT DISTINCT {_cc}, {_sc} FROM {_tbl} "
+                                f"WHERE {_cc} != '' AND {_cc} IS NOT NULL "
+                                f"AND TRIM({_cc}) NOT IN (SELECT TRIM(amc_code) FROM amc_code_map)"
+                            ).fetchall()
+
+                            for _ac, _sch in _rows:
+                                if _ac and str(_ac).strip() not in _already_mapped:
+                                    _ac_clean = str(_ac).strip()
+                                    if _sch and str(_sch).strip():
+                                        _code_schemes[_ac_clean].add(str(_sch).strip())
+                        except Exception as _e:
+                            _log(f"⚠️ {_tbl}: Error - {_e}")
+
+                _log(f"📊 Total unmapped codes found with scheme_codes: {len(_code_schemes)}")
+
+                # ── Step 3b: collect scheme_names for fallback ───
+                _log("🔍 **Step 3b:** Scanning DB for Scheme Names (Fallback)...")
+                _code_scheme_names: dict[str, set] = _dd(set)
+
+                # Tables that have scheme_name (for fallback matching)
+                _scheme_name_tables = [
+                    ("cams_aum", "amc_code", "scheme_name"),
+                    ("kfintech_aum", "amc_code", "scheme_name"),
+                    ("cams_folio_master", "amc_code", "scheme_name"),
+                    ("kfintech_folio_master", "fund_code", "scheme_name"),
+                    ("cams_transactions", "amc_code", "scheme_name"),
+                    ("kfintech_transactions", "fund_code", "scheme_name"),
+                ]
+
+                with get_conn() as conn:
+                    for _tbl, _cc, _sn in _scheme_name_tables:
+                        try:
+                            _cols = [row[1] for row in conn.execute(f"PRAGMA table_info({_tbl})").fetchall()]
+                            if _cc not in _cols or _sn not in _cols:
+                                continue
+
+                            _rows = conn.execute(
+                                f"SELECT DISTINCT {_cc}, {_sn} FROM {_tbl} "
+                                f"WHERE {_cc} != '' AND {_cc} IS NOT NULL "
+                                f"AND TRIM({_cc}) NOT IN (SELECT TRIM(amc_code) FROM amc_code_map)"
+                            ).fetchall()
+
+                            for _ac, _sname in _rows:
+                                if _ac and _sname:
+                                    _ac_clean = str(_ac).strip()
+                                    if _ac_clean not in _already_mapped:
+                                        _code_scheme_names[_ac_clean].add(str(_sname).strip())
+                        except Exception as _e:
+                            _log(f"⚠️ {_tbl} scheme_name scan error: {_e}")
+
+                _log(f"📊 Found scheme names for {len(_code_scheme_names)} unmapped codes.")
+
+                if not _code_schemes and not _code_scheme_names:
+                    _log("✅ All mappable Fund Codes are already mapped!")
+                    _status.update(label="✅ Nothing to map", state="complete", expanded=False)
+                    _log_placeholder.empty()
+                else:
+                    # Combine keys from both dictionaries
+                    _all_unmapped_codes = set(_code_schemes.keys()).union(set(_code_scheme_names.keys()))
+                    _total = len(_all_unmapped_codes)
+                    _log(f"🎯 **Step 4:** Mapping **{_total}** codes…")
+                    _ok_list: list[str] = []
+                    _fail_list: list[str] = []
+
+                    with get_conn() as conn:
+                        for _amc_code in _all_unmapped_codes:
+                            _schemes = _code_schemes.get(_amc_code, set())
+                            _snames = _code_scheme_names.get(_amc_code, set())
+                            _log(f"🔎 Processing code `{_amc_code}`...")
+                            _found = None
+
+                            # 1. Try AMFI 6-digit scheme code match
+                            if _schemes:
+                                _log(f"   Checking {len(_schemes)} scheme code(s) against AMFI index...")
+                                for _s in sorted(_schemes):
+                                    if _s in _scheme_amc:
+                                        _found = _scheme_amc[_s]
+                                        _log(f"   ✅ AMFI MATCH: Scheme `{_s}` → AMC `{_found}`")
+                                        break
+
+                            # 2. FALLBACK: Try Scheme Name match if AMFI failed
+                            if not _found and _snames:
+                                _log(f"   🔄 Trying Scheme Name fallback with {len(_snames)} name(s)...")
+                                # Sort by length descending to match longer names first
+                                for _sname in sorted(_snames, key=len, reverse=True):
+                                    _sname_upper = _sname.upper()
+                                    for _known_amc in _all_known_amcs:
+                                        # Check if scheme name starts with AMC name (e.g., "NIPPON INDIA SMALL CAP...")
+                                        if _sname_upper.startswith(_known_amc):
+                                            _found = _known_amc
+                                            _log(
+                                                f"   ✅ FALLBACK MATCH: Scheme Name `{_sname[:40]}...` starts with AMC `{_found}`")
+                                            break
+                                        # Check first word match (e.g., "JM Flexi Cap..." -> "JM FINANCIAL")
+                                        elif _sname_upper.split()[0] == _known_amc.split()[0] and len(
+                                                _known_amc.split()[0]) >= 2:
+                                            _found = _known_amc
+                                            _log(
+                                                f"   ✅ FALLBACK MATCH (First Word): Scheme Name `{_sname[:40]}...` matches AMC `{_found}`")
+                                            break
+                                    if _found:
+                                        break
+
+                            if _found:
+                                conn.execute(
+                                    "INSERT INTO amc_code_map (amc_code, amc_name) VALUES (?,?) "
+                                    "ON CONFLICT(amc_code) DO UPDATE SET amc_name=excluded.amc_name",
+                                    (_amc_code, _found),
+                                )
+                                _ok_list.append(_amc_code)
+                                _log(f"💾 Saved mapping: `{_amc_code}` → `{_found}`")
+                            else:
+                                _fail_list.append(_amc_code)
+                                _log(f"❌ No match found for code `{_amc_code}`")
+
+                    _log(f"📊 **FINAL RESULTS:**")
+                    _log(f"✅ Successfully mapped: **{len(_ok_list)}** / {_total}")
+                    _log(f"❌ Failed to map: **{len(_fail_list)}** / {_total}")
+
+                    if _fail_list:
+                        _log(f"💡 **TIP:** These codes could not be matched. Please map them manually below.")
+
+                    _status.update(
+                        label=f"✅ Mapped {len(_ok_list)} / {_total} codes",
+                        state="complete", expanded=False,
+                    )
+                    _log_placeholder.empty()
+                    st.cache_data.clear()
+                    st.rerun()
+
+        st.markdown("#### 🪄 Smart Auto-Mapping via Scheme Names")
+        st.caption(
+            "Since RTAs use internal codes (like `RMF`, `G`) that don't match AMFI's 6-digit codes, this tool reads the **Scheme Name** (e.g., *'NIPPON INDIA SMALL CAP...'*) and intelligently extracts the AMC name.")
+
+        if st.button("🪄 Auto-Map Fund Codes via Scheme Names", type="primary"):
+            _log_placeholder = st.empty()
+            _logs: list[str] = []
+
+
+            def _log(msg: str) -> None:
+                _logs.append(msg)
+                _log_placeholder.code("\n".join(_logs[-60:]), language="log")
+                print(f"[AUTO-MAP DEBUG] {msg}")
+
+
+            with st.status("Running Smart String Matching…", expanded=True) as _status:
+                # Combine known AMCs and sort by length descending
+                # (so "ADITYA BIRLA SUN LIFE" matches before "ADITYA")
+                _all_known_amcs = sorted(list(CAMS_AMCS.union(KFIN_AMCS)), key=len, reverse=True)
+                _log(f"🧠 Loaded {len(_all_known_amcs)} known AMC names for string matching.")
+
+                _log("🔍 Scanning DB for unmapped Fund Codes and their Scheme Names...")
+                from collections import defaultdict as _dd
+
+                _code_scheme_names: dict[str, set] = _dd(set)
+
+                # Tables that contain the descriptive scheme names
+                _scheme_name_tables = [
+                    ("cams_aum", "amc_code", "scheme_name"),
+                    ("kfintech_aum", "amc_code", "scheme_name"),
+                    ("cams_folio_master", "amc_code", "scheme_name"),
+                    ("kfintech_folio_master", "fund_code", "scheme_name"),
+                    ("cams_transactions", "amc_code", "scheme_name"),
+                    ("kfintech_transactions", "fund_code", "scheme_name"),
+                ]
+
+                with get_conn() as conn:
+                    _already_mapped = {
+                        r[0].strip()
+                        for r in conn.execute("SELECT amc_code FROM amc_code_map").fetchall()
+                    }
+                    _log(f"📊 Currently mapped codes: {len(_already_mapped)}")
+
+                    for _tbl, _cc, _sn in _scheme_name_tables:
+                        try:
+                            _cols = [row[1] for row in conn.execute(f"PRAGMA table_info({_tbl})").fetchall()]
+                            if _cc not in _cols or _sn not in _cols:
+                                continue
+
+                            _rows = conn.execute(
+                                f"SELECT DISTINCT {_cc}, {_sn} FROM {_tbl} "
+                                f"WHERE {_cc} != '' AND {_cc} IS NOT NULL "
+                                f"AND TRIM({_cc}) NOT IN (SELECT TRIM(amc_code) FROM amc_code_map)"
+                            ).fetchall()
+
+                            for _ac, _sname in _rows:
+                                if _ac and _sname:
+                                    _ac_clean = str(_ac).strip()
+                                    if _ac_clean not in _already_mapped:
+                                        _code_scheme_names[_ac_clean].add(str(_sname).strip())
+                        except Exception as _e:
+                            _log(f"⚠️ {_tbl} scan error: {_e}")
+
+                _log(f"📊 Found scheme names for {len(_code_scheme_names)} unmapped codes.")
+
+                if not _code_scheme_names:
+                    _log("✅ All mappable Fund Codes are already mapped!")
+                    _status.update(label="✅ Nothing to map", state="complete", expanded=False)
+                    _log_placeholder.empty()
+                else:
+                    _total = len(_code_scheme_names)
+                    _log(f"🎯 **Step 2:** Mapping **{_total}** codes via Scheme Name matching…")
+                    _ok_list: list[str] = []
+                    _fail_list: list[str] = []
+
+                    with get_conn() as conn:
+                        for _amc_code, _snames in _code_scheme_names.items():
+                            _log(f"🔎 Processing code `{_amc_code}` ({len(_snames)} scheme names)...")
+                            _found = None
+
+                            # Try to match any scheme name against known AMCs
+                            for _sname in sorted(_snames, key=len, reverse=True):
+                                _sname_upper = _sname.upper()
+                                for _known_amc in _all_known_amcs:
+                                    _known_upper = _known_amc.upper()
+
+                                    # 1. Exact Prefix Match (e.g., "NIPPON INDIA SMALL CAP..." starts with "NIPPON INDIA")
+                                    if _sname_upper.startswith(_known_upper):
+                                        _found = _known_amc
+                                        _log(f"   ✅ PREFIX MATCH: `{_sname[:40]}...` starts with `{_found}`")
+                                        break
+
+                                    # 2. Substring Match (e.g., "Small Cap Fund - Nippon India" contains "NIPPON INDIA")
+                                    elif _known_upper in _sname_upper:
+                                        _found = _known_amc
+                                        _log(f"   ✅ SUBSTRING MATCH: `{_sname[:40]}...` contains `{_found}`")
+                                        break
+
+                                    # 3. First Word Match (e.g., "JM Flexi Cap" -> "JM FINANCIAL")
+                                    elif _sname_upper.split()[0] == _known_upper.split()[0] and len(
+                                            _known_upper.split()[0]) >= 3:
+                                        _found = _known_amc
+                                        _log(f"   ✅ FIRST WORD MATCH: `{_sname[:40]}...` matches `{_found}`")
+                                        break
+
+                                if _found:
+                                    break
+
+                            if _found:
+                                conn.execute(
+                                    "INSERT INTO amc_code_map (amc_code, amc_name) VALUES (?,?) "
+                                    "ON CONFLICT(amc_code) DO UPDATE SET amc_name=excluded.amc_name",
+                                    (_amc_code, _found),
+                                )
+                                _ok_list.append(_amc_code)
+                                _log(f"💾 Saved mapping: `{_amc_code}` → `{_found}`")
+                            else:
+                                _fail_list.append(_amc_code)
+                                _log(f"❌ No match found for code `{_amc_code}`")
+
+                    _log(f"📊 **FINAL RESULTS:**")
+                    _log(f"✅ Successfully mapped: **{len(_ok_list)}** / {_total}")
+                    _log(f"❌ Failed to map: **{len(_fail_list)}** / {_total}")
+
+                    if _fail_list:
+                        _log(f"💡 **TIP:** These codes could not be matched. Please map them manually below.")
+
+                    _status.update(
+                        label=f"✅ Mapped {len(_ok_list)} / {_total} codes",
+                        state="complete", expanded=False,
+                    )
+                    _log_placeholder.empty()
+                    st.cache_data.clear()
+                    st.rerun()
+
+        # ── Manual mapping ────────────────────────────────────────────────────
+        st.markdown("#### 📋 Manual Mapping")
+        cams_codes = load_distinct_all_amc_codes()
         current_map = load_amc_code_map()
         with get_conn() as conn:
             known_amcs = sorted({r[0] for r in conn.execute(
                 "SELECT DISTINCT amc FROM holdings WHERE amc IS NOT NULL AND amc != ''").fetchall()})
+
         if not cams_codes:
             st.info("No RTA data uploaded yet.")
         elif not known_amcs:
             st.info("No holdings imported yet.")
         else:
-            st.markdown(f"**{len(cams_codes)} AMC code(s) found**")
-            unmapped = [c for c in cams_codes if c not in current_map]
-            if unmapped: st.warning(f"{len(unmapped)} code(s) not yet mapped: {', '.join(unmapped)}")
+            _unmapped = [c for c in cams_codes if c not in current_map]
+            _mapped = [c for c in cams_codes if c in current_map]
+            col_m, col_u = st.columns(2)
+            col_m.metric("✅ Already Mapped", len(_mapped))
+            col_u.metric("⚠️ Unmapped", len(_unmapped))
+            if _unmapped:
+                st.warning(
+                    f"{len(_unmapped)} code(s) still need mapping: "
+                    f"{', '.join(_unmapped[:10])}{'...' if len(_unmapped) > 10 else ''}"
+                )
+            st.divider()
             updated_map: dict[str, str] = {}
             cols_per_row = 2
             rows_needed = -(-len(cams_codes) // cols_per_row)
@@ -2238,13 +2784,15 @@ elif mode == "⚙️ Admin Panel":
                 cols = st.columns(cols_per_row)
                 for col_i in range(cols_per_row):
                     idx = row_i * cols_per_row + col_i
-                    if idx >= len(cams_codes): break
+                    if idx >= len(cams_codes):
+                        break
                     code = cams_codes[idx]
                     existing = current_map.get(code, "")
                     options = [""] + known_amcs
                     default_idx = options.index(existing) if existing in options else 0
                     with cols[col_i]:
-                        sel = st.selectbox(f"AMC Code: **{code}**", options, index=default_idx, key=f"amc_map_{code}",
+                        label = f"✅ **{code}** → *{existing}*" if existing else f"⚠️ **{code}** *(unmapped)*"
+                        sel = st.selectbox(label, options, index=default_idx, key=f"amc_map_{code}",
                                            placeholder="Select AMC name…")
                         updated_map[code] = sel
             if st.button("💾 Save Mappings", type="primary"):
@@ -2252,8 +2800,10 @@ elif mode == "⚙️ Admin Panel":
                     for code, name in updated_map.items():
                         if name:
                             conn.execute(
-                                "INSERT INTO amc_code_map (amc_code, amc_name) VALUES (?,?) ON CONFLICT(amc_code) DO UPDATE SET amc_name=excluded.amc_name",
-                                (code.strip(), name))
+                                "INSERT INTO amc_code_map (amc_code, amc_name) VALUES (?,?) "
+                                "ON CONFLICT(amc_code) DO UPDATE SET amc_name=excluded.amc_name",
+                                (code.strip(), name),
+                            )
                         else:
                             conn.execute("DELETE FROM amc_code_map WHERE amc_code=?", (code.strip(),))
                 st.success("Mappings saved.")
@@ -2287,35 +2837,127 @@ elif mode == "⚙️ Admin Panel":
             st.rerun()
 
     with tab_rta_map:
-        st.subheader("📦 RTA Mapping Manager")
-        st.caption("Override auto-detected RTA assignments for specific AMCs.")
+        st.subheader("📦 RTA Mapping")
+        st.info(
+            "RTA is assigned **automatically** when you upload files:\n"
+            "- Files uploaded under **CAMS** sections → RTA = `CAMS`\n"
+            "- Files uploaded under **KFinTech** sections → RTA = `KFinTech`\n \n"
+            "The table below shows the current auto-detected RTA for every AMC in your holdings. "
+            "If anything looks wrong, use the manual overrides below.",
+            icon="ℹ️"
+        )
+
         with get_conn() as conn:
-            distinct_amcs = conn.execute("SELECT DISTINCT amc FROM holdings WHERE amc!='' ORDER BY amc").fetchall()
-            amc_rta_map = {r[0]: get_rta(r[0]) for r in distinct_amcs}
-            db_overrides = conn.execute(
-                "SELECT amc, rta FROM amc_config WHERE amc IN (SELECT DISTINCT amc FROM holdings)").fetchall()
-            for amc, rta in db_overrides: amc_rta_map[amc] = rta
+            amc_rta_df = pd.read_sql(
+                "SELECT h.amc, COALESCE(ac.rta, 'Unknown') as rta "
+                "FROM (SELECT DISTINCT amc FROM holdings WHERE amc != '') h "
+                "LEFT JOIN amc_config ac ON h.amc = ac.amc "
+                "ORDER BY h.amc",
+                conn
+            )
+
+        if amc_rta_df.empty:
+            st.info("No AMCs in holdings yet.")
+        else:
+            st.dataframe(
+                amc_rta_df.rename(columns={"amc": "AMC", "rta": "Current RTA"}),
+                use_container_width=True, hide_index=True
+            )
+            st.divider()
+            st.markdown("#### Manual Override (if auto-detection is wrong)")
             updated_rtas = {}
-            cols_per_row = 2
-            rows_needed = -(-len(amc_rta_map) // cols_per_row)
-            for row_i in range(rows_needed):
-                cols = st.columns(cols_per_row)
-                for col_i in range(cols_per_row):
-                    idx = row_i * cols_per_row + col_i
-                    if idx >= len(amc_rta_map): break
-                    amc = list(amc_rta_map.keys())[idx]
-                    current = amc_rta_map[amc]
-                    with cols[col_i]:
-                        sel = st.selectbox(amc, ["CAMS", "KFinTech", "Unknown"],
-                                           index=["CAMS", "KFinTech", "Unknown"].index(current), key=f"rta_{amc}")
-                        updated_rtas[amc] = sel
+            rta_options = ["CAMS", "KFinTech", "Unknown"]
+            for _, row in amc_rta_df.iterrows():
+                cur = row["rta"] if row["rta"] in rta_options else "Unknown"
+                updated_rtas[row["amc"]] = st.selectbox(
+                    row["amc"], rta_options,
+                    index=rta_options.index(cur),
+                    key=f"rta_{row['amc']}"
+                )
             if st.button("💾 Save RTA Overrides", type="primary"):
                 with get_conn() as conn:
-                    for amc, rta in updated_rtas.items(): conn.execute(
-                        "INSERT INTO amc_config (amc, rta) VALUES (?,?) ON CONFLICT(amc) DO UPDATE SET rta=excluded.rta",
-                        (amc, rta))
+                    for amc, rta in updated_rtas.items():
+                        conn.execute(
+                            "INSERT INTO amc_config (amc, rta) VALUES (?,?) "
+                            "ON CONFLICT(amc) DO UPDATE SET rta=excluded.rta",
+                            (amc, rta)
+                        )
                     conn.execute(
-                        "UPDATE holdings SET rta = (SELECT rta FROM amc_config WHERE amc = holdings.amc) WHERE amc IN (SELECT amc FROM amc_config)")
-                st.success("RTA mappings updated & synced to holdings.")
+                        "UPDATE holdings SET rta = "
+                        "(SELECT rta FROM amc_config WHERE amc = holdings.amc) "
+                        "WHERE amc IN (SELECT amc FROM amc_config)"
+                    )
+                st.success("RTA overrides saved & synced to holdings.")
                 st.cache_data.clear()
                 st.rerun()
+
+    with tab_raw:
+        st.subheader("📄 Raw Data Explorer")
+        st.caption("View raw uploaded data directly from the database with original column names.")
+
+        # Added "All" to the RTA options
+        rta_sel = st.radio("Select RTA", ["All", "CAMS", "KFinTech"], horizontal=True, key="raw_rta")
+        type_sel = st.radio("Select Data Type", ["Transaction", "Folio Master", "AUM", "SIP", "Brokerage"],
+                            horizontal=True, key="raw_type")
+
+        # Map data types to their respective CAMS and KFinTech tables
+        type_to_tables = {
+            "Transaction": ("cams_transactions", "kfintech_transactions"),
+            "Folio Master": ("cams_folio_master", "kfintech_folio_master"),
+            "AUM": ("cams_aum", "kfintech_aum"),
+            "SIP": ("cams_sip_master", "kfintech_sip_master"),
+            "Brokerage": ("cams_brokerage", "kfintech_brokerage"),
+        }
+
+        cams_table, kfin_table = type_to_tables.get(type_sel, (None, None))
+
+        if cams_table and kfin_table:
+            with get_conn() as conn:
+                if rta_sel == "All":
+                    # Fetch from both tables and add a Source identifier
+                    df_cams = pd.read_sql(f"SELECT *, 'CAMS' as Source_RTA FROM {cams_table} LIMIT 1000", conn)
+                    df_kfin = pd.read_sql(f"SELECT *, 'KFinTech' as Source_RTA FROM {kfin_table} LIMIT 1000", conn)
+
+                    # Combine them (pandas automatically aligns columns and fills missing ones with NaN)
+                    df_raw = pd.concat([df_cams, df_kfin], ignore_index=True)
+
+                    total_cams = conn.execute(f"SELECT COUNT(*) FROM {cams_table}").fetchone()[0]
+                    total_kfin = conn.execute(f"SELECT COUNT(*) FROM {kfin_table}").fetchone()[0]
+                    total_rows = total_cams + total_kfin
+
+                    # Move 'Source_RTA' to the very first column for better visibility
+                    if 'Source_RTA' in df_raw.columns:
+                        cols = ['Source_RTA'] + [c for c in df_raw.columns if c != 'Source_RTA']
+                        df_raw = df_raw[cols]
+
+                elif rta_sel == "CAMS":
+                    df_raw = pd.read_sql(f"SELECT * FROM {cams_table} LIMIT 1000", conn)
+                    total_rows = conn.execute(f"SELECT COUNT(*) FROM {cams_table}").fetchone()[0]
+                else:  # KFinTech
+                    df_raw = pd.read_sql(f"SELECT * FROM {kfin_table} LIMIT 1000", conn)
+                    total_rows = conn.execute(f"SELECT COUNT(*) FROM {kfin_table}").fetchone()[0]
+
+            # Dynamic metric label
+            if rta_sel == "All":
+                metric_label = f"Total Records ({cams_table} & {kfin_table})"
+                limit_text = f"{total_rows:,} (Showing up to 1,000 per RTA)"
+            else:
+                target_table = cams_table if rta_sel == "CAMS" else kfin_table
+                metric_label = f"Total Records in {target_table}"
+                limit_text = f"{total_rows:,} (Showing up to 1,000)"
+
+            st.metric(metric_label, limit_text)
+
+            if not df_raw.empty:
+                st.dataframe(df_raw, use_container_width=True, hide_index=True)
+
+                # Download button
+                csv = df_raw.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="⬇️ Download Raw Data (CSV)",
+                    data=csv,
+                    file_name=f"{rta_sel}_{type_sel.replace(' ', '_')}_raw.csv",
+                    mime="text/csv",
+                )
+            else:
+                st.info(f"No data found for {type_sel} ({rta_sel}). Please upload data in the 'Import RTA Data' tab.")

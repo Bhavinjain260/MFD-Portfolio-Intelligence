@@ -38,6 +38,19 @@ def get_conn():
         conn.close()
 
 
+def _sync_rta(amc_codes: list[str], rta: str) -> None:
+    """After a successful upload, upsert RTA into amc_config for every AMC code seen."""
+    if not amc_codes:
+        return
+    with get_conn() as conn:
+        conn.executemany(
+            "INSERT INTO amc_config (amc, rta, is_enabled) VALUES (?,?,1) "
+            "ON CONFLICT(amc) DO UPDATE SET rta=excluded.rta",
+            [(code, rta) for code in amc_codes if code],
+        )
+
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # PURE HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
