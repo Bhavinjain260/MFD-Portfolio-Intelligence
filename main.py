@@ -9,6 +9,7 @@ Updated: Folio Normalization + Full Precision Brokerage + Month Filters + RTA Bi
 + Removed RTA filters from all pages, moved refresh/notifications to Dashboard only
 + Fixed dark mode CSS theming
 """
+
 import logging
 import re
 import sqlite3
@@ -763,6 +764,53 @@ def load_combined_client_aum(client_code: str) -> pd.DataFrame:
     return pd.concat([cams_df, kfin_df], ignore_index=True) if not (cams_df.empty and kfin_df.empty) else pd.DataFrame()
 
 
+# ==================== TRANSACTION & NAV LOADERS ====================
+@st.cache_data(ttl=60, show_spinner=False)
+def load_client_all_transactions(client_code: str) -> pd.DataFrame:
+    """Fetches all CAMS and KFinTech transactions for a specific client."""
+    with get_conn() as conn:
+        client_folios = conn.execute("SELECT folio_no FROM holdings WHERE client_code = ?", (client_code,)).fetchall()
+        if not client_folios: return pd.DataFrame()
+
+        # Fetch all transactions (we will filter in pandas to handle folio normalization easily)
+        cams_df = pd.read_sql("""
+            SELECT 'CAMS' as RTA, folio_no, scheme_name, scheme_code, trade_date, post_date, 
+                   trxn_no, nav, units, amount, trxn_type 
+            FROM cams_transactions
+        """, conn)
+
+        kfin_df = pd.read_sql("""
+            SELECT 'KFinTech' as RTA, folio_no, scheme_name, scheme_code, trade_date, post_date, 
+                   trxn_no, nav, units, amount, trxn_type 
+            FROM kfintech_transactions
+        """, conn)
+
+        all_txns = pd.concat([cams_df, kfin_df], ignore_index=True)
+        if all_txns.empty: return pd.DataFrame()
+
+        # Normalize folios to match client holdings
+        all_txns["folio_base"] = all_txns["folio_no"].apply(normalize_folio)
+        client_folio_bases = {normalize_folio(f[0]) for f in client_folios if f[0]}
+
+        return all_txns[all_txns["folio_base"].isin(client_folio_bases)]
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_amfi_navs() -> dict:
+    """Fetches the latest NAV for all schemes from AMFI sync."""
+    with get_conn() as conn:
+        # Fetch all and filter safely in Python to avoid SQLite type issues
+        rows = conn.execute("SELECT scheme_code, last_nav FROM amc_schemes").fetchall()
+        nav_dict = {}
+        for r in rows:
+            try:
+                val = float(r[1])
+                if val > 0:
+                    nav_dict[str(r[0]).strip()] = val
+            except (ValueError, TypeError):
+                pass # Skip invalid NAV values
+        return nav_dict
+
 # ==================== BROKERAGE DATA LOADERS ====================
 @st.cache_data(ttl=60, show_spinner=False)
 def load_cams_by_amc(month_str: str) -> pd.DataFrame:
@@ -1481,22 +1529,31 @@ if mode == "📊 Dashboard":
 elif mode == "👤 Client View":
     st.header("👤 Client Portfolio")
     clients = load_clients()
+
     if clients.empty:
         st.warning("No clients imported.")
     else:
-        sel = st.selectbox("🔍 Select Client", clients["name"].tolist(), index=None, placeholder="Search...")
+        # --- 1. Client Search ---
+        # Streamlit's selectbox has a built-in search/filter feature when you type in it.
+        sel = st.selectbox(
+            "🔍 Select Client (Type to search)",
+            clients["name"].tolist(),
+            index=None,
+            placeholder="Search client name...",
+            key="client_selectbox"
+        )
+
+        # --- 2. Client Details (If selected) ---
         if sel:
             code = clients.loc[clients["name"] == sel, "client_code"].iloc[0]
             c_holdings = df_active[df_active["client_code"] == code].copy()
             client_aum_df = load_combined_client_aum(code)
+
             total_invested = client_aum_df["rupee_bal"].sum() if not client_aum_df.empty else 0.0
             cams_aum_df, kfin_aum_df = load_client_aum(code), load_client_kfintech_aum(code)
-            cams_invested = cams_aum_df["rupee_bal"].sum() if not cams_aum_df.empty else 0.0
-            kfin_invested = kfin_aum_df["rupee_bal"].sum() if not kfin_aum_df.empty else 0.0
             has_sips, has_aum = not c_holdings.empty, not client_aum_df.empty
             has_cams, has_kfin = not cams_aum_df.empty, not kfin_aum_df.empty
-            has_lumpsum = has_aum and "match_type" in client_aum_df.columns and (
-                client_aum_df["match_type"].str.contains("Lumpsum")).any()
+
             if has_sips:
                 c_holdings["next_sip"] = c_holdings["sip_day"].apply(get_next_sip_date)
                 next_dates = pd.to_datetime(c_holdings["next_sip"], format="%d %b %Y", errors="coerce")
@@ -1505,44 +1562,17 @@ elif mode == "👤 Client View":
                 next_sip_str = next_sip_dt.strftime("%d %b %Y") if pd.notna(next_sip_dt) else "N/A"
             else:
                 sip_total_amt, next_sip_str = 0.0, "—"
+
+            st.divider()
+            st.subheader("📊 Client Summary")
             m1, m2, m3, m4, m5 = st.columns(5)
             m1.metric("📈 Active SIPs", len(c_holdings) if has_sips else 0)
             m2.metric("💰 Monthly SIP", format_currency(sip_total_amt, decimals=0))
             m3.metric("📅 Next SIP", next_sip_str)
-            m4.metric("📦 Total Invested", format_aum(total_invested) if total_invested > 0 else "—")
+            m4.metric("📦 Total AUM", format_aum(total_invested) if total_invested > 0 else "—")
             m5.metric("📦 RTAs", (
                 "CAMS+KFin" if (has_cams and has_kfin) else ("CAMS" if has_cams else ("KFin" if has_kfin else "—"))))
-            if not has_sips and not has_aum: st.info(f"No active SIPs or AUM data found for **{sel}**.")
-            if has_lumpsum and not has_sips:
-                st.warning(
-                    "⚠️ **Lumpsum-only client** — no active SIPs found. AUM below is matched via PAN/Email from AUM reports.",
-                    icon=None)
-            elif has_lumpsum:
-                st.info(
-                    "ℹ️ This client also has lumpsum holdings matched via PAN/Email (shown with **Lumpsum** tag in AUM breakdown).")
-            if has_aum:
-                with st.expander("📦 AUM Holdings Breakdown", expanded=(not has_sips)):
-                    display_cols = ["scheme_name", "amc_code", "folio_no", "units", "rupee_bal", "rep_date",
-                                    "match_type", "rta_source"]
-                    available_cols = [c for c in display_cols if c in client_aum_df.columns]
-                    aum_display = client_aum_df[available_cols].copy()
-                    if "rupee_bal" in aum_display.columns: aum_display["rupee_bal"] = aum_display["rupee_bal"].apply(
-                        lambda x: format_currency(x, decimals=2))
-                    if "units" in aum_display.columns: aum_display["units"] = aum_display["units"].apply(
-                        lambda x: f"{float(x):.3f}" if x else "—")
-                    col_rename = {"scheme_name": "Scheme", "amc_code": "AMC Code", "folio_no": "Folio",
-                                  "units": "Units", "rupee_bal": "Current Value", "rep_date": "As of Date",
-                                  "match_type": "Source", "rta_source": "RTA"}
-                    aum_display = aum_display.rename(
-                        columns={k: v for k, v in col_rename.items() if k in aum_display.columns})
-                    st.dataframe(aum_display, use_container_width=True, hide_index=True)
-                    if len(client_aum_df) > 1:
-                        fig_pie = px.pie(client_aum_df, values="rupee_bal", names="scheme_name", hole=0.4,
-                                         title="Portfolio Allocation",
-                                         color_discrete_sequence=px.colors.qualitative.Set3)
-                        fig_pie = theme_plotly(fig_pie, dark)
-                        fig_pie.update_layout(height=350)
-                        st.plotly_chart(fig_pie, use_container_width=True)
+
             if has_sips:
                 st.subheader("📋 Active SIPs")
                 display_df = c_holdings[
@@ -1553,6 +1583,7 @@ elif mode == "👤 Client View":
                 display_df["SIP Amt"] = display_df["sip_amount"].apply(lambda x: format_currency(x, decimals=0))
                 display_df["First Order"] = display_df["first_order"].apply(
                     lambda x: "Yes" if str(x).upper() == "Y" else "No")
+
                 total_rows = len(display_df)
                 page = st.number_input("Page", 1, max(1, -(-total_rows // PAGE_SIZE)), 1)
                 start, end = (page - 1) * PAGE_SIZE, page * PAGE_SIZE
@@ -1561,42 +1592,129 @@ elif mode == "👤 Client View":
                     ["scheme_name", "amc", "rta", "folio_no", "SIP Amt", "Start Date", "next_sip",
                      "First Order"]].rename(
                     columns={"scheme_name": "Scheme", "amc": "AMC", "rta": "RTA", "folio_no": "Folio",
-                             "next_sip": "Next SIP"}), use_container_width=True, hide_index=True)
-                csv = c_holdings.to_csv(index=False).encode()
-                st.download_button("⬇️ Export Client Holdings (CSV)", csv, f"{sel}_holdings.csv", "text/csv")
+                             "next_sip": "Next SIP"}),
+                    use_container_width=True, hide_index=True)
 
+            # ==========================================
+            # 🚀 HOLDINGS & TRANSACTIONS SECTION
+            # ==========================================
+            st.divider()
+            st.subheader("📂 Holdings & Transaction History")
+            st.caption(
+                "Calculated from uploaded CAMS & KFinTech Transaction files. Current Value uses latest AMFI NAV.")
+
+            txns_df = load_client_all_transactions(code)
+            amfi_navs = load_amfi_navs()  # Uses the fixed function above
+
+            if txns_df.empty:
+                st.info(
+                    "No transaction history found for this client. Please upload CAMS/KFinTech Transaction files in the Admin Panel.")
+            else:
+                # Ensure numeric columns
+                txns_df["units"] = pd.to_numeric(txns_df["units"], errors="coerce").fillna(0)
+                txns_df["amount"] = pd.to_numeric(txns_df["amount"], errors="coerce").fillna(0)
+                txns_df["nav"] = pd.to_numeric(txns_df["nav"], errors="coerce").fillna(0)
+                txns_df["scheme_code"] = txns_df["scheme_code"].astype(str).str.strip()
+
+                # Calculate Holdings Summary (Grouped by Scheme)
+                holdings_summary = txns_df.groupby(["scheme_name", "scheme_code"]).agg(
+                    Total_Units=("units", "sum"),
+                    Invested_Value=("amount", "sum")  # Net invested (Purchases - Redemptions)
+                ).reset_index()
+
+                # Calculate Current Value using AMFI NAV
+                holdings_summary["Current_Value"] = holdings_summary.apply(
+                    lambda row: row["Total_Units"] * amfi_navs.get(row["scheme_code"], 0), axis=1
+                )
+
+                # Sort by Current Value descending
+                holdings_summary = holdings_summary.sort_values(by="Current_Value", ascending=False)
+
+                # Display Summary Table
+                summary_display = holdings_summary[
+                    ["scheme_name", "Total_Units", "Invested_Value", "Current_Value"]].copy()
+                summary_display["Total_Units"] = summary_display["Total_Units"].apply(lambda x: f"{x:,.3f}")
+                summary_display["Invested_Value"] = summary_display["Invested_Value"].apply(
+                    lambda x: format_currency(x, 2))
+                summary_display["Current_Value"] = summary_display["Current_Value"].apply(
+                    lambda x: format_currency(x, 2))
+                summary_display.columns = ["Scheme Name", "Total Units", "Invested Value (Net)", "Current Value (AMFI)"]
+
+                st.dataframe(summary_display, use_container_width=True, hide_index=True)
+
+                # Totals
+                tot_units = holdings_summary["Total_Units"].sum()
+                tot_inv = holdings_summary["Invested_Value"].sum()
+                tot_cur = holdings_summary["Current_Value"].sum()
+                tc1, tc2, tc3 = st.columns(3)
+                tc1.metric("Total Units", f"{tot_units:,.3f}")
+                tc2.metric("Total Invested", format_currency(tot_inv, 2))
+                tc3.metric("Total Current", format_currency(tot_cur, 2))
+
+                st.divider()
+
+                # --- Expandable Transaction Details ---
+                folio_search = st.text_input("🔍 Filter Transactions by Folio Number", key="folio_search_txn")
+
+                for _, row in holdings_summary.iterrows():
+                    scheme = row["scheme_name"]
+                    scheme_txns = txns_df[txns_df["scheme_name"] == scheme].copy()
+
+                    # Apply folio filter if search term exists
+                    if folio_search:
+                        scheme_txns = scheme_txns[
+                            scheme_txns["folio_no"].str.contains(folio_search, case=False, na=False)]
+
+                    if not scheme_txns.empty:
+                        # Expander header with quick stats
+                        expander_label = f"📊 {scheme}  |  Units: {row['Total_Units']:,.3f}  |  Current: {format_currency(row['Current_Value'], 2)}"
+
+                        with st.expander(expander_label):
+                            # Format transaction table
+                            disp_txns = scheme_txns[
+                                ["trade_date", "post_date", "trxn_no", "nav", "units", "amount", "trxn_type",
+                                 "folio_no", "RTA"]].copy()
+                            disp_txns["trade_date"] = pd.to_datetime(disp_txns["trade_date"],
+                                                                     errors="coerce").dt.strftime("%d-%b-%Y")
+                            disp_txns["post_date"] = pd.to_datetime(disp_txns["post_date"],
+                                                                    errors="coerce").dt.strftime("%d-%b-%Y")
+                            disp_txns["nav"] = disp_txns["nav"].apply(lambda x: f"₹{x:,.4f}")
+                            disp_txns["units"] = disp_txns["units"].apply(lambda x: f"{x:,.3f}")
+                            disp_txns["amount"] = disp_txns["amount"].apply(lambda x: format_currency(x, 2))
+
+                            disp_txns.columns = ["Trade Date", "Post Date", "Txn No", "NAV", "Units", "Amount", "Type",
+                                                 "Folio No", "RTA"]
+                            st.dataframe(disp_txns, use_container_width=True, hide_index=True)
+
+            # --- Brokerage Section (Existing) ---
             st.divider()
             st.subheader("💹 Brokerage Generated (from RTA Files)")
             cams_client = load_cams_by_client(code)
             kf_client = load_kfintech_by_client(code)
             all_client_brok = pd.concat([cams_client, kf_client], ignore_index=True) if not (
-                    cams_client.empty and kf_client.empty) else pd.DataFrame()
+                        cams_client.empty and kf_client.empty) else pd.DataFrame()
 
             if all_client_brok.empty:
                 st.info("No RTA brokerage data found for this client's folios.")
             else:
                 months_avail = sorted(all_client_brok["accrual_month"].unique(), reverse=True)
-                sel_month = st.selectbox("📅 Filter by Accrual Month", ["All"] + months_avail,
-                                         key=f"brok_filter_{code}")
+                sel_month = st.selectbox("📅 Filter by Accrual Month", ["All"] + months_avail, key=f"brok_filter_{code}")
                 view_df = all_client_brok if sel_month == "All" else all_client_brok[
                     all_client_brok["accrual_month"] == sel_month]
+
                 total_brok = view_df["brokerage"].sum()
-                month_grp = view_df.groupby("accrual_month")["brokerage"].sum().reset_index()
                 bm1, bm2 = st.columns(2)
                 bm1.metric("💰 Total Brokerage", format_brokerage(total_brok))
-                bm2.metric("📅 Months Shown", len(month_grp) if sel_month == "All" else 1)
+                bm2.metric("📅 Months Shown", len(view_df["accrual_month"].unique()))
+
                 disp = view_df[
                     ["accrual_month", "amc_name", "scheme_name", "folio_no", "trxn_type", "transaction_amount",
                      "brokerage", "rate_pct", "rta"]].copy()
-                disp["transaction_amount"] = disp["transaction_amount"].apply(
-                    lambda x: format_currency(x, decimals=0))
+                disp["transaction_amount"] = disp["transaction_amount"].apply(lambda x: format_currency(x, decimals=0))
                 disp["brokerage"] = disp["brokerage"].apply(format_brokerage)
-                disp["rate_pct"] = disp["rate_pct"].apply(lambda x: f"{float(x):.4f}%" if x else "-")
-                disp.columns = ["Month", "AMC", "Scheme", "Folio", "Txn Type", "Txn Amount", "Brokerage", "Rate",
-                                "RTA"]
+                disp["rate_pct"] = disp["rate_pct"].apply(lambda x: f"{float(x):,.4f}%" if x else "-")
+                disp.columns = ["Month", "AMC", "Scheme", "Folio", "Txn Type", "Txn Amount", "Brokerage", "Rate", "RTA"]
                 st.dataframe(disp, use_container_width=True, hide_index=True)
-                brok_csv = view_df.to_csv(index=False).encode()
-                st.download_button("⬇️ Export Client Brokerage (CSV)", brok_csv, f"{sel}_brokerage.csv", "text/csv")
 
 
 # ==================== 💰 EARNINGS ====================
