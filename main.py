@@ -616,50 +616,61 @@ def theme_plotly(fig, dark: bool):
 # ==================== AMFI SYNC ====================
 def _amfi_sync_worker(result_bucket: list) -> None:
     try:
+        print("[AMFI DEBUG] starting fetch...")
         res = requests.get(AMFI_TEXT_URL, timeout=20)
+        print(f"[AMFI DEBUG] status={res.status_code} len={len(res.text)}")
         res.raise_for_status()
         lines = res.text.splitlines()
+        print(f"[AMFI DEBUG] {len(lines)} lines received")
         schemes, curr_amc = [], None
         for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            if ";" not in line:
-                if "Mutual Fund" in line or "mutual fund" in line.lower():
-                    curr_amc = line.strip()
-                continue
-            parts = line.split(";")
-            if len(parts) < 6 or parts[0] == "Scheme Code":
-                continue
-            if curr_amc is None:
-                continue
-            name = parts[3].strip()
-            name_upper = name.upper()
-            if ("REGULAR" in name_upper or "RETAIL" in name_upper) and "DIRECT" not in name_upper:
-                try:
-                    nav = float(parts[4]) if parts[4] not in ("N.A.", "") else 0.0
-                except ValueError:
-                    nav = 0.0
-                schemes.append((
-                    parts[0].strip(), curr_amc, get_rta(curr_amc),
-                    name, "Auto", nav, parts[5].strip()
-                ))
+            ...
+        print(f"[AMFI DEBUG] parsed {len(schemes)} schemes before insert")
         if schemes:
             with get_conn() as conn:
-                conn.executemany("INSERT OR REPLACE INTO amc_schemes VALUES (?,?,?,?,?,?,?)", schemes)
-                conn.execute(
-                    "INSERT OR IGNORE INTO amc_config (amc, rta, is_enabled) "
-                    "SELECT DISTINCT amc, rta, 1 FROM amc_schemes WHERE amc IS NOT NULL"
-                )
+                conn.executemany(...)
+                ...
             result_bucket.append(("ok", f"Synced {len(schemes):,} schemes"))
         else:
             result_bucket.append(("error", "Parsed 0 schemes — check AMFI URL"))
     except Exception as exc:
         log.exception("AMFI sync failed")
+        print(f"[AMFI DEBUG] EXCEPTION: {exc!r}")
         result_bucket.append(("error", str(exc)))
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_amfi_nav_index() -> dict[str, float]:
+    try:
+        res = requests.get(AMFI_TEXT_URL, timeout=20)
+        res.raise_for_status()
+        lines = res.text.splitlines()
+    except Exception:
+        log.exception("AMFI fetch failed")
+        return {}
+
+    nav_by_name: dict[str, float] = {}
+    for line in lines:
+        line = line.strip()
+        if not line or ";" not in line:
+            continue
+        parts = line.split(";")
+        if len(parts) < 6 or parts[0] == "Scheme Code":
+            continue
+        name = parts[3].strip()
+        try:
+            nav = float(parts[4]) if parts[4] not in ("N.A.", "") else 0.0
+        except ValueError:
+            nav = 0.0
+        if nav > 0 and name:
+            key = _WHITESPACE_RE.sub(" ", name.upper())
+            nav_by_name[key] = nav
+    return nav_by_name
+
+
 def start_amfi_sync() -> None:
+    print(f"[AMFI DEBUG] amfi_sync_started={st.session_state.get('amfi_sync_started')}")
+
     if st.session_state.get("amfi_sync_started"): return
     st.session_state["amfi_sync_started"] = True
     st.session_state["amfi_result"] = []
@@ -769,10 +780,38 @@ def load_combined_client_aum(client_code: str) -> pd.DataFrame:
 def load_client_all_transactions(client_code: str) -> pd.DataFrame:
     """Fetches all CAMS and KFinTech transactions for a specific client."""
     with get_conn() as conn:
-        client_folios = conn.execute("SELECT folio_no FROM holdings WHERE client_code = ?", (client_code,)).fetchall()
-        if not client_folios: return pd.DataFrame()
+        # Get client PAN for cross-RTA matching
+        client_row = conn.execute(
+            "SELECT pan FROM clients WHERE client_code = ?", (client_code,)
+        ).fetchone()
+        client_pan = client_row[0].strip().upper() if client_row and client_row[0] else ""
 
-        # Fetch all transactions (we will filter in pandas to handle folio normalization easily)
+        # Collect all possible folio identifiers for this client
+        folio_bases = set()
+
+        # From holdings (SIPs)
+        for row in conn.execute("SELECT folio_no FROM holdings WHERE client_code = ?", (client_code,)):
+            if row[0]:
+                folio_bases.add(normalize_folio(row[0]))
+
+        # From CAMS folio master (lumpsums)
+        if client_pan:
+            for row in conn.execute("SELECT folio_no FROM cams_folio_master WHERE UPPER(TRIM(pan_no)) = ?",
+                                    (client_pan,)):
+                if row[0]:
+                    folio_bases.add(normalize_folio(row[0]))
+
+        # From KFinTech folio master (lumpsums)
+        if client_pan:
+            for row in conn.execute("SELECT folio_no FROM kfintech_folio_master WHERE UPPER(TRIM(pan_no)) = ?",
+                                    (client_pan,)):
+                if row[0]:
+                    folio_bases.add(normalize_folio(row[0]))
+
+        if not folio_bases:
+            return pd.DataFrame()
+
+        # Fetch all transactions
         cams_df = pd.read_sql("""
             SELECT 'CAMS' as RTA, folio_no, scheme_name, scheme_code, trade_date, post_date, 
                    trxn_no, nav, units, amount, trxn_type 
@@ -786,13 +825,11 @@ def load_client_all_transactions(client_code: str) -> pd.DataFrame:
         """, conn)
 
         all_txns = pd.concat([cams_df, kfin_df], ignore_index=True)
-        if all_txns.empty: return pd.DataFrame()
+        if all_txns.empty:
+            return pd.DataFrame()
 
-        # Normalize folios to match client holdings
         all_txns["folio_base"] = all_txns["folio_no"].apply(normalize_folio)
-        client_folio_bases = {normalize_folio(f[0]) for f in client_folios if f[0]}
-
-        return all_txns[all_txns["folio_base"].isin(client_folio_bases)]
+        return all_txns[all_txns["folio_base"].isin(folio_bases)]
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -808,8 +845,70 @@ def load_amfi_navs() -> dict:
                 if val > 0:
                     nav_dict[str(r[0]).strip()] = val
             except (ValueError, TypeError):
-                pass # Skip invalid NAV values
+                pass  # Skip invalid NAV values
         return nav_dict
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_amfi_navs_by_name() -> dict[str, float]:
+    """Builds a mapping from normalized scheme name → NAV."""
+    with get_conn() as conn:
+        rows = conn.execute("SELECT scheme_name, last_nav FROM amc_schemes").fetchall()
+        nav_dict = {}
+        for scheme_name, nav in rows:
+            try:
+                val = float(nav)
+                if val > 0 and scheme_name:
+                    # Normalize: uppercase, remove extra spaces
+                    key = _WHITESPACE_RE.sub(" ", str(scheme_name).strip().upper())
+                    nav_dict[key] = val
+            except (ValueError, TypeError):
+                pass
+        return nav_dict
+
+
+def find_nav_by_scheme_name(scheme_name: str, nav_by_name: dict[str, float]) -> float:
+    """Fuzzy match scheme name against AMFI index, respecting Direct/Regular and Growth/IDCW."""
+    if not scheme_name:
+        return 0.0
+
+    key = _WHITESPACE_RE.sub(" ", str(scheme_name).strip().upper())
+
+    if key in nav_by_name:
+        return nav_by_name[key]
+
+    simplified = key.replace(" - ", " ").replace("-", " ")
+    if simplified in nav_by_name:
+        return nav_by_name[simplified]
+
+    is_direct = "DIRECT" in key
+    is_idcw = "IDCW" in key or "DIVIDEND" in key
+    want_growth = not is_idcw
+
+    core = re.sub(r"\s*\(.*?\)\s*", " ", key)
+    core = re.sub(r"\s*-\s*", " ", core)
+    for w in ["GROWTH OPTION", "GROWTH", "IDCW", "DIVIDEND", "DIRECT", "REGULAR", "OPTION", "PLAN"]:
+        core = core.replace(w, "")
+    core = _WHITESPACE_RE.sub(" ", core).strip()
+
+    if not core:
+        return 0.0
+
+    for amfi_name, nav in nav_by_name.items():
+        if core not in amfi_name:
+            continue
+        amfi_is_direct = "DIRECT" in amfi_name
+        amfi_is_idcw = "IDCW" in amfi_name or "DIVIDEND" in amfi_name
+        if is_direct != amfi_is_direct:
+            continue
+        if want_growth and amfi_is_idcw:
+            continue
+        if not want_growth and not amfi_is_idcw:
+            continue
+        return nav
+
+    return 0.0
+
 
 # ==================== BROKERAGE DATA LOADERS ====================
 @st.cache_data(ttl=60, show_spinner=False)
@@ -1071,6 +1170,7 @@ st.set_page_config(page_title="MFD Portfolio Intelligence", layout="wide", page_
 
 init_db()
 start_amfi_sync()
+
 result_bucket = st.session_state.get("amfi_result", [])
 if result_bucket:
     status, msg = result_bucket[0]
@@ -1606,6 +1706,8 @@ elif mode == "👤 Client View":
             txns_df = load_client_all_transactions(code)
             amfi_navs = load_amfi_navs()  # Uses the fixed function above
 
+            amfi_navs_by_name = fetch_amfi_nav_index()
+
             if txns_df.empty:
                 st.info(
                     "No transaction history found for this client. Please upload CAMS/KFinTech Transaction files in the Admin Panel.")
@@ -1623,9 +1725,16 @@ elif mode == "👤 Client View":
                 ).reset_index()
 
                 # Calculate Current Value using AMFI NAV
-                holdings_summary["Current_Value"] = holdings_summary.apply(
-                    lambda row: row["Total_Units"] * amfi_navs.get(row["scheme_code"], 0), axis=1
+
+
+                def get_current_nav(scheme_name: str) -> float:
+                    return find_nav_by_scheme_name(scheme_name, amfi_navs_by_name)
+
+
+                holdings_summary["nav_used"] = holdings_summary["scheme_name"].apply(
+                    lambda s: find_nav_by_scheme_name(s, amfi_navs_by_name)
                 )
+                holdings_summary["Current_Value"] = holdings_summary["Total_Units"] * holdings_summary["nav_used"]
 
                 # Sort by Current Value descending
                 holdings_summary = holdings_summary.sort_values(by="Current_Value", ascending=False)
@@ -1692,7 +1801,7 @@ elif mode == "👤 Client View":
             cams_client = load_cams_by_client(code)
             kf_client = load_kfintech_by_client(code)
             all_client_brok = pd.concat([cams_client, kf_client], ignore_index=True) if not (
-                        cams_client.empty and kf_client.empty) else pd.DataFrame()
+                    cams_client.empty and kf_client.empty) else pd.DataFrame()
 
             if all_client_brok.empty:
                 st.info("No RTA brokerage data found for this client's folios.")
@@ -2156,7 +2265,7 @@ elif mode == "⚙️ Admin Panel":
                         st.dataframe(folio_summary, use_container_width=True, hide_index=True)
                         with get_conn() as conn:
                             total_fm_aum = \
-                            conn.execute("SELECT COALESCE(SUM(rupee_bal),0) FROM cams_folio_master").fetchone()[0]
+                                conn.execute("SELECT COALESCE(SUM(rupee_bal),0) FROM cams_folio_master").fetchone()[0]
                         st.metric("Grand Total AUM (Folio Master)", format_aum(total_fm_aum))
                         if st.button("Clear All Folio Master Data", key="clear_cams_fm"):
                             with get_conn() as conn: conn.execute("DELETE FROM cams_folio_master")
