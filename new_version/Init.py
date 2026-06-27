@@ -543,7 +543,7 @@ def init_db() -> None:
             educess_amount          REAL,
             tran_type_code          TEXT,
             upload_batch            TEXT,
-            UNIQUE(transaction_id, account_number, from_date)
+            UNIQUE(transaction_id)
         );
 
         -- ── Manual / Config ─────────────────────────────────────────────────
