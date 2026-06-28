@@ -3,9 +3,8 @@ MFD Portfolio Intelligence — Minimal Version
 Only: Admin Panel (Upload + Raw Data View) + Dashboard (View All Details)
 """
 
-
-import os
 import logging
+import os
 import re
 import warnings
 from datetime import datetime
@@ -272,6 +271,7 @@ def format_brokerage_inr(val) -> str:
         return f"Rs {float(val):,.2f}"
     except (TypeError, ValueError):
         return "Rs -"
+
 
 # ==================== AMFI NAV SERVICE ====================
 
