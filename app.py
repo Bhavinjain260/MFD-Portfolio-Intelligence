@@ -17,6 +17,8 @@ import streamlit as st
 import data_manager
 from Init import init_db, get_conn
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+
 warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s | %(message)s")
 log = logging.getLogger(__name__)
@@ -74,11 +76,11 @@ def format_brokerage(val) -> str:
     except (TypeError, ValueError):
         return "Rs -"
 
-
-
-
-
-
+import logging
+import pandas as pd
+from datetime import datetime
+from typing import Optional
+import requests
 
 log = logging.getLogger(__name__)
 AMFI_TEXT_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
@@ -93,15 +95,20 @@ class AMFINavService:
     _last_fetch: Optional[datetime] = None
 
     def refresh(self) -> dict[str, tuple[float, str]]:
+        log.info("[AMFI] Starting NAV download from %s", AMFI_TEXT_URL)
         try:
             res = requests.get(AMFI_TEXT_URL, timeout=30)
             res.raise_for_status()
             lines = res.text.splitlines()
+            log.info("[AMFI] Downloaded %s lines", len(lines))
         except Exception:
-            log.exception("AMFI NAV download failed")
+            log.exception("[AMFI] NAV download failed")
             return {}
 
         nav_map: dict[str, tuple[float, str]] = {}
+        skipped = 0
+        parsed = 0
+
         for line in lines:
             line = line.strip()
             if not line or ";" not in line:
@@ -126,21 +133,27 @@ class AMFINavService:
                 nav_date = date_str
 
             if nav > 0:
+                parsed += 1
                 for isin in (isin_1, isin_2):
                     if isin:
                         nav_map[isin.upper()] = (nav, nav_date)
+            else:
+                skipped += 1
 
         self._nav_by_isin = nav_map
         self._last_fetch = datetime.now()
-        log.info("AMFI NAV indexed: %s ISINs", len(nav_map))
+        log.info("[AMFI] NAV indexed: %s ISINs parsed, %s skipped (N.A./0)", parsed, skipped)
         return nav_map
 
     def get_nav(self, isin: str) -> Optional[tuple[float, str]]:
         if not self._nav_by_isin:
+            log.debug("[AMFI] Cache empty, triggering refresh")
             self.refresh()
         if not isin:
             return None
-        return self._nav_by_isin.get(isin.strip().upper())
+        result = self._nav_by_isin.get(isin.strip().upper())
+        log.debug("[AMFI] Lookup ISIN=%s → %s", isin, "HIT" if result else "MISS")
+        return result
 
 
 _amfi = AMFINavService()
@@ -165,53 +178,125 @@ def get_all_folios_with_isin_and_nav() -> pd.DataFrame:
     """
     Master batch function:
       1. Download AMFI NAV once → index by ISIN
-      2. Query CAMS folio master JOIN bse_scheme_master (PRODUCT → Channel Partner Code → ISIN)
-      3. Query KFin folio master JOIN bse_scheme_master (Product Code → Channel Partner Code → ISIN)
+      2. Query CAMS folio master JOIN deduplicated bse_scheme_master (product → Channel Partner Code → ISIN)
+      3. Query KFin folio master JOIN deduplicated bse_scheme_master (product_code → Channel Partner Code → ISIN)
+         + computed units from kfin_transactions
       4. Map NAV in-memory
       5. Return combined DataFrame
     """
-    nav_map = _amfi.refresh()
+    log.info("=" * 60)
+    log.info("[NAV-FLOW] Starting get_all_folios_with_isin_and_nav()")
 
-    # ── CAMS folios with ISIN via JOIN ──
-    cams_sql = """
+    # ── Step 1: AMFI NAV Download ──
+    log.info("[NAV-FLOW][Step 1] Downloading AMFI NAV index...")
+    nav_map = _amfi.refresh()
+    log.info("[NAV-FLOW][Step 1] AMFI NAV ready: %s ISINs in index", len(nav_map))
+
+    # ── Step 2: Deduplicated BSE Scheme Master subquery ──
+    log.info("[NAV-FLOW][Step 2] Building deduplicated BSE lookup...")
+    bse_dedup = """
+        SELECT 
+            UPPER(TRIM(Channel_Partner_Code)) AS cp_code,
+            MAX(ISIN) AS ISIN,
+            MAX(Scheme_Name) AS Scheme_Name
+        FROM bse_scheme_master
+        WHERE Channel_Partner_Code IS NOT NULL AND TRIM(Channel_Partner_Code) != ''
+        GROUP BY UPPER(TRIM(Channel_Partner_Code))
+    """
+    log.debug("[NAV-FLOW][Step 2] BSE dedup SQL:\n%s", bse_dedup)
+
+    # ── Step 3: CAMS Query ──
+    log.info("[NAV-FLOW][Step 3] Building CAMS SQL...")
+    cams_sql = f"""
     SELECT 
         f.foliochk          AS folio_id,
-        f.PRODUCT           AS product_code,
-        f.FOLIO_NAME        AS investor_name,
+        f.product           AS product_code,
+        f.inv_name          AS investor_name,
         f.rupee_bal         AS file_aum,
-        f.units             AS units,
+        f.clos_bal          AS units,
         bsm.ISIN            AS isin,
         bsm.Scheme_Name     AS scheme_name,
         'CAMS'              AS rta
     FROM cams_folio f
-    LEFT JOIN bse_scheme_master bsm
-        ON UPPER(TRIM(bsm.Channel_Partner_Code)) = UPPER(TRIM(f.PRODUCT))
-    WHERE f.PRODUCT IS NOT NULL AND TRIM(f.PRODUCT) != ''
+    LEFT JOIN ({bse_dedup}) bsm
+        ON UPPER(TRIM(f.product)) = bsm.cp_code
+    WHERE f.product IS NOT NULL AND TRIM(f.product) != ''
     """
+    log.debug("[NAV-FLOW][Step 3] CAMS SQL:\n%s", cams_sql)
 
-    # ── KFin folios with ISIN via JOIN ──
-    # Schema: Product Code, Fund, Folio, Investor Name
-    kfin_sql = """
+    # ── Step 4: KFin Query ──
+    log.info("[NAV-FLOW][Step 4] Building KFin SQL...")
+    kfin_sql = f"""
     SELECT 
-        f."Folio"           AS folio_id,
-        f."Product Code"    AS product_code,
-        f."Investor Name"   AS investor_name,
+        f.folio             AS folio_id,
+        f.product_code      AS product_code,
+        f.investor_name     AS investor_name,
         NULL                AS file_aum,
-        NULL                AS units,
+        u.total_units       AS units,
         bsm.ISIN            AS isin,
         bsm.Scheme_Name     AS scheme_name,
         'KFinTech'          AS rta
     FROM kfin_folio f
-    LEFT JOIN bse_scheme_master bsm
-        ON UPPER(TRIM(bsm.Channel_Partner_Code)) = UPPER(TRIM(f."Product Code"))
-    WHERE f."Product Code" IS NOT NULL AND TRIM(f."Product Code") != ''
+    INNER JOIN (
+        SELECT 
+            td_acno AS folio_id,
+            fmcode  AS product_code,
+            SUM(td_units) AS total_units
+        FROM kfin_transactions
+        WHERE td_units IS NOT NULL
+        GROUP BY td_acno, fmcode
+        HAVING total_units != 0
+    ) u 
+        ON f.folio = u.folio_id 
+        AND UPPER(TRIM(f.product_code)) = UPPER(TRIM(u.product_code))
+    LEFT JOIN ({bse_dedup}) bsm
+        ON UPPER(TRIM(f.product_code)) = bsm.cp_code
+    WHERE f.product_code IS NOT NULL AND TRIM(f.product_code) != ''
     """
+    log.debug("[NAV-FLOW][Step 4] KFin SQL:\n%s", kfin_sql)
 
+    # ── Step 5: Execute Queries ──
+    log.info("[NAV-FLOW][Step 5] Executing SQL queries...")
     with get_conn() as conn:
         cams_df = pd.read_sql(cams_sql, conn)
-        kfin_df = pd.read_sql(kfin_sql, conn)
+        log.info("[NAV-FLOW][Step 5] CAMS rows fetched: %s", len(cams_df))
 
+        # Debug: CAMS product → ISIN mapping stats
+        cams_with_product = cams_df["product_code"].notna().sum()
+        cams_with_isin = cams_df["isin"].notna().sum()
+        log.info("[NAV-FLOW][Step 5] CAMS: %s rows with product_code, %s rows with ISIN (%s%% match)",
+                 cams_with_product, cams_with_isin,
+                 round(cams_with_isin / cams_with_product * 100, 2) if cams_with_product else 0)
+
+        # Debug: Show sample CAMS mappings
+        cams_sample = cams_df.dropna(subset=["product_code"]).head(3)
+        for _, row in cams_sample.iterrows():
+            log.debug("[NAV-FLOW][Step 5] CAMS SAMPLE | folio=%s | product=%s | isin=%s | scheme=%s",
+                      row["folio_id"], row["product_code"], row["isin"], row["scheme_name"])
+
+        kfin_df = pd.read_sql(kfin_sql, conn)
+        log.info("[NAV-FLOW][Step 5] KFin rows fetched: %s", len(kfin_df))
+
+        # Debug: KFin product_code → ISIN mapping stats
+        kfin_with_product = kfin_df["product_code"].notna().sum()
+        kfin_with_isin = kfin_df["isin"].notna().sum()
+        log.info("[NAV-FLOW][Step 5] KFin: %s rows with product_code, %s rows with ISIN (%s%% match)",
+                 kfin_with_product, kfin_with_isin,
+                 round(kfin_with_isin / kfin_with_product * 100, 2) if kfin_with_product else 0)
+
+        # Debug: Show sample KFin mappings
+        kfin_sample = kfin_df.dropna(subset=["product_code"]).head(3)
+        for _, row in kfin_sample.iterrows():
+            log.debug("[NAV-FLOW][Step 5] KFin SAMPLE | folio=%s | product=%s | isin=%s | scheme=%s",
+                      row["folio_id"], row["product_code"], row["isin"], row["scheme_name"])
+
+    # ── Step 6: Combine ──
+    log.info("[NAV-FLOW][Step 6] Combining CAMS + KFin data...")
     combined = pd.concat([cams_df, kfin_df], ignore_index=True)
+    log.info("[NAV-FLOW][Step 6] Combined rows: %s", len(combined))
+
+    # ── Step 7: NAV Lookup ──
+    log.info("[NAV-FLOW][Step 7] Mapping ISIN → NAV from AMFI index...")
 
     def _lookup_nav(isin):
         if pd.isna(isin) or not str(isin).strip():
@@ -223,7 +308,21 @@ def get_all_folios_with_isin_and_nav() -> pd.DataFrame:
     combined["current_nav"] = nav_cols[0]
     combined["nav_date"] = nav_cols[1]
 
-    # Calculate NAV-based AUM where units exist
+    # Debug: NAV mapping stats
+    total_with_isin = combined["isin"].notna().sum()
+    total_with_nav = combined["current_nav"].notna().sum()
+    log.info("[NAV-FLOW][Step 7] ISIN→NAV mapping: %s with ISIN, %s with NAV (%s%% coverage)",
+             total_with_isin, total_with_nav,
+             round(total_with_nav / total_with_isin * 100, 2) if total_with_isin else 0)
+
+    # Debug: Show sample NAV lookups
+    nav_sample = combined.dropna(subset=["isin"]).head(3)
+    for _, row in nav_sample.iterrows():
+        log.debug("[NAV-FLOW][Step 7] NAV SAMPLE | isin=%s | nav=%s | date=%s",
+                  row["isin"], row["current_nav"], row["nav_date"])
+
+    # ── Step 8: Calculate AUM ──
+    log.info("[NAV-FLOW][Step 8] Calculating NAV-based AUM...")
     combined["nav_based_aum"] = combined.apply(
         lambda r: r["units"] * r["current_nav"]
         if pd.notna(r.get("units")) and pd.notna(r["current_nav"])
@@ -231,6 +330,12 @@ def get_all_folios_with_isin_and_nav() -> pd.DataFrame:
         axis=1
     )
 
+    # Debug: AUM stats
+    total_aum = combined["nav_based_aum"].sum()
+    log.info("[NAV-FLOW][Step 8] Total NAV-based AUM: ₹%s", f"{total_aum:,.2f}" if pd.notna(total_aum) else "N/A")
+
+    # ── Step 9: Final Flags & Reorder ──
+    log.info("[NAV-FLOW][Step 9] Finalizing columns...")
     combined["has_isin"] = combined["isin"].notna()
     combined["has_nav"] = combined["current_nav"].notna()
 
@@ -242,16 +347,22 @@ def get_all_folios_with_isin_and_nav() -> pd.DataFrame:
     ]
     front = [c for c in front if c in combined.columns]
     back = [c for c in combined.columns if c not in front]
-    return combined[front + back]
+    result = combined[front + back]
+
+    log.info("[NAV-FLOW] Complete. Returning %s rows x %s cols", len(result), len(result.columns))
+    log.info("=" * 60)
+
+    return result
 
 
 def get_folio_nav_summary() -> dict:
     """Quick stats for Streamlit metrics."""
+    log.info("[NAV-FLOW] Generating folio NAV summary...")
     df = get_all_folios_with_isin_and_nav()
     cams_df = df[df["rta"] == "CAMS"]
     kfin_df = df[df["rta"] == "KFinTech"]
 
-    return {
+    summary = {
         "total_folios": len(df),
         "cams_folios": len(cams_df),
         "kfin_folios": len(kfin_df),
@@ -262,89 +373,16 @@ def get_folio_nav_summary() -> dict:
         "cams_nav_aum": float(cams_df["nav_based_aum"].sum()) if "nav_based_aum" in cams_df.columns else 0.0,
         "cams_file_aum": float(cams_df["file_aum"].sum()) if "file_aum" in cams_df.columns else 0.0,
     }
-
-
-# ==================== AMFI NAV FETCH ====================
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_amfi_nav_index() -> dict:
-    """Fetch AMFI NAV file and build two lookup indexes:
-    - by_code: AMFI scheme code (numeric) -> NAV  (for CAMS)
-    - by_name: Normalized scheme name -> NAV  (for KFinTech fallback)
-    """
-    try:
-        res = requests.get(AMFI_TEXT_URL, timeout=20)
-        res.raise_for_status()
-        lines = res.text.splitlines()
-    except Exception:
-        log.exception("AMFI fetch failed")
-        return {"by_code": {}, "by_name": {}}
-
-    nav_by_code: dict[str, float] = {}
-    nav_by_name: dict[str, float] = {}
-
-    for line in lines:
-        line = line.strip()
-        if not line or ";" not in line:
-            continue
-        parts = line.split(";")
-        if len(parts) < 6 or parts[0] == "Scheme Code":
-            continue
-        code = parts[0].strip()
-        name = parts[3].strip()
-        try:
-            nav = float(parts[4]) if parts[4] not in ("N.A.", "") else 0.0
-        except ValueError:
-            nav = 0.0
-        if nav > 0 and code:
-            nav_by_code[code] = nav
-            key = _WHITESPACE_RE.sub(" ", name.upper())
-            nav_by_name[key] = nav
-
-    return {"by_code": nav_by_code, "by_name": nav_by_name}
-
-
-def extract_amfi_code(product: str) -> str:
-    """Extract AMFI scheme code from CAMS product code.
-    Examples: 'L689G' -> '689', 'M1234D' -> '1234', '689' -> '689'
-    """
-    if not product:
-        return ""
-    cleaned = re.sub(r"^[A-Za-z]", "", str(product).strip())
-    cleaned = re.sub(r"[A-Za-z]$", "", cleaned)
-    return cleaned.strip()
-
-
-def find_nav_by_name(scheme_name: str, nav_by_name: dict[str, float]) -> float:
-    """Fuzzy match scheme name against AMFI name index."""
-    if not scheme_name:
-        return 0.0
-
-    key = _WHITESPACE_RE.sub(" ", str(scheme_name).strip().upper())
-
-    if key in nav_by_name:
-        return nav_by_name[key]
-
-    simplified = key
-    for suffix in [" GROWTH", " IDCW", " DIVIDEND", " DIRECT", " REGULAR", " PLAN", " OPTION"]:
-        simplified = simplified.replace(suffix, "")
-    simplified = _WHITESPACE_RE.sub(" ", simplified).strip()
-
-    if simplified in nav_by_name:
-        return nav_by_name[simplified]
-
-    for amfi_name, nav in nav_by_name.items():
-        if simplified in amfi_name or amfi_name in simplified:
-            return nav
-
-    return 0.0
+    log.info("[NAV-FLOW] Summary: %s", summary)
+    return summary
 
 
 def normalize_folio(folio: str) -> str:
-    if not folio: return ""
+    if not folio:
+        return ""
     try:
-        if pd.isna(folio): return ""
+        if pd.isna(folio):
+            return ""
     except Exception:
         pass
     return str(folio).strip().split("/")[0].strip().lower()
@@ -363,7 +401,6 @@ def theme_plotly(fig, dark: bool):
         yaxis=dict(gridcolor=grid_c, linecolor=grid_c),
     )
     return fig
-
 
 # ==================== DATA LOADERS ====================
 @st.cache_data(ttl=60, show_spinner=False)
@@ -607,7 +644,7 @@ ensure_db()
 
 # -------------------- AMFI NAV SYNC --------------------
 if "amfi_nav" not in st.session_state:
-    st.session_state["amfi_nav"] = fetch_amfi_nav_index()
+    st.session_state["amfi_nav"] = AMFINavService()
     nav_data = st.session_state["amfi_nav"]
     total_nav = len(nav_data["by_code"]) + len(nav_data["by_name"])
     if total_nav == 0:
