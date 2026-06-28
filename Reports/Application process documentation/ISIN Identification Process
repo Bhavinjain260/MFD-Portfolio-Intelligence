@@ -1,0 +1,276 @@
+# ISIN Identification Process
+
+## Objective
+
+The purpose of this document is to identify the **ISIN (International Securities Identification Number)** for mutual fund schemes using the data received from **KFin (Karvy)** and **CAMS**.
+
+> **Note:** The process of fetching the latest NAV and NAV Date using the ISIN will be handled by a separate process and is outside the scope of this document.
+
+---
+
+# Overview
+
+```text
+KFin/CAMS Files
+       ↓
+Product Code / ProdCode
+       ↓
+BSE Scheme Master (Channel Partner Code)
+       ↓
+ISIN
+```
+
+---
+
+# 1. KFin (Karvy) ISIN Mapping
+
+## Source Fields
+
+### Folio Master
+
+Field:
+
+```text
+Product Code
+```
+
+Example:
+
+```text
+Product Code = 105MSGP
+```
+
+### Transaction File
+
+Field:
+
+```text
+fmcode
+```
+
+Example:
+
+```text
+fmcode = 105MSGP
+```
+
+---
+
+## Mapping Logic
+
+The value present in either:
+
+* `Product Code` (Folio Master), or
+* `fmcode` (Transaction File)
+
+should be searched in the **Channel Partner Code** column of the **BSE Scheme Master**.
+
+---
+
+## Example
+
+### KFin Folio Master
+
+```text
+Product Code = 105MSGP
+Fund Description = JM Flexicap Fund - Growth Option
+```
+
+### KFin Transaction File
+
+```text
+fmcode = 105MSGP
+Fund Description = JM Flexicap Fund - (Regular) - Growth Option
+```
+
+### BSE Scheme Master
+
+| Channel Partner Code | ISIN         | Scheme Name                      |
+| -------------------- | ------------ | -------------------------------- |
+| 105MSGP              | INF192K01635 | JM FLEXICAP FUND - GROWTH OPTION |
+
+### Final Mapping
+
+```text
+105MSGP → INF192K01635
+```
+
+---
+
+# 2. CAMS ISIN Mapping
+
+## Source Fields
+
+### CAMS Folio Master
+
+Field:
+
+```text
+PRODUCT
+```
+
+Example:
+
+```text
+PRODUCT = G340
+```
+
+### CAMS Transaction File
+
+Field:
+
+```text
+PRODCODE
+```
+
+Example:
+
+```text
+PRODCODE = G340
+```
+
+---
+
+## Mapping Logic
+
+The value present in either:
+
+* `PRODUCT` (Folio Master), or
+* `PRODCODE` (Transaction File)
+
+should be searched in the **Channel Partner Code** column of the **BSE Scheme Master**.
+
+---
+
+## Example
+
+```text
+PRODUCT / PRODCODE = G340
+        ↓
+BSE Scheme Master
+        ↓
+ISIN = <Matching Scheme ISIN>
+```
+
+---
+
+# SQL Examples
+
+## KFin
+
+```sql
+SELECT ISIN
+FROM BSE_SCHEME_MASTER
+WHERE CHANNEL_PARTNER_CODE = :product_code;
+```
+
+or
+
+```sql
+SELECT ISIN
+FROM BSE_SCHEME_MASTER
+WHERE CHANNEL_PARTNER_CODE = :fmcode;
+```
+
+---
+
+## CAMS
+
+```sql
+SELECT ISIN
+FROM BSE_SCHEME_MASTER
+WHERE CHANNEL_PARTNER_CODE = :product;
+```
+
+or
+
+```sql
+SELECT ISIN
+FROM BSE_SCHEME_MASTER
+WHERE CHANNEL_PARTNER_CODE = :prodcode;
+```
+
+---
+
+# End-to-End Flow
+
+```text
+KFin Product Code / fmcode
+                OR
+CAMS PRODUCT / PRODCODE
+                    ↓
+          BSE Scheme Master
+                    ↓
+                 ISIN
+```
+
+---
+
+# Summary
+
+| Source System     | Source Field | BSE Scheme Master Field | Output |
+| ----------------- | ------------ | ----------------------- | ------ |
+| KFin Folio Master | Product Code | Channel Partner Code    | ISIN   |
+| KFin Transaction  | fmcode       | Channel Partner Code    | ISIN   |
+| CAMS Folio Master | PRODUCT      | Channel Partner Code    | ISIN   |
+| CAMS Transaction  | PRODCODE     | Channel Partner Code    | ISIN   |
+
+---
+
+# Output
+
+The output of this process is the **ISIN**, which will subsequently be used by a separate NAV process to fetch the latest NAV and NAV Date.
+
+
+
+
+
+
+
+
+RAW input to get the above documentation
+
+
+Create an proper docucuemt on how to get the ISIN
+
+here how the we will get the Nav Date using the ISIN number
+
+To get the ISIN from the BSe Scheme Master- we will be using Channel Partner Code in the BSE Scheme Master
+
+here in Karvy
+in Folio master Product Code
+In Transaction File - fmcode
+
+For Ex: 105MSGP
+
+Folio Master:
+
+Product Code	Fund	Folio	Dividend Option	Fund Description	Investor Name	Joint Name 1	Joint Name 2	Address #1	Address #2	Address #3	City	Pincode	State	Country	TPIN	Date of Birth	F Name	M Name	Phone Residence	Phone Res#1	Phone Res#2	Phone Office	Phone Off#1	Phone Off#2	Fax Residence	Fax Office	Tax Status	Occ Code	Email	BankAccno	Bank Name	Account Type	Branch	Bank Address #1	Bank Address #2	Bank Address #3	Bank City	Bank Phone	Bank State	Bank Country	Investor ID	Broker Code	PAN Number	Mobile Number	Report Date	Report Time	Occupation Description	Mode of Holding	Mode of Holding Description	Mapin Id	Holder 1 Aadhaar info	Holder 2 Aadhaar info	Holder 3 Aadhaar info	Guardian Aadhaar info
+105MSGP	105	77721887803	G	JM Flexicap Fund - Growth Option	DISHIK JAIN			C O RAICHAND BHARATH JAIN 10 554 2 2ND FLOOR SANTHA	PET OPP MANDAPAM NELLORE NELLORE NELLORE NELLORE	ANDHRA PRADESH 524001	NELLORE	524001	ANDHRA PRADESH			1/10/01											I	3	dishikjain24@gmail.com	5.01003E+13	HDFC BANK	SAV		NARTHAKI THEATRE NELLORE			NELLORE					ARN-335644	FYSPD8787A	7013499580	20/06/2026	172649	BUSINESS	1	SINGLE		Y	N	N	N
+
+Transaction File
+
+fmcode	td_fund	td_acno	schpln	divopt	funddesc	td_purred	td_trno	smcode	chqno	invname	trnmode	trnstat	td_branch	isctrno	td_trdt	td_prdt	td_pop	loadper	td_units	td_amt	load1	td_agent	td_broker	brokper	brokcomm	invid	crdate	crtime	trnsub	td_appno	unqno	trdesc	td_trtype	purdate	puramt	purunits	trflag	sfunddt	chqdate	chqbank	td_nav	td_ptrno	STT	IHNo	BranchCode	InwardNo	nctremarks	PAN1	TrCharges	SipRegdt	sipregslno	DivPer	GuardPanNo	CAN	ExchOrgTrtype	ElecTrxnFlag	cleared	InvState
+105MSGP	105	77721887803	MSGP	G	JM Flexicap Fund - (Regular) - Growth Option	P	5161666		111111	DISHIK JAIN	N	Y	MUMBAI	5161666	18/08/2025	18/08/2025	96.3917	0	10.374	999.95	0	ARN-335644		0	0		20/06/2026	173430	L	0	MS77721887803NEW5161666	Purchase	NEW				P		18/08/2025	HDFC BANK	96.3917	0	0	980817951	BS77	2042360303		FYSPD8787A			0				NEW		Y	ANDHRA PRADESH
+
+BSe Scheme Master
+
+Unique No	Scheme Code	RTA Scheme Code	AMC Scheme Code	ISIN	AMC Code	Scheme Type	Scheme Plan	Scheme Name	Purchase Allowed	Purchase Transaction mode	Minimum Purchase Amount	Additional Purchase Amount	Maximum Purchase Amount	Purchase Amount Multiplier	Purchase Cutoff Time	Redemption Allowed	Redemption Transaction Mode	Minimum Redemption Qty	Redemption Qty Multiplier	Maximum Redemption Qty	Redemption Amount - Minimum	Redemption Amount ‚Äì Maximum	Redemption Amount Multiple	Redemption Cut off Time	RTA Agent Code	AMC Active Flag	Dividend Reinvestment Flag	SIP FLAG	STP FLAG	SWP Flag	Switch FLAG	SETTLEMENT TYPE	AMC_IND	Face Value	Start Date	End Date	Exit Load Flag	Exit Load	Lock-in Period Flag	Lock-in Period	Channel Partner Code	ReOpening Date
+8839	MSGP-GR	MSGP	358	INF192K01635	JM FINANCIAL MUTUAL FUND_MF	EQUITY	NORMAL	JM FLEXICAP FUND - GROWTH OPTION	Y	DP	1000	100	0	1	14:30:00	Y	DP	0.001	0.001	0	500	0	1	15:00:00	KARVY	1	Z	Y	N	Y	Y	T2		10	Mar  4 2014	Mar  4 2099	N	0	N	0	105MSGP
+8842	MSGP-GR-L1	MSGP	358	INF192K01635	JM FINANCIAL MUTUAL FUND_MF	EQUITY	NORMAL	JM FLEXICAP FUND - GROWTH OPTION	Y	DP	200000	200000	0	1	14:30:00	N	DP	0.001	0.001	0	500	0	1	14:30:00	KARVY	1	Z	Y	N	N	N	L1		10	Mar  4 2014	Mar  4 2099		0			105MSGP
+
+Then from the Scheme Master we can take the ISIN: BSE Scheme Master and pass it to the AMFI Program will can get the latest NAV
+
+In Cams folio Master we have 'PRODUCT'  and in Cams trasnaction we have 'PRODCODE'
+
+Cams folio Master
+
+'FOLIOCHK'	'INV_NAME'	'ADDRESS1'	'ADDRESS2'	'ADDRESS3'	'CITY'	'PINCODE'	PRODUCT'	'SCH_NAME'	'REP_DATE'	CLOS_BAL'	RUPEE_BAL'	'JNT_NAME1'	'JNT_NAME2'	'PHONE_OFF'	'PHONE_RES'	'EMAIL'	'HOLDING_NATURE'	'UIN_NO'	'PAN_NO'	'JOINT1_PAN'	'JOINT2_PAN'	'GUARD_PAN'	'TAX_STATUS'	'BROKER_CODE'	'SUBBROKER'	'REINV_FLAG'	'BANK_NAME'	'BRANCH'	'AC_TYPE'	'AC_NO'	'B_ADDRESS1'	'B_ADDRESS2'	'B_ADDRESS3'	'B_CITY'	'B_PINCODE'	'INV_DOB'	'MOBILE_NO'	'OCCUPATION'	'INV_IIN'	'NOM_NAME'	'RELATION'	'NOM_ADDR1'	'NOM_ADDR2'	'NOM_ADDR3'	'NOM_CITY'	'NOM_STATE'	'NOM_PINCODE'	'NOM_PH_OFF'	'NOM_PH_RES'	'NOM_EMAIL'	'NOM_PERCENTAGE'	'NOM2_NAME'	'NOM2_RELATION'	'NOM2_ADDR1'	'NOM2_ADDR2'	'NOM2_ADDR3'	'NOM2_CITY'	'NOM2_STATE'	'NOM2_PINCODE'	'NOM2_PH_OFF'	'NOM2_PH_RES'	'NOM2_EMAIL'	'NOM2_PERCENTAGE'	'NOM3_NAME'	'NOM3_RELATION'	'NOM3_ADDR1'	'NOM3_ADDR2'	'NOM3_ADDR3'	'NOM3_CITY'	'NOM3_STATE'	'NOM3_PINCODE'	'NOM3_PH_OFF'	'NOM3_PH_RES'	'NOM3_EMAIL'	'NOM3_PERCENTAGE'	'IFSC_CODE'	'DP_ID'	'DEMAT'	'GUARD_NAME'	'BROKCODE'	'FOLIO_DATE'	'AADHAAR'	'TPA_LINKED'	'FH_CKYC_NO'	'JH1_CKYC'	'JH2_CKYC'	'G_CKYC_NO'	'JH1_DOB'	'JH2_DOB'	'GUARDIAN_DOB'	'AMC_CODE'	'GST_STATE_CODE'	'FOLIO_OLD'	'SCHEME_FOLIO_NUMBER'	'COUNTRY'	'REMARKS'	'JH1_EMAIL'	'JH2_EMAIL'	'JH1_MOBILE_NO'	'JH2_MOBILE_NO'
+'6889538/49'	'Dishik Jain  '	'C O RAICHAND BHARATH JAIN 10 554 2 2ND FLOOR SANTHA'	'PET OPP MANDAPAM NELLORE NELLORE NELLORE NELLORE'	'ANDHRA PRADESH 524001'	'NELLORE'	'524001'	G340'	'Bandhan Small Cap Fund-Regular Plan-Growth'	'6/17/2026 12:00 AM'	378.445	18515.8	''	''	''	''	'dishikjain24@gmail.com'	'SI'	''	'FYSPD8787A'	''	''	''	'Resident Individual'	'ARN-335644'	''	'Z'	'HDFC BANK'	'NARTHAKI THEATRE NELLORE'	'SB'	'50100319839228'	''	''	''	'NELLORE'	''	'10/1/2001 12:00 AM'	'+917013499580'	''	0	'BHARATH KUMAR RAICHAND  '	'Father'	'OPP TO MANDAPAM'	'SANTAPET'	''	'NELLORE'	''	'524001'	''	''	'BHARATHRAICHAND@gmail.com'	100	''	''	''	''	''	''	''	''	''	''	''	0	''	''	''	''	''	''	''	''	''	''	''	0	'HDFC0009613'	''	'N'	''	'ARN-335644'	'8/18/2025 12:00 AM'	''	''	''	''	''	''	''	''	''	'G'	'37'	''	''	'India'	''	''	''	''	''
+
+Cams transaction
+
+'AMC_CODE'	'FOLIO_NO'	PRODCODE'	'SCHEME'	'INV_NAME'	'TRXNTYPE'	'TRXNNO'	'TRXNMODE'	'TRXNSTAT'	'USERCODE'	'USRTRXNO'	'TRADDATE'	'POSTDATE'	'PURPRICE'	'UNITS'	'AMOUNT'	'BROKCODE'	'SUBBROK'	'BROKPERC'	'BROKCOMM'	'ALTFOLIO'	'REP_DATE'	'TIME1'	'TRXNSUBTYP'	'APPLICATION_NO'	'TRXN_NATURE'	'TAX'	'TOTAL_TAX'	'TE_15H'	'MICR_NO'	'REMARKS'	'SWFLAG'	'OLD_FOLIO'	'SEQ_NO'	'REINVEST_FLAG'	'MULT_BROK'	'STT'	'LOCATION'	'SCHEME_TYPE'	'TAX_STATUS'	'LOAD'	'SCANREFNO'	'PAN'	'INV_IIN'	'TARG_SRC_SCHEME'	'TRXN_TYPE_FLAG'	'TICOB_TRTYPE'	'TICOB_TRNO'	'TICOB_POSTED_DATE'	'DP_ID'	'TRXN_CHARGES'	'ELIGIB_AMT'	'SRC_OF_TXN'	'TRXN_SUFFIX'	'SIPTRXNNO'	'TER_LOCATION'	'EUIN'	'EUIN_VALID'	'EUIN_OPTED'	'SUB_BRK_ARN'	'EXCH_DC_FLAG'	'SRC_BRK_CODE'	'SYS_REGN_DATE'	'AC_NO'	'BANK_NAME'	'REVERSAL_CODE'	'EXCHANGE_FLAG'	'CA_INITIATED_DATE'	'GST_STATE_CODE'	'IGST_AMOUNT'	'CGST_AMOUNT'	'SGST_AMOUNT'	'REV_REMARK'	'ORIGINAL_TRXNNO'	'STAMP_DUTY'	'FOLIO_OLD'	'SCHEME_FOLIO_NUMBER'	'AMC_REF_NO'	'REQUEST_REF_NO'	'TRANSMISSION_FLAG'
+'G'	'6889538/49'	'G340'	'Bandhan Small Cap Fund-Regular Plan-Growth'	'Dishik Jain  '	'PSBF1'	149199535	'N'	'Y'	'BSELMNDP'	2113728441	'9/15/2025  12:00:00 AM'	'9/15/2025  12:00:00 AM'	47.318	31.699	1499.93	'ARN-335644'	' '	0	0	0	'6/17/2026  05:48:14 PM'	'          '	'N'	''	'Systematic-BSE - Instalment No - 1 via Online'	0	0	'N'	' '	''	'NA'	''	6430675988	'Z'	''	0	'Mumbai'	'Equity(G)'	'Resident Individual'	0	'2113728441'	'FYSPD8787A'	0	''	'Additional Purchase Systematic'	''	''	''	''	0	0	''	'-BSE - Instalment No - 1 via Online'	6886620	'B'	'E619066'	'Y'	'Y'	''	'Y'	''	'8/26/2025  12:00:00 AM'	'50100319839228'	'HDFC BANK'	0	''	''	'37'	0	0	0	''	''	0.07	''	''	''	'157355387'	'N'
+
+We if search this particular code in the BSE Scheme master's Channel Partner Code we can get the ISIN number
