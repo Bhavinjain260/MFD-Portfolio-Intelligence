@@ -1392,7 +1392,8 @@ if mode == "📊 Dashboard":
 elif mode == "💰 Brokerage Report":
     st.header("💰 Brokerage Report")
     st.caption(
-        "File-reported brokerage (CAMS + KFin), AMC names resolved the same way as your Dashboard (AMFI-canonical via ISIN).")
+        "File-reported brokerage (CAMS + KFin), AMC names resolved the same way as your Dashboard (AMFI-canonical via ISIN)."
+    )
 
     data = load_brokerage_report(get_conn)
     merged = data["merged"]
@@ -1417,24 +1418,38 @@ elif mode == "💰 Brokerage Report":
     st.divider()
 
     # ════════════════════════════════════════════════════════════
-    # SECTION 1 — Record a manual brokerage receipt
+    # SECTION 3 — Record a manual brokerage receipt (AMC dropdown)
     # ════════════════════════════════════════════════════════════
     st.subheader("✍️ Record Manual Brokerage Receipt")
+
+    # AMC options = every AMC seen in resolved file data, so manual entries
+    # always line up with bifurcation/drilldown — no typos creating AMC
+    # names that never match a file row. "Add new AMC" covers the case
+    # where you've received brokerage for an AMC with no file data yet.
+    known_amcs = sorted(detail["amc"].dropna().unique()) if not detail.empty else []
+    amc_dropdown_options = known_amcs + ["➕ Add new AMC..."]
+
     with st.form("manual_brokerage_form", clear_on_submit=True):
         mc1, mc2, mc3, mc4 = st.columns(4)
         with mc1:
-            m_amc = st.text_input("AMC Name")
+            m_amc_choice = st.selectbox("AMC Name", amc_dropdown_options)
         with mc2:
             m_month = st.selectbox("Month", [f"{i:02d}" for i in range(1, 13)])
         with mc3:
             m_year = st.number_input("Year", min_value=2015, max_value=2100, value=pd.Timestamp.now().year)
         with mc4:
             m_amount = st.number_input("Amount (Rs)", min_value=0.0, step=100.0)
+
+        m_amc_new = ""
+        if m_amc_choice == "➕ Add new AMC...":
+            m_amc_new = st.text_input("New AMC Name")
+
         m_notes = st.text_input("Notes (optional)")
         submitted = st.form_submit_button("➕ Add Entry")
 
         if submitted:
-            if not m_amc.strip():
+            m_amc_final = m_amc_new.strip() if m_amc_choice == "➕ Add new AMC..." else m_amc_choice
+            if not m_amc_final:
                 st.error("AMC name is required.")
             else:
                 with get_conn() as conn:
@@ -1445,25 +1460,55 @@ elif mode == "💰 Brokerage Report":
                                 amount = excluded.amount,
                                 notes = excluded.notes,
                                 timestamp = CURRENT_TIMESTAMP
-                        ''', (m_amc.strip(), m_month, int(m_year), float(m_amount), m_notes.strip() or None))
+                        ''', (m_amc_final, m_month, int(m_year), float(m_amount), m_notes.strip() or None))
                 st.cache_data.clear()
-                st.success(f"Logged {format_brokerage_inr(m_amount)} for {m_amc} ({m_month}-{m_year}).")
+                st.success(f"Logged {format_brokerage_inr(m_amount)} for {m_amc_final} ({m_month}-{m_year}).")
                 st.rerun()
 
-    # ── Existing manual log (view/reference) ──
-    with st.expander("📜 View Manual Entry Log"):
+    # ── Existing manual log (view + delete) ──
+    with st.expander("📜 View / Delete Manual Entry Log", expanded=False):
         with get_conn() as conn:
             log_df = pd.read_sql(
                 "SELECT amc, month, year, amount, notes, timestamp FROM monthly_brokerage ORDER BY year DESC, month DESC",
                 conn
             )
-        if not log_df.empty:
-            st.dataframe(log_df, width='stretch', hide_index=True)
-        else:
+
+        if log_df.empty:
             st.info("No manual entries logged yet.")
+        else:
+            st.dataframe(
+                log_df, width='stretch', hide_index=True,
+                column_config={"amount": st.column_config.NumberColumn(format="₹ %.2f")}
+            )
+
+            st.divider()
+            st.caption("Delete an entry")
+            del1, del2, del3 = st.columns([3, 2, 2])
+
+            log_df["_label"] = (
+                    log_df["amc"] + " — " + log_df["month"].astype(str) + "/" + log_df["year"].astype(str)
+                    + " (" + log_df["amount"].apply(format_brokerage_inr) + ")"
+            )
+            with del1:
+                entry_to_delete = st.selectbox(
+                    "Select entry to delete", log_df["_label"].tolist(), key="brok_delete_select"
+                )
+            with del2:
+                confirm_delete = st.checkbox("Confirm", key="brok_delete_confirm")
+            with del3:
+                if st.button("🗑️ Delete Entry", key="brok_delete_btn", disabled=not confirm_delete):
+                    row = log_df[log_df["_label"] == entry_to_delete].iloc[0]
+                    with get_conn() as conn:
+                        conn.execute(
+                            "DELETE FROM monthly_brokerage WHERE amc = ? AND month = ? AND year = ?",
+                            (row["amc"], row["month"], int(row["year"]))
+                        )
+                    st.cache_data.clear()
+                    st.success(f"Deleted entry: {entry_to_delete}")
+                    st.rerun()
 
     # ════════════════════════════════════════════════════════════
-    # SECTION 2 — AMC-wise bifurcation
+    # SECTION 2 — AMC-wise bifurcation (with month filter)
     # ════════════════════════════════════════════════════════════
     st.subheader("🏢 AMC-wise Bifurcation")
 
@@ -1501,36 +1546,41 @@ elif mode == "💰 Brokerage Report":
             }
         )
 
-        chart_df = amc_summary.copy()
-        chart_df["file_amount"] = pd.to_numeric(chart_df["file_amount"], errors="coerce").fillna(0.0)
-        chart_df["manual_amount"] = pd.to_numeric(chart_df["manual_amount"], errors="coerce").fillna(0.0)
+        if not amc_summary.empty:
+            chart_df = amc_summary.copy()
+            chart_df["file_amount"] = pd.to_numeric(chart_df["file_amount"], errors="coerce").fillna(0.0)
+            chart_df["manual_amount"] = pd.to_numeric(chart_df["manual_amount"], errors="coerce").fillna(0.0)
 
-        chart_long = chart_df.melt(
-            id_vars="amc",
-            value_vars=["file_amount", "manual_amount"],
-            var_name="type",
-            value_name="amount"
-        )
-        chart_long["type"] = chart_long["type"].map({
-            "file_amount": "File Brokerage",
-            "manual_amount": "Received (Manual)"
-        })
+            chart_long = chart_df.melt(
+                id_vars="amc",
+                value_vars=["file_amount", "manual_amount"],
+                var_name="type",
+                value_name="amount"
+            )
+            chart_long["type"] = chart_long["type"].map({
+                "file_amount": "File Brokerage",
+                "manual_amount": "Received (Manual)"
+            })
 
-        fig = px.bar(
-            chart_long, x="amc", y="amount", color="type",
-            barmode="group", title="File vs Received, by AMC",
-            labels={"amount": "Amount (₹)", "amc": "AMC", "type": "Type"}
-        )
-        fig = theme_plotly(fig, dark)
-        st.plotly_chart(fig, use_container_width=True)
-
+            fig = px.bar(
+                chart_long, x="amc", y="amount", color="type",
+                barmode="group", title="File vs Received, by AMC",
+                labels={"amount": "Amount (₹)", "amc": "AMC", "type": "Type"}
+            )
+            fig = theme_plotly(fig, dark)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No data for the selected month(s).")
     else:
         st.info("No file brokerage data parsed yet.")
 
     st.divider()
 
     # ════════════════════════════════════════════════════════════
-    # SECTION 3 — Drill into one AMC: full client-level detail
+    # SECTION 3 — AMC Drilldown: client-level detail
+    #   - "All" AMC option
+    #   - month filter
+    #   - RTA filter REMOVED (RTA still shown as a column in the table)
     # ════════════════════════════════════════════════════════════
     st.subheader("🔍 AMC Drilldown — Client-level Detail")
 
@@ -1587,17 +1637,19 @@ elif mode == "💰 Brokerage Report":
                 "Brokerage Amount": st.column_config.NumberColumn(format="₹ %.2f"),
             }
         )
-        st.caption(f"Showing {len(amc_detail):,} brokerage records for {selected_amc}")
+        st.caption(f"Showing {len(amc_detail):,} brokerage records for {label}")
 
         if not amc_detail.empty:
             csv = display_detail.to_csv(index=False).encode("utf-8")
             st.download_button(
-                f"⬇️ Download {selected_amc} Brokerage Detail (CSV)",
-                csv, f"brokerage_{selected_amc.replace(' ', '_')}.csv", "text/csv",
+                f"⬇️ Download {label} Brokerage Detail (CSV)",
+                csv, f"brokerage_{label.replace(' ', '_')}.csv", "text/csv",
                 key="brok_drilldown_download"
             )
 
     st.divider()
+
+
 
 
 
