@@ -3,6 +3,8 @@ MFD Portfolio Intelligence — Minimal Version
 Only: Admin Panel (Upload + Raw Data View) + Dashboard (View All Details)
 """
 
+
+import os
 import logging
 import re
 import warnings
@@ -22,7 +24,6 @@ log = logging.getLogger(__name__)
 
 warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
-logging.basicConfig(level=logging.WARNING, format="%(levelname)s | %(message)s")
 
 # ==================== CONSTANTS ====================
 PAGE_SIZE = 20
@@ -80,157 +81,312 @@ def format_brokerage(val) -> str:
         return "Rs -"
 
 
+# ==================== AMFI NAV SERVICE ====================
+
+
 AMFI_TEXT_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
 
+# ── File-based fallback paths (used when live AMFI fetch fails, e.g. no internet) ──
+NAV_TEXT_DIR = os.environ.get("NAV_TEXT_DIR", "nav_data")
 
-# ==================== AMFI NAV + AMC SERVICE ====================
 
-class AMFINavService:
+def _ensure_text_dir() -> None:
+    os.makedirs(NAV_TEXT_DIR, exist_ok=True)
+
+
+def _snapshot_path(date_str: str) -> str:
+    return os.path.join(NAV_TEXT_DIR, f"nav_{date_str}.txt")
+
+
+def _latest_snapshot_path() -> Optional[str]:
+    """Most recent saved snapshot file, regardless of date, or None if none exist."""
+    _ensure_text_dir()
+    available = sorted(
+        f for f in os.listdir(NAV_TEXT_DIR) if f.startswith("nav_") and f.endswith(".txt")
+    )
+    if not available:
+        return None
+    return os.path.join(NAV_TEXT_DIR, available[-1])
+
+
+def get_snapshot_status() -> dict:
     """
-    Downloads AMFI text once per session and indexes by ISIN for O(1) lookups.
-    Also captures AMC name per ISIN from the section headers in the same file
-    (e.g. "Aditya Birla Sun Life Mutual Fund"), so AMC names are sourced
-    canonically from AMFI instead of unreliable BSE/CAMS/KFin name strings.
+    Info for an admin panel: does today's file exist, what's the latest
+    available file, how old is it. No network call.
+    """
+    _ensure_text_dir()
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_path = _snapshot_path(today)
+    latest_path = _latest_snapshot_path()
+
+    status = {
+        "has_today": os.path.exists(today_path),
+        "today_path": today_path if os.path.exists(today_path) else None,
+        "latest_path": latest_path,
+        "latest_date": None,
+        "latest_bytes": None,
+    }
+    if latest_path:
+        fname = os.path.basename(latest_path)
+        status["latest_date"] = fname.replace("nav_", "").replace(".txt", "")
+        status["latest_bytes"] = os.path.getsize(latest_path)
+    return status
+
+
+# ==================== THE ONLY FUNCTION THAT CALLS AMFI ====================
+
+def download_and_save_nav(timeout: int = 30) -> dict:
+    """
+    Hits AMFI's server, saves the raw response verbatim to nav_data/nav_<today>.txt.
+    This is the ONLY function in this module that makes a network call.
+    Call this from: (a) app startup, via download_and_save_nav_if_needed(), and
+    (b) an explicit admin "Redownload NAV" button.
+
+    Raises on failure — caller decides how to handle/log it.
+    Returns {"path": str, "bytes": int, "date": str}.
+    """
+    log.info("[AMFI] Downloading NAV file from %s", AMFI_TEXT_URL)
+    res = requests.get(AMFI_TEXT_URL, timeout=timeout)
+    res.raise_for_status()
+    text = res.text
+
+    _ensure_text_dir()
+    today = datetime.now().strftime("%Y-%m-%d")
+    path = _snapshot_path(today)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+    size = os.path.getsize(path)
+    log.info("[AMFI] Saved NAV file: %s (%s bytes, %s lines)",
+             path, size, text.count("\n") + 1)
+    return {"path": path, "bytes": size, "date": today}
+
+
+def download_and_save_nav_if_needed(force: bool = False) -> dict:
+    """
+    Calls download_and_save_nav() only if today's file doesn't already exist.
+    Safe to call on every app start/restart — only actually hits AMFI once
+    per calendar day unless force=True (admin button).
+
+    Returns {"ran": bool, "ok": bool, "reason": str, "bytes": int|None}.
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_path = _snapshot_path(today)
+
+    if not force and os.path.exists(today_path):
+        size = os.path.getsize(today_path)
+        log.info("[AMFI] Today's NAV file already exists (%s, %s bytes) — not hitting AMFI", today, size)
+        return {"ran": False, "ok": True, "reason": f"already have today's file ({today})", "bytes": size}
+
+    try:
+        result = download_and_save_nav()
+        return {"ran": True, "ok": True, "reason": "downloaded", "bytes": result["bytes"]}
+    except Exception as e:
+        log.exception("[AMFI] Download failed")
+        return {"ran": True, "ok": False, "reason": f"download failed: {e}", "bytes": None}
+
+
+# ==================== PARSER (shared by file load) ====================
+
+def _parse_nav_text(text: str) -> tuple[dict, dict, list[dict]]:
+    """
+    Parses AMFI's raw text format. Returns:
+      nav_map:  {isin: (nav, nav_date)}
+      amc_map:  {isin: amc_name}
+      records:  list of {isin, scheme_code, isin_payout, scheme_name,
+                          amc_name, category, nav, nav_date}
+    """
+    nav_map: dict[str, tuple[float, str]] = {}
+    amc_map: dict[str, str] = {}
+    records: list[dict] = []
+    current_amc = ""
+    current_category = ""
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        # Non-data lines: AMC header or category header (no semicolons)
+        if ";" not in line:
+            if line.lower().endswith("mutual fund"):
+                current_amc = line
+            elif "(" in line and ")" in line:
+                current_category = line
+            continue
+
+        parts = line.split(";")
+        if len(parts) < 6 or parts[0] == "Scheme Code":
+            continue
+
+        scheme_code = parts[0].strip()
+        isin_1 = parts[1].strip()
+        isin_2 = parts[2].strip()
+        scheme_name = parts[3].strip()
+        nav_str = parts[4].strip()
+        date_str = parts[5].strip()
+
+        try:
+            nav = float(nav_str) if nav_str not in ("N.A.", "") else 0.0
+        except ValueError:
+            nav = 0.0
+
+        try:
+            nav_date = datetime.strptime(date_str, "%d-%b-%Y").strftime("%Y-%m-%d")
+        except ValueError:
+            nav_date = date_str
+
+        if nav <= 0:
+            continue
+
+        isin_clean = isin_1 if isin_1 and isin_1 != "-" else None
+        isin_payout_clean = isin_2 if isin_2 and isin_2 != "-" else None
+        primary_isin = isin_clean or isin_payout_clean
+
+        if primary_isin:
+            records.append({
+                "isin": primary_isin.upper(),
+                "scheme_code": scheme_code,
+                "isin_payout": isin_payout_clean.upper() if isin_payout_clean else None,
+                "scheme_name": scheme_name,
+                "amc_name": current_amc or None,
+                "category": current_category or None,
+                "nav": nav,
+                "nav_date": nav_date,
+            })
+
+        for isin in (isin_1, isin_2):
+            if isin and isin != "-":
+                isin_u = isin.upper()
+                nav_map[isin_u] = (nav, nav_date)
+                if current_amc:
+                    amc_map[isin_u] = current_amc
+
+    return nav_map, amc_map, records
+
+
+# ==================== IN-MEMORY INDEX (loaded from file, not network) ====================
+
+class AMFINavIndex:
+    """
+    In-memory ISIN-keyed index, loaded from the saved file. Loaded once per
+    process (TTL-cached so repeated calls within the same run are free) and
+    NEVER triggers a network call itself — only reads NAV_TEXT_DIR.
     """
 
     _nav_by_isin: dict[str, tuple[float, str]] = {}
     _amc_by_isin: dict[str, str] = {}
-    _last_fetch: Optional[datetime] = None
-    _ttl_seconds: int = 3600  # AMFI publishes NAV once/day; 1hr cache is plenty
+    _records: list[dict] = []
+    _loaded_from: Optional[str] = None
+    _last_load: Optional[datetime] = None
+    _ttl_seconds: int = 3600  # re-read the file at most once/hour within a run
 
     def _is_fresh(self) -> bool:
-        if not self._nav_by_isin or self._last_fetch is None:
+        if not self._nav_by_isin or self._last_load is None:
             return False
-        age = (datetime.now() - self._last_fetch).total_seconds()
+        age = (datetime.now() - self._last_load).total_seconds()
         return age < self._ttl_seconds
 
-    def refresh(self, force: bool = False) -> dict[str, tuple[float, str]]:
+    def load(self, force: bool = False) -> dict[str, tuple[float, str]]:
+        """Loads (or reloads) the index from the latest saved file on disk."""
         if not force and self._is_fresh():
-            age_min = (datetime.now() - self._last_fetch).total_seconds() / 60
-            log.info("[AMFI] Cache fresh (%.1f min old, ttl=%ss) — skipping download",
-                     age_min, self._ttl_seconds)
+            log.debug("[AMFI] In-memory index fresh (loaded from %s) — reusing", self._loaded_from)
             return self._nav_by_isin
 
-        log.info("[AMFI] Starting NAV download from %s", AMFI_TEXT_URL)
-        try:
-            res = requests.get(AMFI_TEXT_URL, timeout=30)
-            res.raise_for_status()
-            lines = res.text.splitlines()
-            log.info("[AMFI] Downloaded %s lines", len(lines))
-        except Exception:
-            log.exception("[AMFI] NAV download failed")
+        path = _latest_snapshot_path()
+        if path is None:
+            log.error("[AMFI] No saved NAV file found in '%s' (abs: %s). "
+                      "Run download_and_save_nav_if_needed() first, or check NAV_TEXT_DIR.",
+                      NAV_TEXT_DIR, os.path.abspath(NAV_TEXT_DIR))
             return {}
 
-        nav_map: dict[str, tuple[float, str]] = {}
-        amc_map: dict[str, str] = {}
-        current_amc = ""
-        skipped = 0
-        parsed = 0
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                text = f.read()
+        except Exception:
+            log.exception("[AMFI] Failed to read saved NAV file '%s'", path)
+            return {}
 
-        for raw_line in lines:
-            line = raw_line.strip()
-            if not line:
-                continue
+        if not text.strip():
+            log.error("[AMFI] Saved NAV file '%s' is empty", path)
+            return {}
 
-            # ── AMC header line: no semicolons, ends with "Mutual Fund" ──
-            # AMFI file structure:
-            #   Open Ended Schemes(...)        <- category header, ignore
-            #   Aditya Birla Sun Life Mutual Fund   <- AMC header, capture
-            #   119551;ISIN1;ISIN2;Scheme Name;NAV;Date   <- data row
-            if ";" not in line:
-                if line.lower().endswith("mutual fund"):
-                    current_amc = line
-                continue
-
-            parts = line.split(";")
-            if len(parts) < 6 or parts[0] == "Scheme Code":
-                continue
-
-            isin_1 = parts[1].strip()
-            isin_2 = parts[2].strip()
-            nav_str = parts[4].strip()
-            date_str = parts[5].strip()
-
-            try:
-                nav = float(nav_str) if nav_str not in ("N.A.", "") else 0.0
-            except ValueError:
-                nav = 0.0
-
-            try:
-                nav_date = datetime.strptime(date_str, "%d-%b-%Y").strftime("%Y-%m-%d")
-            except ValueError:
-                nav_date = date_str
-
-            if nav > 0:
-                parsed += 1
-                for isin in (isin_1, isin_2):
-                    if isin and isin != "-":
-                        isin_u = isin.upper()
-                        nav_map[isin_u] = (nav, nav_date)
-                        if current_amc:
-                            amc_map[isin_u] = current_amc
-            else:
-                skipped += 1
-
+        nav_map, amc_map, records = _parse_nav_text(text)
         self._nav_by_isin = nav_map
         self._amc_by_isin = amc_map
-        self._last_fetch = datetime.now()
-        log.info(
-            "[AMFI] NAV indexed: %s ISINs parsed, %s skipped (N.A./0), %s ISINs with AMC name",
-            parsed, skipped, len(amc_map),
-        )
+        self._records = records
+        self._loaded_from = path
+        self._last_load = datetime.now()
+
+        log.info("[AMFI] Loaded index from '%s': %s ISINs (NAV), %s ISINs (AMC), %s records",
+                 path, len(nav_map), len(amc_map), len(records))
         return nav_map
 
     def get_nav(self, isin: str) -> Optional[tuple[float, str]]:
         if not self._nav_by_isin:
-            log.debug("[AMFI] Cache empty, triggering refresh")
-            self.refresh()
+            self.load()
         if not isin:
             return None
-        result = self._nav_by_isin.get(isin.strip().upper())
-        log.debug("[AMFI] Lookup ISIN=%s → %s", isin, "HIT" if result else "MISS")
-        return result
+        return self._nav_by_isin.get(isin.strip().upper())
 
     def get_amc(self, isin: str) -> str:
-        """Canonical AMC name for an ISIN, sourced from AMFI section headers."""
         if not self._amc_by_isin:
-            self.refresh()
+            self.load()
         if not isin:
             return ""
         return self._amc_by_isin.get(isin.strip().upper(), "")
 
+    def get_records(self) -> list[dict]:
+        if not self._records:
+            self.load()
+        return self._records
 
-_amfi = AMFINavService()
+
+_amfi = AMFINavIndex()
 
 
-# ==================== PUBLIC API ====================
+# ==================== PUBLIC LOOKUP API ====================
 
 def fetch_nav_by_isin(isin: str) -> Optional[tuple[float, str]]:
-    """Single ISIN lookup using shared AMFI index."""
+    """Single ISIN → (nav, nav_date) lookup, reading from the file-backed index."""
     isin = isin.strip().upper()
     result = _amfi.get_nav(isin)
     if result:
         nav, nav_date = result
-        print(f"✅ ISIN {isin} | NAV: ₹{nav} | Date: {nav_date}")
+        log.debug("ISIN %s | NAV: %s | Date: %s", isin, nav, nav_date)
         return nav, nav_date
-    else:
-        print(f"❌ No NAV found for ISIN: {isin}")
-        return None
+    log.debug("No NAV found for ISIN: %s", isin)
+    return None
 
 
 def fetch_amc_by_isin(isin: str) -> str:
-    """Single ISIN → canonical AMC name lookup."""
+    """Single ISIN → canonical AMC name lookup, reading from the file-backed index."""
     return _amfi.get_amc(isin)
 
+
+def load_nav_dataframe() -> pd.DataFrame:
+    """
+    Full NAV+AMC table as a DataFrame with just isin, nav, nav_date, amc_name —
+    reads from the saved file via the in-memory index, no network call.
+    """
+    _amfi.load()
+    records = _amfi.get_records()
+    df = pd.DataFrame(records, columns=["isin", "scheme_code", "isin_payout",
+                                        "scheme_name", "amc_name", "category",
+                                        "nav", "nav_date"])
+    return df
+
+
+# ==================== FOLIO JOIN (CAMS/KFin × BSE × AMFI) ====================
 
 def _get_bse_amc_column(get_conn) -> Optional[str]:
     """
     Probe bse_scheme_master's actual schema to find whichever column holds
-    the AMC/fund-house name string (e.g. 'BirlaSunLifeMutualFund_MF').
-    Column naming varies by import batch, so don't hardcode 'AMC'.
-    Returns None if no plausible column is found — caller must handle that.
+    the AMC/fund-house name string. Used only as a fallback label for ISINs
+    that don't resolve via AMFI.
     """
     candidates = [
+        "amc_code", "amc_ind", "amc_name",
         "AMC", "AMC_Name", "AMC_NAME", "Amc_Name",
         "Fund_Name", "FUND_NAME", "Fund", "FUND",
         "AMC_Code", "AMC_CODE",
@@ -247,28 +403,33 @@ def _get_bse_amc_column(get_conn) -> Optional[str]:
     return None
 
 
-def get_all_folios_with_isin_and_nav(get_conn, force_refresh: bool = False) -> pd.DataFrame:
+def get_all_folios_with_isin_and_nav(get_conn, force_reload: bool = False) -> pd.DataFrame:
     """
-    Master batch function:
-      1. Download AMFI NAV + AMC index once → index by ISIN (cached, TTL-guarded
-         unless force_refresh=True)
-      2. Query CAMS folio master JOIN deduplicated bse_scheme_master (product → Channel Partner Code → ISIN)
-      3. Query KFin folio master JOIN deduplicated bse_scheme_master (product_code → Channel Partner Code → ISIN)
-         + computed units from kfin_transactions
-      4. Map NAV + AMC name (canonical, from AMFI) in-memory by ISIN
+    Master batch function — reads NAV/AMC from the saved file (NOT live AMFI):
+      1. Load AMFI NAV + AMC index from disk (in-memory cached per process)
+      2. Query CAMS folio master JOIN deduplicated bse_scheme_master
+      3. Query KFin folio master JOIN deduplicated bse_scheme_master + units
+      4. Map NAV + AMC name (canonical, from saved file) in-memory by ISIN
       5. Return combined DataFrame
 
-    `get_conn` is passed in (your existing Init.get_conn) to keep this module
-    dependency-free of your app's DB wiring.
+    force_reload=True re-reads the saved file from disk (not the network) —
+    use this if you just ran download_and_save_nav() and want fresh numbers
+    without restarting the app.
     """
     log.info("=" * 60)
     log.info("[NAV-FLOW] Starting get_all_folios_with_isin_and_nav()")
 
-    # ── Step 1: AMFI NAV + AMC Download (TTL-cached) ──
-    log.info("[NAV-FLOW][Step 1] Fetching AMFI NAV + AMC index (force=%s)...", force_refresh)
-    nav_map = _amfi.refresh(force=force_refresh)
-    log.info("[NAV-FLOW][Step 1] AMFI ready: %s ISINs in NAV index, %s in AMC index",
+    # ── Step 1: Load NAV + AMC index from saved file ──
+    log.info("[NAV-FLOW][Step 1] Loading AMFI NAV + AMC index from saved file (force_reload=%s)...",
+             force_reload)
+    nav_map = _amfi.load(force=force_reload)
+    log.info("[NAV-FLOW][Step 1] Index ready: %s ISINs (NAV), %s ISINs (AMC)",
              len(nav_map), len(_amfi._amc_by_isin))
+    if not nav_map:
+        log.error("[NAV-FLOW][Step 1] nav_map is EMPTY — no saved NAV file found or it's unreadable. "
+                  "Every row downstream will have current_nav=None, so total AUM will be 0. "
+                  "Fix: call download_and_save_nav_if_needed() at startup, or use the admin "
+                  "'Redownload NAV' button. Checked dir: %s", os.path.abspath(NAV_TEXT_DIR))
 
     # ── Step 2: Deduplicated BSE Scheme Master subquery ──
     log.info("[NAV-FLOW][Step 2] Building deduplicated BSE lookup...")
@@ -284,7 +445,6 @@ def get_all_folios_with_isin_and_nav(get_conn, force_refresh: bool = False) -> p
         WHERE Channel_Partner_Code IS NOT NULL AND TRIM(Channel_Partner_Code) != ''
         GROUP BY UPPER(TRIM(Channel_Partner_Code))
     """
-    log.debug("[NAV-FLOW][Step 2] BSE dedup SQL:\n%s", bse_dedup)
 
     # ── Step 3: CAMS Query ──
     log.info("[NAV-FLOW][Step 3] Building CAMS SQL...")
@@ -304,7 +464,6 @@ def get_all_folios_with_isin_and_nav(get_conn, force_refresh: bool = False) -> p
         ON UPPER(TRIM(f.product)) = bsm.cp_code
     WHERE f.product IS NOT NULL AND TRIM(f.product) != ''
     """
-    log.debug("[NAV-FLOW][Step 3] CAMS SQL:\n%s", cams_sql)
 
     # ── Step 4: KFin Query ──
     log.info("[NAV-FLOW][Step 4] Building KFin SQL...")
@@ -336,36 +495,21 @@ def get_all_folios_with_isin_and_nav(get_conn, force_refresh: bool = False) -> p
         ON UPPER(TRIM(f.product_code)) = bsm.cp_code
     WHERE f.product_code IS NOT NULL AND TRIM(f.product_code) != ''
     """
-    log.debug("[NAV-FLOW][Step 4] KFin SQL:\n%s", kfin_sql)
 
     # ── Step 5: Execute Queries ──
     log.info("[NAV-FLOW][Step 5] Executing SQL queries...")
     with get_conn() as conn:
         cams_df = pd.read_sql(cams_sql, conn)
         log.info("[NAV-FLOW][Step 5] CAMS rows fetched: %s", len(cams_df))
-
-        cams_with_product = cams_df["product_code"].notna().sum()
-        cams_with_isin = cams_df["isin"].notna().sum()
-        log.info("[NAV-FLOW][Step 5] CAMS: %s rows with product_code, %s rows with ISIN (%s%% match)",
-                 cams_with_product, cams_with_isin,
-                 round(cams_with_isin / cams_with_product * 100, 2) if cams_with_product else 0)
-
         kfin_df = pd.read_sql(kfin_sql, conn)
         log.info("[NAV-FLOW][Step 5] KFin rows fetched: %s", len(kfin_df))
 
-        kfin_with_product = kfin_df["product_code"].notna().sum()
-        kfin_with_isin = kfin_df["isin"].notna().sum()
-        log.info("[NAV-FLOW][Step 5] KFin: %s rows with product_code, %s rows with ISIN (%s%% match)",
-                 kfin_with_product, kfin_with_isin,
-                 round(kfin_with_isin / kfin_with_product * 100, 2) if kfin_with_product else 0)
-
     # ── Step 6: Combine ──
-    log.info("[NAV-FLOW][Step 6] Combining CAMS + KFin data...")
     combined = pd.concat([cams_df, kfin_df], ignore_index=True)
     log.info("[NAV-FLOW][Step 6] Combined rows: %s", len(combined))
 
-    # ── Step 7: NAV + AMC Lookup (both keyed by ISIN, both from AMFI) ──
-    log.info("[NAV-FLOW][Step 7] Mapping ISIN → NAV and ISIN → AMC name from AMFI index...")
+    # ── Step 7: NAV + AMC Lookup ──
+    log.info("[NAV-FLOW][Step 7] Mapping ISIN → NAV and ISIN → AMC name...")
 
     def _lookup_nav(isin):
         if pd.isna(isin) or not str(isin).strip():
@@ -381,10 +525,6 @@ def get_all_folios_with_isin_and_nav(get_conn, force_refresh: bool = False) -> p
         lambda i: _amfi.get_amc(i) if pd.notna(i) and str(i).strip() else None
     )
 
-    # ── Step 7b: Resolve final AMC name ──
-    # Priority: AMFI name (canonical) > BSE scheme master AMC name (fallback for
-    # unmapped ISINs) so every row still shows something, but resolved rows
-    # always use the AMFI-canonical spelling.
     combined["amc_name"] = combined["amfi_amc_name"].fillna(combined["bse_amc_name"])
     combined["amc_name_source"] = combined["amfi_amc_name"].apply(
         lambda x: "AMFI" if pd.notna(x) and str(x).strip() else None
@@ -404,19 +544,16 @@ def get_all_folios_with_isin_and_nav(get_conn, force_refresh: bool = False) -> p
              total_with_amc, len(combined), total_amfi_amc, total_with_amc - total_amfi_amc)
 
     # ── Step 8: Calculate AUM ──
-    log.info("[NAV-FLOW][Step 8] Calculating NAV-based AUM...")
     combined["nav_based_aum"] = combined.apply(
         lambda r: r["units"] * r["current_nav"]
         if pd.notna(r.get("units")) and pd.notna(r["current_nav"])
         else None,
         axis=1
     )
-
     total_aum = combined["nav_based_aum"].sum()
     log.info("[NAV-FLOW][Step 8] Total NAV-based AUM: ₹%s", f"{total_aum:,.2f}" if pd.notna(total_aum) else "N/A")
 
     # ── Step 9: Final Flags & Reorder ──
-    log.info("[NAV-FLOW][Step 9] Finalizing columns...")
     combined["has_isin"] = combined["isin"].notna()
     combined["has_nav"] = combined["current_nav"].notna()
     combined["has_amc"] = combined["amc_name"].notna()
@@ -434,15 +571,14 @@ def get_all_folios_with_isin_and_nav(get_conn, force_refresh: bool = False) -> p
 
     log.info("[NAV-FLOW] Complete. Returning %s rows x %s cols", len(result), len(result.columns))
     log.info("=" * 60)
-
     return result
 
 
-def get_folio_nav_summary(get_conn, force_refresh: bool = False) -> dict:
-    """Quick stats for Streamlit metrics."""
+def get_folio_nav_summary(get_conn, force_reload: bool = False) -> dict:
+    """Quick stats for Streamlit metrics. Reads from saved file via get_all_folios_with_isin_and_nav."""
     log.info("[NAV-FLOW] Generating folio NAV summary...")
 
-    df = get_all_folios_with_isin_and_nav(get_conn, force_refresh=force_refresh)
+    df = get_all_folios_with_isin_and_nav(get_conn, force_reload=force_reload)
     cams_df = df[df["rta"] == "CAMS"]
     kfin_df = df[df["rta"] == "KFinTech"]
 
@@ -477,18 +613,13 @@ def get_folio_nav_summary(get_conn, force_refresh: bool = False) -> dict:
         "kfin_with_nav": int(kfin_df["has_nav"].sum()),
         "kfin_total": len(kfin_df),
 
-        "df": df,  # carry the full df forward so AMC breakdown can reuse it without re-querying
+        "df": df,
     }
 
 
 def load_amc_breakdown_by_isin(get_conn) -> pd.DataFrame:
-    """
-    AMC-wise AUM + folio breakdown, grouped by canonical AMFI AMC name (via ISIN),
-    NOT by raw amc_code/Fund strings from CAMS/KFin/BSE files.
-    Replaces the old load_amc_breakdown() that grouped on inconsistent name strings.
-    """
+    """AMC-wise AUM + folio breakdown, grouped by canonical AMFI AMC name (via ISIN)."""
     df = get_all_folios_with_isin_and_nav(get_conn)
-
     if df.empty:
         return pd.DataFrame()
 
@@ -779,7 +910,7 @@ current_theme = st.context.theme.type
 
 dark = st.context.theme.type == "dark"
 
-st.components.v1.html(THEME_WATCHER_JS, height=0)
+st.html(THEME_WATCHER_JS)
 
 if "last_theme" not in st.session_state:
     st.session_state["last_theme"] = current_theme
@@ -822,6 +953,9 @@ if mode == "📊 Dashboard":
     if "folio_nav_df" not in st.session_state:
         with st.spinner("⏳ Fetching ISIN mappings & latest NAVs from AMFI... (5–10s)"):
             try:
+                # CRITICAL FIX: Download NAV file if missing before loading index
+                download_and_save_nav_if_needed()
+
                 folio_nav_df = get_all_folios_with_isin_and_nav(get_conn)
                 nav_stats = get_folio_nav_summary(get_conn)
                 st.session_state["folio_nav_df"] = folio_nav_df
@@ -871,7 +1005,7 @@ if mode == "📊 Dashboard":
             st.cache_data.clear()
             st.session_state.pop("folio_nav_df", None)
             st.session_state.pop("folio_nav_summary", None)
-            _amfi.refresh(force=True)  # add this — forces real re-download
+            _amfi.load(force=True)  # FIXED: was .refresh() which doesn't exist
             st.rerun()
 
     # ── AUM Cards (NAV-based only) ──
@@ -945,12 +1079,8 @@ if mode == "📊 Dashboard":
     st.divider()
     st.subheader("📈 Folio-Level ISIN & Current NAV")
 
-    try:
-
-        _has_nav_module = True
-    except ImportError as e:
-        _has_nav_module = False
-        # st.warning(f"⚠️ folio_nav_enricher.py not found: {e}")
+    # REMOVED: Dead ImportError guard
+    _has_nav_module = True
 
     if _has_nav_module:
         if "folio_nav_df" in st.session_state:
@@ -996,7 +1126,7 @@ if mode == "📊 Dashboard":
 
             st.dataframe(
                 view[display_cols],
-                use_container_width=True,
+                width='stretch',
                 hide_index=True,
                 column_config={
                     "current_nav": st.column_config.NumberColumn("Current NAV", format="₹ %.4f"),
@@ -1027,12 +1157,12 @@ if mode == "📊 Dashboard":
             columns={"amc": "AMC Code", "rta": "RTA", "folios": "Folios",
                      "records": "Records", "aum_display": "AUM"}
         )
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, width='stretch', hide_index=True)
 
         fig = px.pie(amc_df, values="aum", names="amc", hole=0.4,
                      title="AUM Distribution by AMC")
         fig = theme_plotly(fig, dark)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     else:
         st.info("No AMC data uploaded yet. Go to Admin Panel -> Import Data.")
 
@@ -1041,7 +1171,7 @@ if mode == "📊 Dashboard":
     st.subheader("📤 Recent Uploads")
     uploads_df = load_recent_uploads()
     if not uploads_df.empty:
-        st.dataframe(uploads_df, use_container_width=True, hide_index=True)
+        st.dataframe(uploads_df, width='stretch', hide_index=True)
     else:
         st.info("No uploads yet. Go to Admin Panel to upload data.")
 
@@ -1126,7 +1256,7 @@ elif mode == "⚙️ Admin Panel":
         if total_rows > 0:
             df_raw = load_table_summary(table)
             if not df_raw.empty:
-                st.dataframe(df_raw, use_container_width=True, hide_index=True)
+                st.dataframe(df_raw, width='stretch', hide_index=True)
 
                 csv = df_raw.to_csv(index=False).encode("utf-8")
                 st.download_button(
