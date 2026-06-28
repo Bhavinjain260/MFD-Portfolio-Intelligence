@@ -6,20 +6,21 @@ Only: Admin Panel (Upload + Raw Data View) + Dashboard (View All Details)
 import logging
 import re
 import warnings
-
 import plotly.express as px
 import streamlit as st
-
 import data_manager
 from Init import init_db, get_conn
-
 from theme_patch import render_theme
+import pandas as pd
+from datetime import datetime
+from typing import Optional
+import requests
 
+log = logging.getLogger(__name__)
 
 warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s | %(message)s")
-log = logging.getLogger(__name__)
 
 # ==================== CONSTANTS ====================
 PAGE_SIZE = 20
@@ -37,9 +38,11 @@ def ensure_db() -> None:
 
 # ==================== PURE HELPERS ====================
 def clean_str(val) -> str:
-    if val is None: return ""
+    if val is None:
+        return ""
     try:
-        if pd.isna(val): return ""
+        if pd.isna(val):
+            return ""
     except (TypeError, ValueError):
         pass
     s = str(val).strip()
@@ -75,13 +78,6 @@ def format_brokerage(val) -> str:
         return "Rs -"
 
 
-import logging
-import pandas as pd
-from datetime import datetime
-from typing import Optional
-import requests
-
-log = logging.getLogger(__name__)
 AMFI_TEXT_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
 
 
@@ -670,8 +666,6 @@ _text = "#e6edf3" if dark else "#1a1a2e"
 _muted = "#8b949e" if dark else "#6b7280"
 _border = "#30363d" if dark else "#d0d7de"
 _accent = "#58a6ff" if dark else "#2563eb"
-
-
 
 st.markdown(render_theme(dark), unsafe_allow_html=True)
 
