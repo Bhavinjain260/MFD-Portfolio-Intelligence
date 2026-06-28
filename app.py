@@ -656,16 +656,6 @@ st.set_page_config(page_title="MFD Portfolio Intelligence", layout="wide", page_
 
 ensure_db()
 
-# # -------------------- AMFI NAV SYNC --------------------
-# if "amfi_nav" not in st.session_state:
-#     st.session_state["amfi_nav"] = AMFINavService()
-#     nav_data = st.session_state["amfi_nav"]
-#     total_nav = len(nav_data["by_code"]) + len(nav_data["by_name"])
-#     if total_nav == 0:
-#         st.warning("⚠️ AMFI NAV fetch failed. AUM calculations will show 0.")
-#     else:
-#         st.toast(f"✅ AMFI NAV synced: {len(nav_data['by_code']):,} schemes")
-
 # -------------------- THEME --------------------
 if "dark_mode" not in st.session_state:
     st.session_state["dark_mode"] = False
@@ -888,54 +878,19 @@ if mode == "📊 Dashboard":
         "total_clients", "total_xsip", "cams_txns", "cams_sips",
         "kfin_txns", "kfin_sips"
     ]))
-    # # Third metrics row — Scheme Master
-    # st.divider()
-    # m1, _, _, _, _ = st.columns(5)
-    # m1.metric("📋 BSE Schemes", summary.get("bse_schemes", 0))
 
     # ── ISIN + Current NAV Section ──
     st.divider()
     st.subheader("📈 Folio-Level ISIN & Current NAV")
 
     try:
-        # get_all_folios_with_isin_and_nav, get_folio_nav_summary
+
         _has_nav_module = True
     except ImportError as e:
         _has_nav_module = False
         # st.warning(f"⚠️ folio_nav_enricher.py not found: {e}")
 
     if _has_nav_module:
-        # nav_btn = st.button("🔄 Fetch ISIN & Latest NAV", use_container_width=True, type="primary")
-        # if nav_btn:
-        #     with st.spinner("Downloading AMFI NAV file + mapping ISINs... (5–10 seconds)"):
-        #         try:
-        #             folio_nav_df = get_all_folios_with_isin_and_nav()
-        #             st.session_state["folio_nav_df"] = folio_nav_df
-        #             st.session_state["folio_nav_summary"] = get_folio_nav_summary()
-        #             st.toast("✅ ISIN & NAV mapping complete!")
-        #         except Exception as e:
-        #             st.error(f"Failed to fetch NAV: {e}")
-        #             log.exception("folio_nav_enricher failed")
-
-        # if "folio_nav_summary" in st.session_state:
-        #     stats = st.session_state["folio_nav_summary"]
-        #
-        #     c1, c2, c3, c4, c5 = st.columns(5)
-        #     c1.metric("Total Folios", stats["total_folios"])
-        #     c2.metric("With ISIN", stats["with_isin"], f"{stats['isin_coverage_pct']}%")
-        #     c3.metric("With NAV", stats["with_nav"], f"{stats['nav_coverage_pct']}%")
-        #     c4.metric("CAMS NAV AUM", format_aum(stats["cams_aum"]))
-        #     c5.metric("KFinTech NAV AUM", format_aum(stats["kfin_aum"]))
-        #
-        #     if stats.get("cams_aum"):
-        #         diff = stats["cams_aum"] - stats["cams_aum"]
-        #         diff_pct = (diff / stats["cams_aum"] * 100) if stats["cams_aum"] else 0
-        #         st.caption(
-        #             f"CAMS File AUM: {format_aum(stats['cams_aum'])} | "
-        #             f"NAV-based AUM: {format_aum(stats['cams_aum'])} | "
-        #             f"Diff: {format_aum(diff)} ({diff_pct:+.2f}%)"
-        #         )
-
         if "folio_nav_df" in st.session_state:
             df = st.session_state["folio_nav_df"]
 
@@ -1119,12 +1074,6 @@ elif mode == "⚙️ Admin Panel":
                     file_name=f"{source}_{data_type.replace(' ', '_')}_raw.csv",
                     mime="text/csv",
                 )
-
-                # numeric_cols = df_raw.select_dtypes(include=["number"]).columns.tolist()
-                # if numeric_cols:
-                #     st.divider()
-                #     st.subheader("📊 Numeric Column Summary")
-                #     st.dataframe(df_raw[numeric_cols].describe(), use_container_width=True)
             else:
                 st.info("No data to display.")
         else:
