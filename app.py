@@ -1147,24 +1147,42 @@ if mode == "📊 Dashboard":
                     "text/csv",
                 )
 
-    # ── AMC Breakdown ──
+    # ── AMC Breakdown (using AMFI-resolved AMC names) ──
     st.divider()
     st.subheader("🏢 AMC-wise Breakdown")
-    amc_df = load_amc_breakdown()
-    if not amc_df.empty:
-        amc_df["aum_display"] = amc_df["aum"].apply(format_aum)
-        display_df = amc_df[["amc", "rta", "folios", "records", "aum_display"]].rename(
-            columns={"amc": "AMC Code", "rta": "RTA", "folios": "Folios",
-                     "records": "Records", "aum_display": "AUM"}
-        )
-        st.dataframe(display_df, width='stretch', hide_index=True)
 
-        fig = px.pie(amc_df, values="aum", names="amc", hole=0.4,
-                     title="AUM Distribution by AMC")
-        fig = theme_plotly(fig, dark)
-        st.plotly_chart(fig, width='stretch')
+    if nav_ready and not folio_nav_df.empty:
+        # Build breakdown from the NAV-enriched DataFrame already in session state
+        amc_breakdown_df = folio_nav_df.copy()
+        amc_breakdown_df["amc_name"] = amc_breakdown_df["amc_name"].fillna("⚠️ Unresolved (no ISIN match)")
+
+        amc_df = (
+            amc_breakdown_df.groupby(["amc_name", "rta"], dropna=False)
+            .agg(
+                folios=("folio_id", "nunique"),
+                records=("folio_id", "count"),
+                aum=("nav_based_aum", "sum"),
+            )
+            .reset_index()
+            .sort_values("aum", ascending=False)
+        )
+
+        if not amc_df.empty:
+            amc_df["aum_display"] = amc_df["aum"].apply(format_aum)
+            display_df = amc_df[["amc_name", "rta", "folios", "records", "aum_display"]].rename(
+                columns={"amc_name": "AMC Name", "rta": "RTA", "folios": "Folios",
+                         "records": "Records", "aum_display": "AUM"}
+            )
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+            fig = px.pie(amc_df, values="aum", names="amc_name", hole=0.4,
+                         title="AUM Distribution by AMC")
+            fig = theme_plotly(fig, dark)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No AMC breakdown data available.")
     else:
-        st.info("No AMC data uploaded yet. Go to Admin Panel -> Import Data.")
+        st.info("AMC breakdown requires NAV data. Refresh the page if NAV is still loading.")
 
     # ── Recent Uploads ──
     st.divider()
