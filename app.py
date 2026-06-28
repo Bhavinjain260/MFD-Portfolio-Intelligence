@@ -81,6 +81,198 @@ def format_brokerage(val) -> str:
         return "Rs -"
 
 
+# ==================== Cams, Karvy and Manual entir Brokerage Data HELPERS ====================
+def _resolve_amc_via_isin(get_conn, scheme_code_col_sql: str, table: str, scheme_code_value_alias: str):
+    """
+    Not used directly — kept as documentation of the join shape.
+    Actual resolution happens inline in the loader below via a single
+    bse_scheme_master join, exactly like get_all_folios_with_isin_and_nav().
+    """
+    pass
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def load_brokerage_report(_get_conn) -> dict:
+    """
+    Returns {
+        "merged":     DataFrame[amc, month, file_amount, manual_amount, variance, status]
+        "detail":     DataFrame[amc, rta, client, folio, scheme_code, isin, txn_date,
+                                 txn_amount, brokerage_pct, brokerage_amount, brokerage_type]
+        "manual_raw": DataFrame[amc, month, manual_amount]
+    }
+
+    AMC resolution path (matches Dashboard's proven join):
+        brokerage.folio_no / account_number
+            -> cams_folio.foliochk / kfin_folio.folio   (get product code)
+            -> Channel_Partner_Code (bse_scheme_master) -> ISIN
+            -> _amfi.get_amc(isin)                       (canonical AMC name)
+
+    Date handling: CAMS proc_date is DD-MM-YYYY, KFin proc_date is
+    YYYY-MM-DD. Each is parsed in its OWN format BEFORE concatenation —
+    parsing a combined column once with a single dayfirst= flag lets
+    pandas' format inference lock onto whichever format it sees first
+    and silently return NaT for every row in the other format.
+    """
+    # ---- Resolve BSE's AMC fallback column FIRST, on its own connection,
+    #      BEFORE opening the connection used for the real reads ----
+    bse_amc_col = _get_bse_amc_column(_get_conn)
+    bse_amc_select = f"MAX({bse_amc_col}) AS bse_amc_name" if bse_amc_col else "NULL AS bse_amc_name"
+    bse_dedup = f"""
+        SELECT
+            UPPER(TRIM(Channel_Partner_Code)) AS cp_code,
+            MAX(ISIN) AS ISIN,
+            {bse_amc_select}
+        FROM bse_scheme_master
+        WHERE Channel_Partner_Code IS NOT NULL AND TRIM(Channel_Partner_Code) != ''
+        GROUP BY UPPER(TRIM(Channel_Partner_Code))
+    """
+
+    # ---- CAMS brokerage -> cams_folio (get product code) -> Channel_Partner_Code -> ISIN ----
+    cams_sql = f"""
+        SELECT
+            cb.proc_date              AS proc_date,
+            cb.brokerage_acrual_month AS accrual_month,
+            cb.inv_name               AS client,
+            cb.folio_no               AS folio,
+            cb.scheme_code            AS scheme_code,
+            cb.trxn_no                AS txn_no,
+            cb.plot_amount            AS txn_amount,
+            cb.brkage_rate            AS brokerage_pct,
+            cb.brkage_amt             AS brokerage_amount,
+            cb.brkage_type            AS brokerage_type,
+            cf.product                AS folio_product_code,
+            sm.ISIN                   AS isin,
+            sm.bse_amc_name           AS bse_amc_name,
+            'CAMS'                    AS rta
+        FROM cams_brokerage cb
+        LEFT JOIN cams_folio cf
+            ON UPPER(TRIM(cb.folio_no)) = UPPER(TRIM(cf.foliochk))
+        LEFT JOIN ({bse_dedup}) sm
+            ON UPPER(TRIM(cf.product)) = sm.cp_code
+    """
+
+    # ---- KFin brokerage -> kfin_folio (get product_code) -> Channel_Partner_Code -> ISIN ----
+    kfin_sql = f"""
+        SELECT
+            kb.process_date        AS proc_date,
+            NULL                   AS accrual_month,
+            kb.investor_name       AS client,
+            kb.account_number      AS folio,
+            kb.scheme_code         AS scheme_code,
+            kb.transaction_number  AS txn_no,
+            kb.amount_rs           AS txn_amount,
+            kb.percentage          AS brokerage_pct,
+            kb.brokerage_rs        AS brokerage_amount,
+            kb.brokerage_type      AS brokerage_type,
+            kf.product_code        AS folio_product_code,
+            sm.ISIN                AS isin,
+            sm.bse_amc_name        AS bse_amc_name,
+            'KFinTech'             AS rta
+        FROM kfin_brokerage kb
+        LEFT JOIN kfin_folio kf
+            ON UPPER(TRIM(kb.account_number)) = UPPER(TRIM(kf.folio))
+        LEFT JOIN ({bse_dedup}) sm
+            ON UPPER(TRIM(kf.product_code)) = sm.cp_code
+    """
+
+    # ---- Open the connection once, run both reads on it, then close ----
+    with _get_conn() as conn:
+        cams_df = pd.read_sql(cams_sql, conn)
+        kfin_df = pd.read_sql(kfin_sql, conn)
+        manual_df = pd.read_sql("SELECT amc, month, year, amount FROM monthly_brokerage", conn)
+
+    # ---- Parse each RTA's date format SEPARATELY, before combining ----
+    # NOTE: both CAMS and KFin proc_date are YYYY-MM-DD in this dataset —
+    # confirmed via direct query (e.g. CAMS: '2026-02-06', '2026-05-06').
+    # dayfirst=True on an already year-first string SILENTLY SWAPS month
+    # and day (e.g. '2026-02-06' -> June 2nd instead of Feb 6th) instead
+    # of raising an error, which is what caused older-month CAMS rows to
+    # disappear (they got miscategorized into the current month). Use
+    # dayfirst=False for both — if a future upload genuinely uses
+    # DD-MM-YYYY, change that side's flag back to True at that time.
+    if not cams_df.empty:
+        cams_df["proc_date"] = pd.to_datetime(cams_df["proc_date"], errors="coerce", dayfirst=False)
+    if not kfin_df.empty:
+        kfin_df["proc_date"] = pd.to_datetime(kfin_df["proc_date"], errors="coerce", dayfirst=False)
+
+    detail = pd.concat([cams_df, kfin_df], ignore_index=True)
+
+    # ---- AMC name: AMFI-canonical (via ISIN) first, then BSE fallback, then raw product code ----
+    detail["amfi_amc_name"] = detail["isin"].apply(
+        lambda i: _amfi.get_amc(i) if pd.notna(i) and str(i).strip() else None
+    )
+    detail["amc"] = detail["amfi_amc_name"]
+    detail["amc"] = detail["amc"].fillna(detail["bse_amc_name"])
+    detail["amc"] = detail["amc"].fillna(detail["folio_product_code"])
+    detail["amc"] = detail["amc"].fillna(detail["scheme_code"])
+    detail["amc"] = detail["amc"].fillna("⚠️ Unresolved")
+
+    # ---- Month key: prefer explicit accrual_month (CAMS), else derive from
+    #      the already-parsed proc_date. Anything still unresolved falls
+    #      into an explicit "Unknown" bucket instead of silently vanishing
+    #      from downstream filters (which never match NaN). ----
+    month_from_accrual = detail["accrual_month"].astype(str).str.strip()
+    month_from_proc = detail["proc_date"].dt.strftime("%Y-%m")
+    detail["month"] = month_from_accrual.where(
+        month_from_accrual.str.match(r"^\d{4}-\d{2}$", na=False), month_from_proc
+    )
+    detail["month"] = detail["month"].fillna("Unknown")
+
+    detail["txn_amount"] = pd.to_numeric(detail["txn_amount"], errors="coerce")
+    detail["brokerage_pct"] = pd.to_numeric(detail["brokerage_pct"], errors="coerce")
+    detail["brokerage_amount"] = pd.to_numeric(detail["brokerage_amount"], errors="coerce").fillna(0.0)
+    detail["txn_date"] = detail["proc_date"].dt.strftime("%Y-%m-%d")
+
+    # ---- File-side grouped by AMC + month ----
+    file_grouped = (
+        detail.dropna(subset=["month"])
+        .groupby(["amc", "month"], dropna=False)["brokerage_amount"]
+        .sum()
+        .reset_index()
+        .rename(columns={"brokerage_amount": "file_amount"})
+    )
+
+    # ---- Manual entries ----
+    if not manual_df.empty:
+        manual_df["month"] = manual_df["year"].astype(str) + "-" + manual_df["month"].astype(str).str.zfill(2)
+        manual_grouped = (
+            manual_df.groupby(["amc", "month"], dropna=False)["amount"]
+            .sum()
+            .reset_index()
+            .rename(columns={"amount": "manual_amount"})
+        )
+    else:
+        manual_grouped = pd.DataFrame(columns=["amc", "month", "manual_amount"])
+
+    merged = pd.merge(file_grouped, manual_grouped, on=["amc", "month"], how="outer")
+    merged["file_amount"] = merged["file_amount"].fillna(0.0)
+    merged["manual_amount"] = merged["manual_amount"].fillna(0.0)
+    merged["variance"] = merged["file_amount"] - merged["manual_amount"]
+
+    def _status(row):
+        if row["manual_amount"] == 0 and row["file_amount"] > 0:
+            return "⚠️ Not yet received"
+        if row["file_amount"] == 0 and row["manual_amount"] > 0:
+            return "❓ Received, no file match"
+        if abs(row["variance"]) < 1:
+            return "✅ Matched"
+        return "🔶 Mismatch"
+
+    if not merged.empty:
+        merged["status"] = merged.apply(_status, axis=1)
+        merged = merged.sort_values(["month", "amc"], ascending=[False, True])
+    else:
+        merged["status"] = pd.Series(dtype="object")
+
+    return {"merged": merged, "detail": detail, "manual_raw": manual_grouped}
+
+
+def format_brokerage_inr(val) -> str:
+    try:
+        return f"Rs {float(val):,.2f}"
+    except (TypeError, ValueError):
+        return "Rs -"
+
 # ==================== AMFI NAV SERVICE ====================
 
 
@@ -925,9 +1117,9 @@ from theme_patch import render_theme
 st.markdown(render_theme(dark), unsafe_allow_html=True)
 
 # Navigation
-nav_cols = st.columns([1, 1])
-nav_options = ["📊 Dashboard", "⚙️ Admin Panel"]
-nav_keys = ["nav_dash", "nav_admin"]
+nav_cols = st.columns([1, 1, 1])
+nav_options = ["📊 Dashboard", "💰 Brokerage Report", "⚙️ Admin Panel"]
+nav_keys = ["nav_dash", "nav_admin", "nav_brokerage"]
 if "nav_mode" not in st.session_state:
     st.session_state["nav_mode"] = "📊 Dashboard"
 
@@ -1192,6 +1384,221 @@ if mode == "📊 Dashboard":
         st.dataframe(uploads_df, width='stretch', hide_index=True)
     else:
         st.info("No uploads yet. Go to Admin Panel to upload data.")
+
+
+
+# ==================== 💰 Brokerage Report ====================
+
+elif mode == "💰 Brokerage Report":
+    st.header("💰 Brokerage Report")
+    st.caption(
+        "File-reported brokerage (CAMS + KFin), AMC names resolved the same way as your Dashboard (AMFI-canonical via ISIN).")
+
+    data = load_brokerage_report(get_conn)
+    merged = data["merged"]
+    detail = data["detail"]
+
+    if merged.empty and detail.empty:
+        st.info("No brokerage data yet. Upload CAMS/KFin brokerage files and log manual entries first.")
+        st.stop()
+
+    # ── Top summary cards ──
+    total_file = merged["file_amount"].sum() if not merged.empty else 0.0
+    total_manual = merged["manual_amount"].sum() if not merged.empty else 0.0
+    total_variance = total_file - total_manual
+    pending_count = (merged["status"] == "⚠️ Not yet received").sum() if not merged.empty else 0
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("📄 Total File Brokerage", format_brokerage_inr(total_file))
+    c2.metric("🏦 Total Received (Manual)", format_brokerage_inr(total_manual))
+    c3.metric("📊 Variance", format_brokerage_inr(total_variance))
+    c4.metric("⚠️ Pending AMC-Months", int(pending_count))
+
+    st.divider()
+
+    # ════════════════════════════════════════════════════════════
+    # SECTION 1 — Record a manual brokerage receipt
+    # ════════════════════════════════════════════════════════════
+    st.subheader("✍️ Record Manual Brokerage Receipt")
+    with st.form("manual_brokerage_form", clear_on_submit=True):
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        with mc1:
+            m_amc = st.text_input("AMC Name")
+        with mc2:
+            m_month = st.selectbox("Month", [f"{i:02d}" for i in range(1, 13)])
+        with mc3:
+            m_year = st.number_input("Year", min_value=2015, max_value=2100, value=pd.Timestamp.now().year)
+        with mc4:
+            m_amount = st.number_input("Amount (Rs)", min_value=0.0, step=100.0)
+        m_notes = st.text_input("Notes (optional)")
+        submitted = st.form_submit_button("➕ Add Entry")
+
+        if submitted:
+            if not m_amc.strip():
+                st.error("AMC name is required.")
+            else:
+                with get_conn() as conn:
+                    conn.execute('''
+                            INSERT INTO monthly_brokerage (amc, month, year, amount, notes)
+                            VALUES (?, ?, ?, ?, ?)
+                            ON CONFLICT(amc, month, year) DO UPDATE SET
+                                amount = excluded.amount,
+                                notes = excluded.notes,
+                                timestamp = CURRENT_TIMESTAMP
+                        ''', (m_amc.strip(), m_month, int(m_year), float(m_amount), m_notes.strip() or None))
+                st.cache_data.clear()
+                st.success(f"Logged {format_brokerage_inr(m_amount)} for {m_amc} ({m_month}-{m_year}).")
+                st.rerun()
+
+    # ── Existing manual log (view/reference) ──
+    with st.expander("📜 View Manual Entry Log"):
+        with get_conn() as conn:
+            log_df = pd.read_sql(
+                "SELECT amc, month, year, amount, notes, timestamp FROM monthly_brokerage ORDER BY year DESC, month DESC",
+                conn
+            )
+        if not log_df.empty:
+            st.dataframe(log_df, width='stretch', hide_index=True)
+        else:
+            st.info("No manual entries logged yet.")
+
+    # ════════════════════════════════════════════════════════════
+    # SECTION 2 — AMC-wise bifurcation
+    # ════════════════════════════════════════════════════════════
+    st.subheader("🏢 AMC-wise Bifurcation")
+
+    if not merged.empty:
+        available_months = sorted(merged["month"].dropna().unique(), reverse=True)
+        bif_month_filter = st.multiselect(
+            "📅 Month(s)", available_months, default=available_months,
+            key="brok_bif_month_filter"
+        )
+
+        merged_view = merged[merged["month"].isin(bif_month_filter)]
+
+        amc_summary = (
+            merged_view.groupby("amc")[["file_amount", "manual_amount", "variance"]]
+            .sum()
+            .reset_index()
+            .sort_values("file_amount", ascending=False)
+        )
+        amc_summary["status"] = amc_summary.apply(
+            lambda r: "⚠️ Pending" if r["manual_amount"] == 0 and r["file_amount"] > 0
+            else ("✅ Matched" if abs(r["variance"]) < 1 else "🔶 Mismatch"),
+            axis=1
+        )
+
+        display_amc = amc_summary.rename(columns={
+            "amc": "AMC", "file_amount": "File Brokerage",
+            "manual_amount": "Received (Manual)", "variance": "Variance", "status": "Status"
+        })
+        st.dataframe(
+            display_amc, width='stretch', hide_index=True,
+            column_config={
+                "File Brokerage": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Received (Manual)": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Variance": st.column_config.NumberColumn(format="₹ %.2f"),
+            }
+        )
+
+        chart_df = amc_summary.copy()
+        chart_df["file_amount"] = pd.to_numeric(chart_df["file_amount"], errors="coerce").fillna(0.0)
+        chart_df["manual_amount"] = pd.to_numeric(chart_df["manual_amount"], errors="coerce").fillna(0.0)
+
+        chart_long = chart_df.melt(
+            id_vars="amc",
+            value_vars=["file_amount", "manual_amount"],
+            var_name="type",
+            value_name="amount"
+        )
+        chart_long["type"] = chart_long["type"].map({
+            "file_amount": "File Brokerage",
+            "manual_amount": "Received (Manual)"
+        })
+
+        fig = px.bar(
+            chart_long, x="amc", y="amount", color="type",
+            barmode="group", title="File vs Received, by AMC",
+            labels={"amount": "Amount (₹)", "amc": "AMC", "type": "Type"}
+        )
+        fig = theme_plotly(fig, dark)
+        st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.info("No file brokerage data parsed yet.")
+
+    st.divider()
+
+    # ════════════════════════════════════════════════════════════
+    # SECTION 3 — Drill into one AMC: full client-level detail
+    # ════════════════════════════════════════════════════════════
+    st.subheader("🔍 AMC Drilldown — Client-level Detail")
+
+    all_amcs = sorted(detail["amc"].dropna().unique()) if not detail.empty else []
+    if not all_amcs:
+        st.info("No detail rows available.")
+    else:
+        amc_options = ["All"] + all_amcs
+        selected_amc = st.selectbox("Select AMC", amc_options, key="brok_drilldown_amc")
+
+        if selected_amc == "All":
+            amc_detail = detail.copy()
+        else:
+            amc_detail = detail[detail["amc"] == selected_amc].copy()
+
+        dc1, dc2 = st.columns([2, 2])
+        with dc1:
+            available_drilldown_months = sorted(amc_detail["month"].dropna().unique(), reverse=True)
+            month_f = st.multiselect(
+                "📅 Month(s)", available_drilldown_months, default=available_drilldown_months,
+                key="brok_drilldown_month"
+            )
+        with dc2:
+            client_search = st.text_input("🔍 Search Client / Folio", "", key="brok_drilldown_search")
+
+        amc_detail = amc_detail[amc_detail["month"].isin(month_f)]
+        if client_search.strip():
+            mask = (
+                    amc_detail["client"].astype(str).str.contains(client_search, case=False, na=False)
+                    | amc_detail["folio"].astype(str).str.contains(client_search, case=False, na=False)
+            )
+            amc_detail = amc_detail[mask]
+
+        amc_total = amc_detail["brokerage_amount"].sum()
+        label = "All AMCs" if selected_amc == "All" else selected_amc
+        st.metric(f"💰 Total Brokerage — {label}", format_brokerage_inr(amc_total))
+
+        detail_cols = [
+            "rta", "client", "folio", "scheme_code", "txn_date",
+            "txn_amount", "brokerage_pct", "brokerage_amount", "brokerage_type"
+        ]
+        detail_cols = [c for c in detail_cols if c in amc_detail.columns]
+        display_detail = amc_detail[detail_cols].rename(columns={
+            "rta": "RTA", "client": "Client", "folio": "Folio", "scheme_code": "Scheme Code",
+            "txn_date": "Date", "txn_amount": "Txn Amount", "brokerage_pct": "Brokerage %",
+            "brokerage_amount": "Brokerage Amount", "brokerage_type": "Type",
+        })
+        st.dataframe(
+            display_detail.sort_values("Date", ascending=False) if "Date" in display_detail.columns else display_detail,
+            width='stretch', hide_index=True,
+            column_config={
+                "Txn Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Brokerage %": st.column_config.NumberColumn(format="%.4f"),
+                "Brokerage Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+            }
+        )
+        st.caption(f"Showing {len(amc_detail):,} brokerage records for {selected_amc}")
+
+        if not amc_detail.empty:
+            csv = display_detail.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                f"⬇️ Download {selected_amc} Brokerage Detail (CSV)",
+                csv, f"brokerage_{selected_amc.replace(' ', '_')}.csv", "text/csv",
+                key="brok_drilldown_download"
+            )
+
+    st.divider()
+
 
 
 # ==================== ⚙️ ADMIN PANEL ====================
