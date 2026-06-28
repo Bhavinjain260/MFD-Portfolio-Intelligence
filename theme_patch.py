@@ -142,3 +142,42 @@ def render_theme(dark: bool) -> str:
         muted="#6b7280", border="#d0d7de", accent="#2563eb",
         hover="#eef2f7",
     )
+
+
+# Watches Streamlit's actual rendered background color (changes instantly
+# when user picks Light/Dark/System in the ⋮ menu, even though the Python
+# script doesn't know yet -- this is a known Streamlit limitation: theme
+# menu changes are frontend-only and don't trigger a script rerun on their
+# own). On a detected color change, reloads the page so app.py re-runs with
+# the correct st.context.theme.type -- no manual refresh needed by the user.
+THEME_WATCHER_JS = """
+<script>
+(function() {
+    function getBg() {
+        const doc = window.parent.document;
+        const appEl = doc.querySelector('[data-testid="stApp"]') || doc.body;
+        return window.parent.getComputedStyle(appEl).backgroundColor;
+    }
+
+    function isDarkColor(rgbStr) {
+        const m = rgbStr && rgbStr.match(/\\d+/g);
+        if (!m || m.length < 3) return null;
+        const [r, g, b] = m.map(Number);
+        return (r + g + b) / 3 < 128;
+    }
+
+    const STORE_KEY = "__last_theme_is_dark__";
+    let stored = window.parent.sessionStorage.getItem(STORE_KEY);
+    let lastIsDark = stored === null ? isDarkColor(getBg()) : stored === "true";
+
+    setInterval(function() {
+        const nowDark = isDarkColor(getBg());
+        if (nowDark === null) return;
+        if (nowDark !== lastIsDark) {
+            window.parent.sessionStorage.setItem(STORE_KEY, String(nowDark));
+            window.parent.location.reload();
+        }
+    }, 350);
+})();
+</script>
+"""

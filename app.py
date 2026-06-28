@@ -6,15 +6,17 @@ Only: Admin Panel (Upload + Raw Data View) + Dashboard (View All Details)
 import logging
 import re
 import warnings
-import plotly.express as px
-import streamlit as st
-import data_manager
-from Init import init_db, get_conn
-from theme_patch import render_theme
-import pandas as pd
 from datetime import datetime
 from typing import Optional
+
+import pandas as pd
+import plotly.express as px
 import requests
+import streamlit as st
+
+import data_manager
+from Init import init_db, get_conn
+from theme_patch import THEME_WATCHER_JS
 
 log = logging.getLogger(__name__)
 
@@ -81,15 +83,34 @@ def format_brokerage(val) -> str:
 AMFI_TEXT_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
 
 
-# ==================== AMFI NAV SERVICE ====================
+# ==================== AMFI NAV + AMC SERVICE ====================
 
 class AMFINavService:
-    """Downloads AMFI text once per session and indexes by ISIN for O(1) lookups."""
+    """
+    Downloads AMFI text once per session and indexes by ISIN for O(1) lookups.
+    Also captures AMC name per ISIN from the section headers in the same file
+    (e.g. "Aditya Birla Sun Life Mutual Fund"), so AMC names are sourced
+    canonically from AMFI instead of unreliable BSE/CAMS/KFin name strings.
+    """
 
     _nav_by_isin: dict[str, tuple[float, str]] = {}
+    _amc_by_isin: dict[str, str] = {}
     _last_fetch: Optional[datetime] = None
+    _ttl_seconds: int = 3600  # AMFI publishes NAV once/day; 1hr cache is plenty
 
-    def refresh(self) -> dict[str, tuple[float, str]]:
+    def _is_fresh(self) -> bool:
+        if not self._nav_by_isin or self._last_fetch is None:
+            return False
+        age = (datetime.now() - self._last_fetch).total_seconds()
+        return age < self._ttl_seconds
+
+    def refresh(self, force: bool = False) -> dict[str, tuple[float, str]]:
+        if not force and self._is_fresh():
+            age_min = (datetime.now() - self._last_fetch).total_seconds() / 60
+            log.info("[AMFI] Cache fresh (%.1f min old, ttl=%ss) — skipping download",
+                     age_min, self._ttl_seconds)
+            return self._nav_by_isin
+
         log.info("[AMFI] Starting NAV download from %s", AMFI_TEXT_URL)
         try:
             res = requests.get(AMFI_TEXT_URL, timeout=30)
@@ -101,13 +122,26 @@ class AMFINavService:
             return {}
 
         nav_map: dict[str, tuple[float, str]] = {}
+        amc_map: dict[str, str] = {}
+        current_amc = ""
         skipped = 0
         parsed = 0
 
-        for line in lines:
-            line = line.strip()
-            if not line or ";" not in line:
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line:
                 continue
+
+            # ── AMC header line: no semicolons, ends with "Mutual Fund" ──
+            # AMFI file structure:
+            #   Open Ended Schemes(...)        <- category header, ignore
+            #   Aditya Birla Sun Life Mutual Fund   <- AMC header, capture
+            #   119551;ISIN1;ISIN2;Scheme Name;NAV;Date   <- data row
+            if ";" not in line:
+                if line.lower().endswith("mutual fund"):
+                    current_amc = line
+                continue
+
             parts = line.split(";")
             if len(parts) < 6 or parts[0] == "Scheme Code":
                 continue
@@ -130,14 +164,21 @@ class AMFINavService:
             if nav > 0:
                 parsed += 1
                 for isin in (isin_1, isin_2):
-                    if isin:
-                        nav_map[isin.upper()] = (nav, nav_date)
+                    if isin and isin != "-":
+                        isin_u = isin.upper()
+                        nav_map[isin_u] = (nav, nav_date)
+                        if current_amc:
+                            amc_map[isin_u] = current_amc
             else:
                 skipped += 1
 
         self._nav_by_isin = nav_map
+        self._amc_by_isin = amc_map
         self._last_fetch = datetime.now()
-        log.info("[AMFI] NAV indexed: %s ISINs parsed, %s skipped (N.A./0)", parsed, skipped)
+        log.info(
+            "[AMFI] NAV indexed: %s ISINs parsed, %s skipped (N.A./0), %s ISINs with AMC name",
+            parsed, skipped, len(amc_map),
+        )
         return nav_map
 
     def get_nav(self, isin: str) -> Optional[tuple[float, str]]:
@@ -149,6 +190,14 @@ class AMFINavService:
         result = self._nav_by_isin.get(isin.strip().upper())
         log.debug("[AMFI] Lookup ISIN=%s → %s", isin, "HIT" if result else "MISS")
         return result
+
+    def get_amc(self, isin: str) -> str:
+        """Canonical AMC name for an ISIN, sourced from AMFI section headers."""
+        if not self._amc_by_isin:
+            self.refresh()
+        if not isin:
+            return ""
+        return self._amc_by_isin.get(isin.strip().upper(), "")
 
 
 _amfi = AMFINavService()
@@ -169,31 +218,68 @@ def fetch_nav_by_isin(isin: str) -> Optional[tuple[float, str]]:
         return None
 
 
-def get_all_folios_with_isin_and_nav() -> pd.DataFrame:
+def fetch_amc_by_isin(isin: str) -> str:
+    """Single ISIN → canonical AMC name lookup."""
+    return _amfi.get_amc(isin)
+
+
+def _get_bse_amc_column(get_conn) -> Optional[str]:
+    """
+    Probe bse_scheme_master's actual schema to find whichever column holds
+    the AMC/fund-house name string (e.g. 'BirlaSunLifeMutualFund_MF').
+    Column naming varies by import batch, so don't hardcode 'AMC'.
+    Returns None if no plausible column is found — caller must handle that.
+    """
+    candidates = [
+        "AMC", "AMC_Name", "AMC_NAME", "Amc_Name",
+        "Fund_Name", "FUND_NAME", "Fund", "FUND",
+        "AMC_Code", "AMC_CODE",
+    ]
+    with get_conn() as conn:
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(bse_scheme_master)").fetchall()]
+    log.info("[NAV-FLOW] bse_scheme_master columns: %s", cols)
+    for c in candidates:
+        if c in cols:
+            log.info("[NAV-FLOW] Using '%s' as BSE AMC-name fallback column", c)
+            return c
+    log.warning("[NAV-FLOW] No AMC-name column found in bse_scheme_master (checked %s). "
+                "BSE fallback name disabled — rows will rely on AMFI ISIN match only.", candidates)
+    return None
+
+
+def get_all_folios_with_isin_and_nav(get_conn, force_refresh: bool = False) -> pd.DataFrame:
     """
     Master batch function:
-      1. Download AMFI NAV once → index by ISIN
+      1. Download AMFI NAV + AMC index once → index by ISIN (cached, TTL-guarded
+         unless force_refresh=True)
       2. Query CAMS folio master JOIN deduplicated bse_scheme_master (product → Channel Partner Code → ISIN)
       3. Query KFin folio master JOIN deduplicated bse_scheme_master (product_code → Channel Partner Code → ISIN)
          + computed units from kfin_transactions
-      4. Map NAV in-memory
+      4. Map NAV + AMC name (canonical, from AMFI) in-memory by ISIN
       5. Return combined DataFrame
+
+    `get_conn` is passed in (your existing Init.get_conn) to keep this module
+    dependency-free of your app's DB wiring.
     """
     log.info("=" * 60)
     log.info("[NAV-FLOW] Starting get_all_folios_with_isin_and_nav()")
 
-    # ── Step 1: AMFI NAV Download ──
-    log.info("[NAV-FLOW][Step 1] Downloading AMFI NAV index...")
-    nav_map = _amfi.refresh()
-    log.info("[NAV-FLOW][Step 1] AMFI NAV ready: %s ISINs in index", len(nav_map))
+    # ── Step 1: AMFI NAV + AMC Download (TTL-cached) ──
+    log.info("[NAV-FLOW][Step 1] Fetching AMFI NAV + AMC index (force=%s)...", force_refresh)
+    nav_map = _amfi.refresh(force=force_refresh)
+    log.info("[NAV-FLOW][Step 1] AMFI ready: %s ISINs in NAV index, %s in AMC index",
+             len(nav_map), len(_amfi._amc_by_isin))
 
     # ── Step 2: Deduplicated BSE Scheme Master subquery ──
     log.info("[NAV-FLOW][Step 2] Building deduplicated BSE lookup...")
-    bse_dedup = """
+    bse_amc_col = _get_bse_amc_column(get_conn)
+    bse_amc_select = f"MAX({bse_amc_col}) AS bse_amc_name" if bse_amc_col else "NULL AS bse_amc_name"
+    bse_dedup = f"""
         SELECT 
             UPPER(TRIM(Channel_Partner_Code)) AS cp_code,
             MAX(ISIN) AS ISIN,
-            MAX(Scheme_Name) AS Scheme_Name
+            MAX(Scheme_Name) AS Scheme_Name,
+            {bse_amc_select}
         FROM bse_scheme_master
         WHERE Channel_Partner_Code IS NOT NULL AND TRIM(Channel_Partner_Code) != ''
         GROUP BY UPPER(TRIM(Channel_Partner_Code))
@@ -211,6 +297,7 @@ def get_all_folios_with_isin_and_nav() -> pd.DataFrame:
         f.clos_bal          AS units,
         bsm.ISIN            AS isin,
         bsm.Scheme_Name     AS scheme_name,
+        bsm.bse_amc_name    AS bse_amc_name,
         'CAMS'              AS rta
     FROM cams_folio f
     LEFT JOIN ({bse_dedup}) bsm
@@ -230,6 +317,7 @@ def get_all_folios_with_isin_and_nav() -> pd.DataFrame:
         u.total_units       AS units,
         bsm.ISIN            AS isin,
         bsm.Scheme_Name     AS scheme_name,
+        bsm.bse_amc_name    AS bse_amc_name,
         'KFinTech'          AS rta
     FROM kfin_folio f
     INNER JOIN (
@@ -256,42 +344,28 @@ def get_all_folios_with_isin_and_nav() -> pd.DataFrame:
         cams_df = pd.read_sql(cams_sql, conn)
         log.info("[NAV-FLOW][Step 5] CAMS rows fetched: %s", len(cams_df))
 
-        # Debug: CAMS product → ISIN mapping stats
         cams_with_product = cams_df["product_code"].notna().sum()
         cams_with_isin = cams_df["isin"].notna().sum()
         log.info("[NAV-FLOW][Step 5] CAMS: %s rows with product_code, %s rows with ISIN (%s%% match)",
                  cams_with_product, cams_with_isin,
                  round(cams_with_isin / cams_with_product * 100, 2) if cams_with_product else 0)
 
-        # Debug: Show sample CAMS mappings
-        cams_sample = cams_df.dropna(subset=["product_code"]).head(3)
-        for _, row in cams_sample.iterrows():
-            log.debug("[NAV-FLOW][Step 5] CAMS SAMPLE | folio=%s | product=%s | isin=%s | scheme=%s",
-                      row["folio_id"], row["product_code"], row["isin"], row["scheme_name"])
-
         kfin_df = pd.read_sql(kfin_sql, conn)
         log.info("[NAV-FLOW][Step 5] KFin rows fetched: %s", len(kfin_df))
 
-        # Debug: KFin product_code → ISIN mapping stats
         kfin_with_product = kfin_df["product_code"].notna().sum()
         kfin_with_isin = kfin_df["isin"].notna().sum()
         log.info("[NAV-FLOW][Step 5] KFin: %s rows with product_code, %s rows with ISIN (%s%% match)",
                  kfin_with_product, kfin_with_isin,
                  round(kfin_with_isin / kfin_with_product * 100, 2) if kfin_with_product else 0)
 
-        # Debug: Show sample KFin mappings
-        kfin_sample = kfin_df.dropna(subset=["product_code"]).head(3)
-        for _, row in kfin_sample.iterrows():
-            log.debug("[NAV-FLOW][Step 5] KFin SAMPLE | folio=%s | product=%s | isin=%s | scheme=%s",
-                      row["folio_id"], row["product_code"], row["isin"], row["scheme_name"])
-
     # ── Step 6: Combine ──
     log.info("[NAV-FLOW][Step 6] Combining CAMS + KFin data...")
     combined = pd.concat([cams_df, kfin_df], ignore_index=True)
     log.info("[NAV-FLOW][Step 6] Combined rows: %s", len(combined))
 
-    # ── Step 7: NAV Lookup ──
-    log.info("[NAV-FLOW][Step 7] Mapping ISIN → NAV from AMFI index...")
+    # ── Step 7: NAV + AMC Lookup (both keyed by ISIN, both from AMFI) ──
+    log.info("[NAV-FLOW][Step 7] Mapping ISIN → NAV and ISIN → AMC name from AMFI index...")
 
     def _lookup_nav(isin):
         if pd.isna(isin) or not str(isin).strip():
@@ -303,18 +377,31 @@ def get_all_folios_with_isin_and_nav() -> pd.DataFrame:
     combined["current_nav"] = nav_cols[0]
     combined["nav_date"] = nav_cols[1]
 
-    # Debug: NAV mapping stats
+    combined["amfi_amc_name"] = combined["isin"].apply(
+        lambda i: _amfi.get_amc(i) if pd.notna(i) and str(i).strip() else None
+    )
+
+    # ── Step 7b: Resolve final AMC name ──
+    # Priority: AMFI name (canonical) > BSE scheme master AMC name (fallback for
+    # unmapped ISINs) so every row still shows something, but resolved rows
+    # always use the AMFI-canonical spelling.
+    combined["amc_name"] = combined["amfi_amc_name"].fillna(combined["bse_amc_name"])
+    combined["amc_name_source"] = combined["amfi_amc_name"].apply(
+        lambda x: "AMFI" if pd.notna(x) and str(x).strip() else None
+    )
+    combined.loc[combined["amc_name_source"].isna() & combined["bse_amc_name"].notna(),
+    "amc_name_source"] = "BSE (unresolved)"
+    combined["amc_name_source"] = combined["amc_name_source"].fillna("Unknown")
+
     total_with_isin = combined["isin"].notna().sum()
     total_with_nav = combined["current_nav"].notna().sum()
-    log.info("[NAV-FLOW][Step 7] ISIN→NAV mapping: %s with ISIN, %s with NAV (%s%% coverage)",
+    total_with_amc = combined["amc_name"].notna().sum()
+    total_amfi_amc = (combined["amc_name_source"] == "AMFI").sum()
+    log.info("[NAV-FLOW][Step 7] ISIN→NAV: %s with ISIN, %s with NAV (%s%% coverage)",
              total_with_isin, total_with_nav,
              round(total_with_nav / total_with_isin * 100, 2) if total_with_isin else 0)
-
-    # Debug: Show sample NAV lookups
-    nav_sample = combined.dropna(subset=["isin"]).head(3)
-    for _, row in nav_sample.iterrows():
-        log.debug("[NAV-FLOW][Step 7] NAV SAMPLE | isin=%s | nav=%s | date=%s",
-                  row["isin"], row["current_nav"], row["nav_date"])
+    log.info("[NAV-FLOW][Step 7] AMC name resolved: %s/%s rows (%s via AMFI-canonical, %s via BSE fallback)",
+             total_with_amc, len(combined), total_amfi_amc, total_with_amc - total_amfi_amc)
 
     # ── Step 8: Calculate AUM ──
     log.info("[NAV-FLOW][Step 8] Calculating NAV-based AUM...")
@@ -325,7 +412,6 @@ def get_all_folios_with_isin_and_nav() -> pd.DataFrame:
         axis=1
     )
 
-    # Debug: AUM stats
     total_aum = combined["nav_based_aum"].sum()
     log.info("[NAV-FLOW][Step 8] Total NAV-based AUM: ₹%s", f"{total_aum:,.2f}" if pd.notna(total_aum) else "N/A")
 
@@ -333,10 +419,12 @@ def get_all_folios_with_isin_and_nav() -> pd.DataFrame:
     log.info("[NAV-FLOW][Step 9] Finalizing columns...")
     combined["has_isin"] = combined["isin"].notna()
     combined["has_nav"] = combined["current_nav"].notna()
+    combined["has_amc"] = combined["amc_name"].notna()
 
     front = [
         "rta", "folio_id", "investor_name", "product_code",
         "scheme_name", "isin", "has_isin",
+        "amc_name", "amc_name_source", "has_amc",
         "current_nav", "nav_date", "has_nav",
         "units", "file_aum", "nav_based_aum"
     ]
@@ -350,11 +438,11 @@ def get_all_folios_with_isin_and_nav() -> pd.DataFrame:
     return result
 
 
-def get_folio_nav_summary() -> dict:
+def get_folio_nav_summary(get_conn, force_refresh: bool = False) -> dict:
     """Quick stats for Streamlit metrics."""
     log.info("[NAV-FLOW] Generating folio NAV summary...")
 
-    df = get_all_folios_with_isin_and_nav()
+    df = get_all_folios_with_isin_and_nav(get_conn, force_refresh=force_refresh)
     cams_df = df[df["rta"] == "CAMS"]
     kfin_df = df[df["rta"] == "KFinTech"]
 
@@ -373,8 +461,11 @@ def get_folio_nav_summary() -> dict:
         "isin_coverage_pct": round(df["has_isin"].mean() * 100, 2) if len(df) else 0,
         "with_nav": int(df["has_nav"].sum()),
         "nav_coverage_pct": round(df["has_nav"].mean() * 100, 2) if len(df) else 0,
+        "with_amc": int(df["has_amc"].sum()),
+        "amc_coverage_pct": round(df["has_amc"].mean() * 100, 2) if len(df) else 0,
+        "amc_resolved_via_amfi": int((df["amc_name_source"] == "AMFI").sum()),
 
-        "total_aum": cams_nav_aum + kfin_nav_aum,  # ← ADD THIS
+        "total_aum": cams_nav_aum + kfin_nav_aum,
         "cams_aum": cams_nav_aum,
         "cams_file_aum": cams_file_aum,
         "cams_unmatched_nav": cams_unmatched,
@@ -385,7 +476,36 @@ def get_folio_nav_summary() -> dict:
         "cams_total": len(cams_df),
         "kfin_with_nav": int(kfin_df["has_nav"].sum()),
         "kfin_total": len(kfin_df),
+
+        "df": df,  # carry the full df forward so AMC breakdown can reuse it without re-querying
     }
+
+
+def load_amc_breakdown_by_isin(get_conn) -> pd.DataFrame:
+    """
+    AMC-wise AUM + folio breakdown, grouped by canonical AMFI AMC name (via ISIN),
+    NOT by raw amc_code/Fund strings from CAMS/KFin/BSE files.
+    Replaces the old load_amc_breakdown() that grouped on inconsistent name strings.
+    """
+    df = get_all_folios_with_isin_and_nav(get_conn)
+
+    if df.empty:
+        return pd.DataFrame()
+
+    df = df.copy()
+    df["amc_name"] = df["amc_name"].fillna("⚠️ Unresolved (no ISIN match)")
+
+    grouped = (
+        df.groupby(["amc_name", "rta"], dropna=False)
+        .agg(
+            folios=("folio_id", "nunique"),
+            records=("folio_id", "count"),
+            aum=("nav_based_aum", "sum"),
+        )
+        .reset_index()
+        .sort_values("aum", ascending=False)
+    )
+    return grouped
 
 
 def normalize_folio(folio: str) -> str:
@@ -654,29 +774,24 @@ st.set_page_config(page_title="MFD Portfolio Intelligence", layout="wide", page_
 
 ensure_db()
 
-# -------------------- THEME --------------------
+# -------------------- THEME (native Streamlit System/Light/Dark) --------------------
+current_theme = st.context.theme.type
 
-if "dark_mode" not in st.session_state:
-    st.session_state["dark_mode"] = False
-dark = st.session_state["dark_mode"]
+dark = st.context.theme.type == "dark"
 
-_bg = "#0e1117" if dark else "#ffffff"
-_sbg = "#161b22" if dark else "#f6f8fa"
-_text = "#e6edf3" if dark else "#1a1a2e"
-_muted = "#8b949e" if dark else "#6b7280"
-_border = "#30363d" if dark else "#d0d7de"
-_accent = "#58a6ff" if dark else "#2563eb"
+st.components.v1.html(THEME_WATCHER_JS, height=0)
+
+if "last_theme" not in st.session_state:
+    st.session_state["last_theme"] = current_theme
+elif st.session_state["last_theme"] != current_theme:
+    st.session_state["last_theme"] = current_theme
+    st.rerun()
+
+dark = current_theme == "dark"
+
+from theme_patch import render_theme
 
 st.markdown(render_theme(dark), unsafe_allow_html=True)
-
-# -------------------- COMPACT HEADER --------------------
-hdr1, hdr2 = st.columns([6, 1])
-with hdr1:
-    st.markdown("#### 📊 MFD Portfolio Intelligence")
-with hdr2:
-    if st.button("🌙" if not dark else "☀️", help="Toggle dark/light mode", use_container_width=True):
-        st.session_state["dark_mode"] = not st.session_state["dark_mode"]
-        st.rerun()
 
 # Navigation
 nav_cols = st.columns([1, 1])
@@ -707,8 +822,8 @@ if mode == "📊 Dashboard":
     if "folio_nav_df" not in st.session_state:
         with st.spinner("⏳ Fetching ISIN mappings & latest NAVs from AMFI... (5–10s)"):
             try:
-                folio_nav_df = get_all_folios_with_isin_and_nav()
-                nav_stats = get_folio_nav_summary()
+                folio_nav_df = get_all_folios_with_isin_and_nav(get_conn)
+                nav_stats = get_folio_nav_summary(get_conn)
                 st.session_state["folio_nav_df"] = folio_nav_df
                 st.session_state["folio_nav_summary"] = nav_stats
                 nav_ready = True
@@ -756,6 +871,7 @@ if mode == "📊 Dashboard":
             st.cache_data.clear()
             st.session_state.pop("folio_nav_df", None)
             st.session_state.pop("folio_nav_summary", None)
+            _amfi.refresh(force=True)  # add this — forces real re-download
             st.rerun()
 
     # ── AUM Cards (NAV-based only) ──
@@ -840,7 +956,6 @@ if mode == "📊 Dashboard":
         if "folio_nav_df" in st.session_state:
             df = st.session_state["folio_nav_df"]
 
-            st.divider()
             f1, f2, f3 = st.columns([2, 2, 2])
             with f1:
                 rta_filter = st.multiselect(
