@@ -12,6 +12,7 @@ without updating init.py first.
 """
 
 import logging
+import os
 import re
 import sqlite3
 from contextlib import contextmanager
@@ -21,10 +22,11 @@ import pandas as pd
 import streamlit as st
 
 log = logging.getLogger(__name__)
+DB_PATH = os.path.join(os.path.dirname(__file__), "mfd_local.db")
 
 
 def set_db_path(path: str):
-    """Kept for compatibility; overrides the shared DB_PATH at runtime if ever needed."""
+    """Override the shared DB_PATH at runtime."""
     global DB_PATH
     DB_PATH = path
 
