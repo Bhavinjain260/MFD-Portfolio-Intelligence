@@ -13,9 +13,11 @@ import streamlit as st
 import data_manager
 from Init import init_db, get_conn
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+from theme_patch import render_theme
+
 
 warnings.filterwarnings("ignore")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s | %(message)s")
 log = logging.getLogger(__name__)
 
@@ -669,7 +671,7 @@ _muted = "#8b949e" if dark else "#6b7280"
 _border = "#30363d" if dark else "#d0d7de"
 _accent = "#58a6ff" if dark else "#2563eb"
 
-from theme_patch import render_theme
+
 
 st.markdown(render_theme(dark), unsafe_allow_html=True)
 
