@@ -860,9 +860,13 @@ def theme_plotly(fig, dark: bool):
 # Calcute the Invested Amount for Karvy Schemes
 @st.cache_data(ttl=180, show_spinner=False)
 def get_kfin_invested_amount(folio_list):
-    """Return total invested amount (sum of td_amt) for KFin folios."""
     if not folio_list:
         return 0.0
+
+    # ⬇️ TEMPORARY DEBUG: Remove after testing ⬇️
+    print(f"DEBUG KFIN INVESTED: Received {len(folio_list)} folios: {folio_list}")
+    st.write(f"**DEBUG:** Calculating invested for {len(folio_list)} folios:", folio_list)
+    # ⬆️ TEMPORARY DEBUG: Remove after testing ⬆️
 
     with get_conn() as conn:
         placeholders = ','.join(['?'] * len(folio_list))
@@ -873,6 +877,29 @@ def get_kfin_invested_amount(folio_list):
         """
         result = conn.execute(query, folio_list).fetchone()[0]
         return float(result) if result is not None else 0.0
+
+
+@st.cache_data(ttl=180, show_spinner=False)
+def get_kfin_invested_per_scheme(folio_list: list) -> pd.DataFrame:
+    """
+    Return invested amount PER SCHEME for KFin folios.
+    Groups by folio + product_code so each scheme gets its own total.
+    """
+    if not folio_list:
+        return pd.DataFrame(columns=["folio_id", "product_code", "invested_amount"])
+
+    placeholders = ",".join(["?"] * len(folio_list))
+    with get_conn() as conn:
+        query = f"""
+            SELECT
+                td_acno   AS folio_id,
+                fmcode    AS product_code,
+                COALESCE(SUM(td_amt), 0) AS invested_amount
+            FROM kfin_transactions
+            WHERE td_acno IN ({placeholders})
+            GROUP BY td_acno, fmcode
+        """
+        return pd.read_sql(query, conn, params=folio_list)
 
 
 # ==================== DATA LOADERS ====================
@@ -1408,7 +1435,7 @@ if mode == "📊 Dashboard":
 
 # ==================== 👥 CLIENTS ====================
 elif mode == "👥 Clients":
-    st.header("👥 Client Portfolio & Analytics")
+    st.header("👤 Client Portfolio & Analytics")
 
 
     # Client Search
@@ -1447,6 +1474,7 @@ elif mode == "👥 Clients":
     if not selected_display: st.stop()
 
     selected_client = search_results[search_results['display'] == selected_display].iloc[0]
+    print(selected_client)
     client_code = selected_client['client_code']
     pan = selected_client['pan']
     name = selected_client['name']
@@ -1484,23 +1512,40 @@ elif mode == "👥 Clients":
         st.stop()
 
 
-    # KFin Invested Amount
+    # =====================================================================
+    # FIX 1: KFIN INVESTED AMOUNT (PER SCHEME, NOT TOTAL FOLIO)
+    # =====================================================================
     @st.cache_data(ttl=180)
-    def get_kfin_invested_amount(folios):
-        if not folios: return 0.0
+    def get_kfin_invested_per_scheme(folios):
+        if not folios:
+            return pd.DataFrame(columns=["folio_id", "product_code", "invested_amount"])
         with get_conn() as conn:
             ph = ','.join(['?'] * len(folios))
-            res = conn.execute(f"SELECT COALESCE(SUM(td_amt),0) FROM kfin_transactions WHERE td_acno IN ({ph})",
-                               folios).fetchone()[0]
-            return float(res)
+            # Group by folio AND product code so each scheme gets its own sum
+            return pd.read_sql(f"""
+                SELECT 
+                    td_acno AS folio_id, 
+                    fmcode AS product_code,
+                    COALESCE(SUM(td_amt), 0) AS invested_amount
+                FROM kfin_transactions 
+                WHERE td_acno IN ({ph})
+                GROUP BY td_acno, fmcode
+            """, conn, params=folios)
 
 
     # Holdings
     holdings = folio_nav_df[folio_nav_df['folio_id'].isin(all_folios)].copy()
+
     if not holdings.empty:
-        holdings = holdings.copy()
+        # Apply KFin fix: Merge the per-scheme DataFrame instead of painting one total
         if 'KFinTech' in holdings['rta'].values:
-            holdings.loc[holdings['rta'] == 'KFinTech', 'file_aum'] = get_kfin_invested_amount(kfin_f['folio'].tolist())
+            kfin_invested_df = get_kfin_invested_per_scheme(kfin_f['folio'].tolist())
+            holdings = holdings.merge(kfin_invested_df, on=["folio_id", "product_code"], how="left")
+
+            # Update only KFin rows with their specific scheme invested amount
+            kfin_mask = holdings['rta'] == 'KFinTech'
+            holdings.loc[kfin_mask, 'file_aum'] = holdings.loc[kfin_mask, 'invested_amount']
+            holdings = holdings.drop(columns=['invested_amount'], errors='ignore')
 
         total_invested = holdings['file_aum'].sum()
         total_current = holdings['nav_based_aum'].sum() or 0
@@ -1511,7 +1556,7 @@ elif mode == "👥 Clients":
         h2.metric("Current Value", format_aum(total_current))
         h3.metric("Gain / Loss", format_aum(total_gain_loss),
                   delta=f"{(total_gain_loss / total_invested * 100):.2f}%" if total_invested > 0 else "0%")
-        h4.metric("Folios", len(all_folios))
+        h4.metric("Total Folios", len(all_folios))
 
         # Display Holdings
         holdings["gain_loss"] = holdings["nav_based_aum"] - holdings["file_aum"]
@@ -1545,62 +1590,97 @@ elif mode == "👥 Clients":
             row = display_holdings.iloc[idx]
             st.divider()
             st.subheader(f"Transactions → {row['Scheme']} ({row['Folio']})")
-            # ... (keep your transaction query logic here)
+            # ... (keep your existing transaction query logic here)
 
     st.divider()
 
-    # ==================== SIP SECTION (Deduplicated + All Status) ====================
-    st.subheader("🔄 All SIPs (BSE + CAMS + KFin)")
+    # =====================================================================
+    # FIX 2: SIP DEDUPLICATION (Using only columns that exist in your DB)
+    # =====================================================================
+    st.subheader("🔄 All SIPs (Deduplicated)")
 
     with get_conn() as conn:
-        # BSE XSIP
+        # 1. Load BSE XSIP (The Master)
         bse_sip = pd.read_sql("""
-            SELECT amc_name, scheme_name, installments_amt, status, frequency_type, 
-                   'BSE' as source 
-            FROM bse_xsip WHERE client_code = ?
-        """, conn, params=(client_code,))
+                SELECT amc_name, scheme_name, installments_amt, status, frequency_type, 
+                       'BSE' as source 
+                FROM bse_xsip WHERE client_code = ?
+            """, conn, params=(client_code,))
 
-        # CAMS SIP
+        # 2. Load CAMS SIP
         cams_sip = pd.read_sql("""
-            SELECT scheme as scheme_name, auto_amount as installments_amt, 
-                   periodicity as frequency_type, 
-                   CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END as status,
-                   'CAMS' as source
-            FROM cams_sip WHERE folio_no IN (SELECT foliochk FROM cams_folio WHERE pan_no = ?)
-        """, conn, params=(pan,))
+                SELECT scheme as scheme_name, auto_amount as installments_amt, 
+                       periodicity as frequency_type, 
+                       CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END as status,
+                       'CAMS' as source
+                FROM cams_sip WHERE folio_no IN (SELECT foliochk FROM cams_folio WHERE pan_no = ?)
+            """, conn, params=(pan,))
 
-        # KFin SIP
+        # 3. Load KFin SIP
         kfin_sip = pd.read_sql("""
-            SELECT scheme_name, amount as installments_amt, frequency as frequency_type, 
-                   status, 'KFin' as source
-            FROM kfin_sip WHERE folio IN (SELECT folio FROM kfin_folio WHERE pan_number = ?)
-        """, conn, params=(pan,))
+                SELECT scheme_name, amount as installments_amt, frequency as frequency_type, 
+                       status, 'KFin' as source
+                FROM kfin_sip WHERE folio IN (SELECT folio FROM kfin_folio WHERE pan_number = ?)
+            """, conn, params=(pan,))
 
-    # Combine and Deduplicate
-    all_sips = pd.concat([bse_sip, cams_sip, kfin_sip], ignore_index=True)
 
-    if not all_sips.empty:
-        # Simple deduplication logic
-        all_sips = all_sips.drop_duplicates(subset=['scheme_name', 'installments_amt', 'frequency_type'], keep='first')
+    # --- Deduplication Logic (BSE Priority) ---
+    # Since we don't have scheme_code/folio_no reliably in all tables,
+    # we match on Scheme Name + Amount + Frequency
+    def _make_safe_key(df):
+        return (
+                df["scheme_name"].fillna("").str.strip().str.upper() + "|" +
+                df["installments_amt"].astype(str) + "|" +
+                df["frequency_type"].fillna("").str.strip().str.upper()
+        )
+
+
+    frames_to_keep = []
+    bse_keys = set()
+
+    if not bse_sip.empty:
+        bse_sip["_match_key"] = _make_safe_key(bse_sip)
+        bse_keys = set(bse_sip["_match_key"])
+        frames_to_keep.append(bse_sip)
+
+    if not cams_sip.empty:
+        cams_sip["_match_key"] = _make_safe_key(cams_sip)
+        cams_direct = cams_sip[~cams_sip["_match_key"].isin(bse_keys)].copy()
+        if not cams_direct.empty:
+            cams_direct["source"] = "CAMS (Direct)"
+            frames_to_keep.append(cams_direct)
+
+    if not kfin_sip.empty:
+        kfin_sip["_match_key"] = _make_safe_key(kfin_sip)
+        kfin_direct = kfin_sip[~kfin_sip["_match_key"].isin(bse_keys)].copy()
+        if not kfin_direct.empty:
+            kfin_direct["source"] = "KFin (Direct)"
+            frames_to_keep.append(kfin_direct)
+
+    if frames_to_keep:
+        final_sips = pd.concat(frames_to_keep, ignore_index=True)
+        final_sips = final_sips.drop(columns=["_match_key"], errors='ignore')
 
         # Summary
-        active = len(all_sips[all_sips['status'].str.contains('Active', na=False, case=False)])
-        total_monthly = all_sips['installments_amt'].sum()
+        active = len(final_sips[final_sips['status'].str.contains('Active', na=False, case=False)])
+        total_monthly = final_sips['installments_amt'].sum()
 
         s1, s2, s3 = st.columns(3)
-        s1.metric("Total SIPs", len(all_sips))
+        s1.metric("Total SIPs", len(final_sips))
         s2.metric("Active SIPs", active)
         s3.metric("Monthly Commitment", format_currency(total_monthly))
 
         st.dataframe(
-            all_sips[['source', 'scheme_name', 'installments_amt', 'frequency_type', 'status']],
+            final_sips[['source', 'scheme_name', 'installments_amt', 'frequency_type', 'status']].sort_values('source'),
             use_container_width=True,
             hide_index=True,
-            column_config={"installments_amt": st.column_config.NumberColumn("Amount", format="₹ %.2f")}
+            column_config={
+                "installments_amt": st.column_config.NumberColumn("Amount", format="₹ %.2f"),
+                "source": st.column_config.TextColumn("Source")
+            }
         )
     else:
         st.info("No SIP records found.")
-
 
 # ==================== 💰 Brokerage Report ====================
 
