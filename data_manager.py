@@ -252,6 +252,36 @@ def _resolve_columns(df: pd.DataFrame) -> dict[str, str | None]:
         resolved[field] = found
     return resolved
 
+def _cflex(columns, *base_names: str) -> str | None:
+    """
+    Flexible header matcher for BSE exports whose numbering style varies
+    (nominee1_name vs nominee_1_name vs nominee_name_1, bank1_account_no vs
+    account_no_1, etc). `columns` is any iterable of already-lowercased,
+    underscore-joined column names (df.columns or row.index).
+    """
+    cols = set(columns)
+    variants = set()
+    for base in base_names:
+        variants.add(base)
+        m = re.match(r"^([a-z]+)(\d)_(.+)$", base)
+        if m:
+            word, num, rest = m.groups()
+            variants.add(f"{word}_{num}_{rest}")
+            variants.add(f"{word}{num}{rest}")
+            variants.add(f"{word}_{rest}_{num}")
+            variants.add(f"{rest}_{num}")
+            variants.add(f"{word}_{num}{rest}")
+        m2 = re.match(r"^(bank)(\d)_(.+)$", base)
+        if m2:
+            _, num, rest = m2.groups()
+            variants.add(f"bank_{rest}_{num}")
+            variants.add(f"{rest}_{num}")
+            variants.add(f"bank{num}_{rest}")
+    for v in variants:
+        if v in cols:
+            return v
+    return None
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # BSE PARSERS
@@ -469,19 +499,25 @@ def parse_bse_client_master(file, replace: bool) -> tuple[bool, str]:
             clean_str(row.get(nsdl_cltid_col, "")) if nsdl_cltid_col else "",
         )
 
-        # [42-91] Bank 1–5 (10 fields each)
+        # [42-91] Bank 1–5 (10 fields each) — FIXED with _cflex
         bank_fields = []
         for seq in range(1, 6):
             pfx = f"bank{seq}_"
-            acno_col = _c(f"{pfx}account_no", f"{pfx}ac_no", f"bank_account_no_{seq}")
+            acno_col = _cflex(df.columns, f"{pfx}account_no", f"{pfx}ac_no", f"account_no_{seq}")
+            type_col = _cflex(df.columns, f"{pfx}account_type", f"account_type_{seq}")
+            micr_col = _cflex(df.columns, f"{pfx}micr_no", f"micr_no_{seq}", f"micr_{seq}")
+            ifsc_col = _cflex(df.columns, f"{pfx}ifsc_code", f"ifsc_code_{seq}", f"ifsc_{seq}")
+            bname_col = _cflex(df.columns, f"{pfx}bank_name", f"bank_name_{seq}")
+            branch_col = _cflex(df.columns, f"{pfx}bank_branch", f"bank_branch_{seq}", f"branch_{seq}")
+
             has_acct = bool(acno_col and clean_str(row.get(acno_col, "")))
             bank_fields += [
-                clean_str(row.get(_c(f"{pfx}account_type", f"bank_account_type_{seq}") or "", "")),
+                clean_str(row.get(type_col or "", "")),
                 clean_str(row.get(acno_col or "", "")),
-                clean_str(row.get(_c(f"{pfx}micr_no", f"micr_{seq}") or "", "")),
-                clean_str(row.get(_c(f"{pfx}ifsc_code", f"ifsc_{seq}") or "", "")),
-                clean_str(row.get(_c(f"{pfx}bank_name", f"bank_name_{seq}") or "", "")),
-                clean_str(row.get(_c(f"{pfx}bank_branch", f"branch_{seq}") or "", "")),
+                clean_str(row.get(micr_col or "", "")),
+                clean_str(row.get(ifsc_col or "", "")),
+                clean_str(row.get(bname_col or "", "")),
+                clean_str(row.get(branch_col or "", "")),
                 ("Y" if seq == 1 and has_acct else ("N" if has_acct else "")),
                 parse_date_safe(row.get(created_col, "")) if (created_col and has_acct) else "",
                 parse_date_safe(row.get(modified_col, "")) if (modified_col and has_acct) else "",
@@ -577,7 +613,7 @@ def parse_bse_client_master(file, replace: bool) -> tuple[bool, str]:
             clean_str(row.get(nom_auth_mode_col, "")) if nom_auth_mode_col else "",
         )
 
-        # [141-157] Nominee 1 (17 fields)
+        # [141-157] Nominee 1 (17 fields) — FIXED with _cflex internally
         nom1 = _build_nominee(row, _c, 1)
 
         # [158-174] Nominee 2 (17 fields)
@@ -702,27 +738,34 @@ def parse_bse_client_master(file, replace: bool) -> tuple[bool, str]:
     return True, msg
 
 
+
 def _build_nominee(row, _c_func, seq: int) -> tuple:
-    """Build a 17-field nominee tuple in init.py schema order."""
+    """Build a 17-field nominee tuple in init.py schema order. Uses flexible
+    header matching since BSE exports vary in numbering style."""
     pfx = f"nominee{seq}_"
     npfx = f"nom{seq}_"
-    name_val = clean_str(row.get(_c_func(f"{pfx}name", f"nominee_{seq}_name") or "", ""))
-    relationship = clean_str(row.get(_c_func(f"{pfx}relationship") or "", ""))
-    percentage = _sf(row.get(_c_func(f"{pfx}percentage") or "", 0))
-    minor_flag = clean_str(row.get(_c_func(f"{pfx}is_minor", f"{pfx}minor_flag") or "", ""))
-    dob = parse_date_safe(row.get(_c_func(f"{pfx}dob") or "", ""))
-    guardian = clean_str(row.get(_c_func(f"{pfx}guardian_name") or "", ""))
-    guardian_pan = clean_str(row.get(_c_func(f"{pfx}guardian_pan") or "", ""))
-    id_typ = clean_str(row.get(_c_func(f"{npfx}id_typ") or "", ""))
-    idno = clean_str(row.get(_c_func(f"{npfx}idno") or "", ""))
-    nom_email = clean_str(row.get(_c_func(f"{pfx}email", f"{npfx}email") or "", "")).lower()
-    nom_mob = clean_str(row.get(_c_func(f"{pfx}mobile", f"{npfx}mob") or "", ""))
-    add1 = clean_str(row.get(_c_func(f"{pfx}address1", f"{npfx}add1") or "", ""))
-    add2 = clean_str(row.get(_c_func(f"{pfx}address2", f"{npfx}add2") or "", ""))
-    add3 = clean_str(row.get(_c_func(f"{pfx}address3", f"{npfx}add3") or "", ""))
-    nom_city = clean_str(row.get(_c_func(f"{pfx}city", f"{npfx}city") or "", ""))
-    nom_pin = clean_str(row.get(_c_func(f"{pfx}pincode", f"{npfx}pin") or "", ""))
-    nom_con = clean_str(row.get(_c_func(f"{npfx}con") or "", ""))
+    cols = row.index
+
+    def F(*bases):
+        return _cflex(cols, *bases)
+
+    name_val = clean_str(row.get(F(f"{pfx}name", f"nominee_{seq}_name") or "", ""))
+    relationship = clean_str(row.get(F(f"{pfx}relationship") or "", ""))
+    percentage = _sf(row.get(F(f"{pfx}percentage") or "", 0))
+    minor_flag = clean_str(row.get(F(f"{pfx}is_minor", f"{pfx}minor_flag") or "", ""))
+    dob = parse_date_safe(row.get(F(f"{pfx}dob") or "", ""))
+    guardian = clean_str(row.get(F(f"{pfx}guardian_name") or "", ""))
+    guardian_pan = clean_str(row.get(F(f"{pfx}guardian_pan") or "", ""))
+    id_typ = clean_str(row.get(F(f"{npfx}id_typ") or "", ""))
+    idno = clean_str(row.get(F(f"{npfx}idno") or "", ""))
+    nom_email = clean_str(row.get(F(f"{pfx}email", f"{npfx}email") or "", "")).lower()
+    nom_mob = clean_str(row.get(F(f"{pfx}mobile", f"{npfx}mob") or "", ""))
+    add1 = clean_str(row.get(F(f"{pfx}address1", f"{npfx}add1") or "", ""))
+    add2 = clean_str(row.get(F(f"{pfx}address2", f"{npfx}add2") or "", ""))
+    add3 = clean_str(row.get(F(f"{pfx}address3", f"{npfx}add3") or "", ""))
+    nom_city = clean_str(row.get(F(f"{pfx}city", f"{npfx}city") or "", ""))
+    nom_pin = clean_str(row.get(F(f"{pfx}pincode", f"{npfx}pin") or "", ""))
+    nom_con = clean_str(row.get(F(f"{npfx}con") or "", ""))
     return (
         name_val, relationship, percentage, minor_flag, dob, guardian, guardian_pan,
         id_typ, idno, nom_email, nom_mob, add1, add2, add3, nom_city, nom_pin, nom_con,

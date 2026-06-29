@@ -857,6 +857,24 @@ def theme_plotly(fig, dark: bool):
     return fig
 
 
+# Calcute the Invested Amount for Karvy Schemes
+@st.cache_data(ttl=180, show_spinner=False)
+def get_kfin_invested_amount(folio_list):
+    """Return total invested amount (sum of td_amt) for KFin folios."""
+    if not folio_list:
+        return 0.0
+
+    with get_conn() as conn:
+        placeholders = ','.join(['?'] * len(folio_list))
+        query = f"""
+            SELECT COALESCE(SUM(td_amt), 0) as total_invested
+            FROM kfin_transactions 
+            WHERE td_acno IN ({placeholders})
+        """
+        result = conn.execute(query, folio_list).fetchone()[0]
+        return float(result) if result is not None else 0.0
+
+
 # ==================== DATA LOADERS ====================
 @st.cache_data(ttl=60, show_spinner=False)
 def load_table_summary(table: str) -> pd.DataFrame:
@@ -1116,10 +1134,11 @@ from theme_patch import render_theme
 
 st.markdown(render_theme(dark), unsafe_allow_html=True)
 
-# Navigation
-nav_cols = st.columns([1, 1, 1])
-nav_options = ["📊 Dashboard", "💰 Brokerage Report", "⚙️ Admin Panel"]
-nav_keys = ["nav_dash", "nav_admin", "nav_brokerage"]
+# ==================== Navigation ====================
+nav_cols = st.columns([1, 1, 1, 1])  # Changed to 4 columns
+nav_options = ["📊 Dashboard", "👥 Clients", "💰 Brokerage Report", "⚙️ Admin Panel"]
+nav_keys = ["nav_dash", "nav_clients", "nav_brokerage", "nav_admin"]
+
 if "nav_mode" not in st.session_state:
     st.session_state["nav_mode"] = "📊 Dashboard"
 
@@ -1387,12 +1406,209 @@ if mode == "📊 Dashboard":
 
 
 
+# ==================== 👥 CLIENTS ====================
+elif mode == "👥 Clients":
+    st.header("👥 Client Portfolio & Analytics")
+
+
+    # Client Search
+    @st.cache_data(ttl=300)
+    def load_clients_search():
+        with get_conn() as conn:
+            return pd.read_sql("""
+                SELECT client_code, 
+                       primary_holder_first_name || ' ' || primary_holder_last_name AS name, 
+                       primary_holder_pan AS pan, mobile, email, city
+                FROM clients WHERE primary_holder_pan IS NOT NULL
+            """, conn)
+
+
+    clients_df = load_clients_search()
+    if clients_df.empty:
+        st.warning("No clients found. Upload client master.")
+        st.stop()
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        search_term = st.text_input("🔍 Search Client", key="client_search")
+    with col2:
+        max_show = st.slider("Show", 10, 100, 30)
+
+    if search_term:
+        mask = clients_df.apply(lambda x: x.astype(str).str.contains(search_term, case=False)).any(axis=1)
+        search_results = clients_df[mask].head(max_show)
+    else:
+        search_results = clients_df.head(max_show)
+
+    search_results['display'] = search_results.apply(
+        lambda r: f"{r['name']} | PAN: {r['pan']} | {r['client_code']}", axis=1)
+
+    selected_display = st.selectbox("Select Client", search_results['display'].tolist(), key="client_select")
+    if not selected_display: st.stop()
+
+    selected_client = search_results[search_results['display'] == selected_display].iloc[0]
+    client_code = selected_client['client_code']
+    pan = selected_client['pan']
+    name = selected_client['name']
+
+    st.divider()
+    st.subheader(f"👤 {name}")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Client Code", client_code)
+    c2.metric("PAN", pan)
+    c3.metric("Mobile", selected_client.get('mobile') or 'N/A')
+    c4.metric("Email", selected_client.get('email') or 'N/A')
+    c5.metric("City", selected_client.get('city') or 'N/A')
+    st.divider()
+
+    # NAV Data
+    if "folio_nav_df" not in st.session_state:
+        with st.spinner("Loading NAV..."):
+            download_and_save_nav_if_needed()
+            st.session_state["folio_nav_df"] = get_all_folios_with_isin_and_nav(get_conn)
+
+    folio_nav_df = st.session_state["folio_nav_df"]
+
+    # Get Folios
+    with get_conn() as conn:
+        cams_f = pd.read_sql("SELECT foliochk FROM cams_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+                             conn, params=(pan, name))
+        kfin_f = pd.read_sql(
+            "SELECT folio FROM kfin_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
+            conn, params=(pan, name))
+
+    all_folios = set(cams_f['foliochk'].tolist() + kfin_f['folio'].tolist())
+
+    if not all_folios:
+        st.info("No folios found.")
+        st.stop()
+
+
+    # KFin Invested Amount
+    @st.cache_data(ttl=180)
+    def get_kfin_invested_amount(folios):
+        if not folios: return 0.0
+        with get_conn() as conn:
+            ph = ','.join(['?'] * len(folios))
+            res = conn.execute(f"SELECT COALESCE(SUM(td_amt),0) FROM kfin_transactions WHERE td_acno IN ({ph})",
+                               folios).fetchone()[0]
+            return float(res)
+
+
+    # Holdings
+    holdings = folio_nav_df[folio_nav_df['folio_id'].isin(all_folios)].copy()
+    if not holdings.empty:
+        holdings = holdings.copy()
+        if 'KFinTech' in holdings['rta'].values:
+            holdings.loc[holdings['rta'] == 'KFinTech', 'file_aum'] = get_kfin_invested_amount(kfin_f['folio'].tolist())
+
+        total_invested = holdings['file_aum'].sum()
+        total_current = holdings['nav_based_aum'].sum() or 0
+        total_gain_loss = total_current - total_invested
+
+        h1, h2, h3, h4 = st.columns(4)
+        h1.metric("Total Invested", format_aum(total_invested))
+        h2.metric("Current Value", format_aum(total_current))
+        h3.metric("Gain / Loss", format_aum(total_gain_loss),
+                  delta=f"{(total_gain_loss / total_invested * 100):.2f}%" if total_invested > 0 else "0%")
+        h4.metric("Folios", len(all_folios))
+
+        # Display Holdings
+        holdings["gain_loss"] = holdings["nav_based_aum"] - holdings["file_aum"]
+        holdings["portfolio_pct"] = (holdings["nav_based_aum"] / total_current * 100).fillna(
+            0) if total_current > 0 else 0
+
+        display_holdings = holdings[[
+            'rta', 'folio_id', 'amc_name', 'scheme_name', 'units', 'file_aum',
+            'current_nav', 'nav_based_aum', 'gain_loss', 'portfolio_pct'
+        ]].rename(columns={
+            'rta': 'RTA', 'folio_id': 'Folio', 'amc_name': 'AMC', 'scheme_name': 'Scheme',
+            'file_aum': 'Invested', 'nav_based_aum': 'Current Value',
+            'gain_loss': 'Gain/Loss', 'portfolio_pct': '% Portfolio'
+        })
+
+        selected = st.dataframe(
+            display_holdings.sort_values("Current Value", ascending=False),
+            use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
+            column_config={
+                "Units": st.column_config.NumberColumn(format="%.4f"),
+                "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Current Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+                "% Portfolio": st.column_config.NumberColumn(format="%.2f%%"),
+            }
+        )
+
+        # Transaction View
+        if selected and len(selected["selection"]["rows"]) > 0:
+            idx = selected["selection"]["rows"][0]
+            row = display_holdings.iloc[idx]
+            st.divider()
+            st.subheader(f"Transactions → {row['Scheme']} ({row['Folio']})")
+            # ... (keep your transaction query logic here)
+
+    st.divider()
+
+    # ==================== SIP SECTION (Deduplicated + All Status) ====================
+    st.subheader("🔄 All SIPs (BSE + CAMS + KFin)")
+
+    with get_conn() as conn:
+        # BSE XSIP
+        bse_sip = pd.read_sql("""
+            SELECT amc_name, scheme_name, installments_amt, status, frequency_type, 
+                   'BSE' as source 
+            FROM bse_xsip WHERE client_code = ?
+        """, conn, params=(client_code,))
+
+        # CAMS SIP
+        cams_sip = pd.read_sql("""
+            SELECT scheme as scheme_name, auto_amount as installments_amt, 
+                   periodicity as frequency_type, 
+                   CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END as status,
+                   'CAMS' as source
+            FROM cams_sip WHERE folio_no IN (SELECT foliochk FROM cams_folio WHERE pan_no = ?)
+        """, conn, params=(pan,))
+
+        # KFin SIP
+        kfin_sip = pd.read_sql("""
+            SELECT scheme_name, amount as installments_amt, frequency as frequency_type, 
+                   status, 'KFin' as source
+            FROM kfin_sip WHERE folio IN (SELECT folio FROM kfin_folio WHERE pan_number = ?)
+        """, conn, params=(pan,))
+
+    # Combine and Deduplicate
+    all_sips = pd.concat([bse_sip, cams_sip, kfin_sip], ignore_index=True)
+
+    if not all_sips.empty:
+        # Simple deduplication logic
+        all_sips = all_sips.drop_duplicates(subset=['scheme_name', 'installments_amt', 'frequency_type'], keep='first')
+
+        # Summary
+        active = len(all_sips[all_sips['status'].str.contains('Active', na=False, case=False)])
+        total_monthly = all_sips['installments_amt'].sum()
+
+        s1, s2, s3 = st.columns(3)
+        s1.metric("Total SIPs", len(all_sips))
+        s2.metric("Active SIPs", active)
+        s3.metric("Monthly Commitment", format_currency(total_monthly))
+
+        st.dataframe(
+            all_sips[['source', 'scheme_name', 'installments_amt', 'frequency_type', 'status']],
+            use_container_width=True,
+            hide_index=True,
+            column_config={"installments_amt": st.column_config.NumberColumn("Amount", format="₹ %.2f")}
+        )
+    else:
+        st.info("No SIP records found.")
+
+
 # ==================== 💰 Brokerage Report ====================
 
 elif mode == "💰 Brokerage Report":
     st.header("💰 Brokerage Report")
     st.caption(
-        "File-reported brokerage (CAMS + KFin), AMC names resolved the same way as your Dashboard (AMFI-canonical via ISIN)."
+        "File-reported brokerage (CAMS + KFin), AMC names resolved the same way as your Dashboard (AMFI-canonical via "
+        "ISIN)."
     )
 
     data = load_brokerage_report(get_conn)
