@@ -1,3 +1,5 @@
+"""Old Init.py"""
+
 import sqlite3
 from contextlib import contextmanager
 
@@ -931,7 +933,7 @@ def init_db() -> None:
             cleared                 TEXT,
             invstate                TEXT,
             upload_batch            TEXT,
-            UNIQUE(td_acno, td_trno)
+
         );
 
         -- =====================================================================
