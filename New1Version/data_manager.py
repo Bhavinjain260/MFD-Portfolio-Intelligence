@@ -1380,7 +1380,8 @@ kfin_table_column_map = {
 def render_data_manager():
     st.header("📁 Data Upload Manager")
     st.markdown(
-        "Upload raw BSE, CAMS, and KFinTech files. Data is inserted exactly as provided in the files (no text case changes or date reformatting).")
+        "Upload raw BSE, CAMS, and KFinTech files. Data is inserted exactly as provided in the files (no text case "
+        "changes or date reformatting).")
 
     tab_bse, tab_cams, tab_kfin = st.tabs(["⭐ BSE Star", "🏦 CAMS", "🟦 KFinTech"])
 
