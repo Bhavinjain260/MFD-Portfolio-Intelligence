@@ -1248,46 +1248,46 @@ if mode == "⚙️ Admin Panel":
 
         st.divider()
 
-        with get_conn() as conn:
-            total_rows = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-
-        st.metric(f"Total Records in {table}", f"{total_rows:,}")
-
-        if total_rows > 0:
-            df_raw = load_table_summary(table)
-            if not df_raw.empty:
-                st.dataframe(df_raw, width='stretch', hide_index=True)
-
-                csv = df_raw.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    label="⬇️ Download Raw Data (CSV)",
-                    data=csv,
-                    file_name=f"{source}_{data_type.replace(' ', '_')}_raw.csv",
-                    mime="text/csv",
-                )
-            else:
-                st.info("No data to display.")
-        else:
-            st.info(f"No data in `{table}` yet. Upload data in the Upload Data tab.")
+        # with get_conn() as conn:
+        #     total_rows = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        #
+        # st.metric(f"Total Records in {table}", f"{total_rows:,}")
+        #
+        # if total_rows > 0:
+        #     df_raw = load_table_summary(table)
+        #     if not df_raw.empty:
+        #         st.dataframe(df_raw, width='stretch', hide_index=True)
+        #
+        #         csv = df_raw.to_csv(index=False).encode("utf-8")
+        #         st.download_button(
+        #             label="⬇️ Download Raw Data (CSV)",
+        #             data=csv,
+        #             file_name=f"{source}_{data_type.replace(' ', '_')}_raw.csv",
+        #             mime="text/csv",
+        #         )
+        #     else:
+        #         st.info("No data to display.")
+        # else:
+        #     st.info(f"No data in `{table}` yet. Upload data in the Upload Data tab.")
 
         # DB Stats at bottom
         st.divider()
-        st.subheader("🗄️ Database Stats")
-        stats = load_db_stats()
-
-        cols = st.columns(3)
-        categories = {
-            "BSE": ["clients", "bse_xsip", "bse_scheme_master"],
-            "CAMS": ["cams_folio", "cams_transactions", "cams_sip", "cams_aum", "cams_brokerage"],
-            "KFinTech": ["kfin_folio", "kfin_transactions", "kfin_sip", "kfin_aum", "kfin_brokerage"],
-        }
-        for i, (cat, tables) in enumerate(categories.items()):
-            with cols[i]:
-                st.markdown(f"**{cat}**")
-                for t in tables:
-                    st.caption(f"{t}: **{stats.get(t, 0):,}**")
-
-        with cols[0]:
-            st.markdown("**Other**")
-            st.caption(f"monthly_brokerage: **{stats.get('monthly_brokerage', 0):,}**")
-            st.caption(f"amc_code_map: **{stats.get('amc_code_map', 0):,}**")
+        # st.subheader("🗄️ Database Stats")
+        # stats = load_db_stats()
+        #
+        # cols = st.columns(3)
+        # categories = {
+        #     "BSE": ["clients", "bse_xsip", "bse_scheme_master"],
+        #     "CAMS": ["cams_folio", "cams_transactions", "cams_sip", "cams_aum", "cams_brokerage"],
+        #     "KFinTech": ["kfin_folio", "kfin_transactions", "kfin_sip", "kfin_aum", "kfin_brokerage"],
+        # }
+        # for i, (cat, tables) in enumerate(categories.items()):
+        #     with cols[i]:
+        #         st.markdown(f"**{cat}**")
+        #         for t in tables:
+        #             st.caption(f"{t}: **{stats.get(t, 0):,}**")
+        #
+        # with cols[0]:
+        #     st.markdown("**Other**")
+        #     st.caption(f"monthly_brokerage: **{stats.get('monthly_brokerage', 0):,}**")
+        #     st.caption(f"amc_code_map: **{stats.get('amc_code_map', 0):,}**")

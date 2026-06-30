@@ -12,6 +12,8 @@ import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
+import re
+
 
 import pandas as pd
 import streamlit as st
@@ -217,7 +219,7 @@ def parse_bse_client_master(file, replace: bool) -> tuple[bool, str]:
     except Exception as exc:
         return False, f"File read error: {exc}"
 
-    df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
+    df.columns = [re.sub(r"[^a-z0-9]+", "_", c.strip().lower()).strip("_") for c in df.columns]
 
     def _c(*candidates):
         return next((c for c in candidates if c in df.columns), None)
