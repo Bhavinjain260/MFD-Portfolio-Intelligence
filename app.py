@@ -1524,7 +1524,6 @@ if mode == "📊 Dashboard":
 elif mode == "👥 Clients":
     st.header("👤 Client Portfolio & Analytics")
 
-
     # Client Search
     @st.cache_data(ttl=300)
     def load_clients_search():
@@ -1533,13 +1532,12 @@ elif mode == "👥 Clients":
                 SELECT client_code, 
                 primary_holder_first_name || ' ' || primary_holder_last_name AS name, 
                 primary_holder_pan AS pan, 
-                indian_mobile_no AS mobile,  -- ← FIXED
+                indian_mobile_no AS mobile,
                 email, 
                 city
-                    FROM bse_client_master             -- ← FIXED
-                    WHERE primary_holder_pan IS NOT NULL
+                FROM bse_client_master
+                WHERE primary_holder_pan IS NOT NULL
             """, conn)
-
 
     clients_df = load_clients_search()
     if clients_df.empty:
@@ -1562,10 +1560,10 @@ elif mode == "👥 Clients":
         lambda r: f"{r['name']} | PAN: {r['pan']} | {r['client_code']}", axis=1)
 
     selected_display = st.selectbox("Select Client", search_results['display'].tolist(), key="client_select")
-    if not selected_display: st.stop()
+    if not selected_display:
+        st.stop()
 
     selected_client = search_results[search_results['display'] == selected_display].iloc[0]
-    print(selected_client)
     client_code = selected_client['client_code']
     pan = selected_client['pan']
     name = selected_client['name']
@@ -1590,8 +1588,9 @@ elif mode == "👥 Clients":
 
     # Get Folios
     with get_conn() as conn:
-        cams_f = pd.read_sql("SELECT foliochk FROM cams_wbr9_folio  WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
-                             conn, params=(pan, name))
+        cams_f = pd.read_sql(
+            "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+            conn, params=(pan, name))
         kfin_f = pd.read_sql(
             "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
             conn, params=(pan, name))
@@ -1602,17 +1601,13 @@ elif mode == "👥 Clients":
         st.info("No folios found.")
         st.stop()
 
-
-    # =====================================================================
-    # FIX 1: KFIN INVESTED AMOUNT (PER SCHEME, NOT TOTAL FOLIO)
-    # =====================================================================
+    # KFin Invested Amount (Per Scheme)
     @st.cache_data(ttl=180)
     def get_kfin_invested_per_scheme(folios):
         if not folios:
             return pd.DataFrame(columns=["folio_id", "product_code", "invested_amount"])
         with get_conn() as conn:
             ph = ','.join(['?'] * len(folios))
-            # Group by folio AND product code so each scheme gets its own sum
             return pd.read_sql(f"""
                 SELECT 
                     td_acno AS folio_id, 
@@ -1623,12 +1618,11 @@ elif mode == "👥 Clients":
                 GROUP BY td_acno, fmcode
             """, conn, params=folios)
 
-
     # Holdings
     holdings = folio_nav_df[folio_nav_df['folio_id'].isin(all_folios)].copy()
 
     if not holdings.empty:
-        # Apply KFin fix: Merge the per-scheme DataFrame instead of painting one total
+        # Apply KFin fix: Merge per-scheme invested amounts
         if 'KFinTech' in holdings['rta'].values:
             kfin_invested_df = get_kfin_invested_per_scheme(kfin_f['folio'].tolist())
             holdings = holdings.merge(kfin_invested_df, on=["folio_id", "product_code"], how="left")
@@ -1663,8 +1657,11 @@ elif mode == "👥 Clients":
             'gain_loss': 'Gain/Loss', 'portfolio_pct': '% Portfolio'
         })
 
+        # CRITICAL FIX: Sort once, use same sorted DataFrame for display AND indexing
+        display_holdings_sorted = display_holdings.sort_values("Current Value", ascending=False).reset_index(drop=True)
+
         selected = st.dataframe(
-            display_holdings.sort_values("Current Value", ascending=False),
+            display_holdings_sorted,
             use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
             column_config={
                 "Units": st.column_config.NumberColumn(format="%.4f"),
@@ -1678,53 +1675,88 @@ elif mode == "👥 Clients":
         # Transaction View
         if selected and len(selected["selection"]["rows"]) > 0:
             idx = selected["selection"]["rows"][0]
-            row = display_holdings.iloc[idx]
+            row = display_holdings_sorted.iloc[idx]  # FIXED: Use sorted DataFrame
+            folio_id = row['Folio']
+            rta = row['RTA']
             st.divider()
-            st.subheader(f"Transactions → {row['Scheme']} ({row['Folio']})")
-            # ... (keep your existing transaction query logic here)
+            st.subheader(f"Transactions → {row['Scheme']} ({folio_id})")
+
+            with get_conn() as conn:
+                if rta == 'CAMS':
+                    txn_df = pd.read_sql("""
+                        SELECT trxnno, traddate, trxntype, trxnmode, trxnstat, 
+                               purprice, units, amount, brokcode, subbrok, remarks
+                        FROM cams_wbr2_transaction
+                        WHERE folio_no = ?
+                        ORDER BY traddate DESC
+                    """, conn, params=(folio_id,))
+                else:  # KFinTech
+                    txn_df = pd.read_sql("""
+                        SELECT td_trno as trxnno, td_trdt as traddate, td_purred as trxntype,
+                               trnmode as trxnmode, trnstat as trxnstat, td_pop as purprice,
+                               td_units as units, td_amt as amount, td_broker as brokcode,
+                               '' as subbrok, trdesc as remarks
+                        FROM kfin_mfsd201_transaction
+                        WHERE td_acno = ?
+                        ORDER BY td_trdt DESC
+                    """, conn, params=(folio_id,))
+
+            if not txn_df.empty:
+                st.dataframe(
+                    txn_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "units": st.column_config.NumberColumn(format="%.4f"),
+                        "amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "purprice": st.column_config.NumberColumn(format="₹ %.4f"),
+                    }
+                )
+            else:
+                st.info("No transactions found for this folio.")
 
     st.divider()
 
-    # =====================================================================
-    # FIX 2: SIP DEDUPLICATION (Using only columns that exist in your DB)
-    # =====================================================================
+    # SIP Deduplication
     st.subheader("🔄 All SIPs (Deduplicated)")
 
     with get_conn() as conn:
-        # 1. Load BSE XSIP (The Master)
+        # 1. Load BSE XSIP
         bse_sip = pd.read_sql("""
-                SELECT amc_name, scheme_name, installments_amt, status, frequency_type, 
-                       'BSE' as source 
-                FROM bse_sip WHERE client_code = ?
-            """, conn, params=(client_code,))
+            SELECT amc_name, scheme_name, installments_amt, status, frequency_type, 
+                   'BSE' as source 
+            FROM bse_sip WHERE client_code = ?
+        """, conn, params=(client_code,))
 
         # 2. Load CAMS SIP
         cams_wbr49_sip = pd.read_sql("""
-                SELECT scheme as scheme_name, auto_amount as installments_amt, 
-                       periodicity as frequency_type, 
-                       CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END as status,
-                       'CAMS' as source
-                FROM cams_wbr49_sip WHERE folio_no IN (SELECT foliochk FROM cams_wbr9_folio  WHERE pan_no = ?)
-            """, conn, params=(pan,))
+            SELECT scheme as scheme_name, auto_amount as installments_amt, 
+                   periodicity as frequency_type, 
+                   CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END as status,
+                   'CAMS' as source
+            FROM cams_wbr49_sip 
+            WHERE folio_no IN (SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no)) = ?)
+        """, conn, params=(pan,))
 
-        # 3. Load KFin SIP
-        kfin_mfsd243_sip = pd.read_sql("""
+        # 3. Load KFin SIP — FIXED: Use folio list directly
+        kfin_folio_list = kfin_f['folio'].tolist()
+        if kfin_folio_list:
+            placeholders = ','.join(['?'] * len(kfin_folio_list))
+            kfin_mfsd243_sip = pd.read_sql(f"""
                 SELECT scheme_name, amount as installments_amt, frequency as frequency_type, 
                        status, 'KFin' as source
-                FROM kfin_mfsd243_sip WHERE folio IN (SELECT folio FROM kfin_mfsd211_folio WHERE pan_number = ?)
-            """, conn, params=(pan,))
+                FROM kfin_mfsd243_sip WHERE folio IN ({placeholders})
+            """, conn, params=tuple(kfin_folio_list))
+        else:
+            kfin_mfsd243_sip = pd.DataFrame()
 
-
-    # --- Deduplication Logic (BSE Priority) ---
-    # Since we don't have scheme_code/folio_no reliably in all tables,
-    # we match on Scheme Name + Amount + Frequency
+    # Deduplication Logic (BSE Priority)
     def _make_safe_key(df):
         return (
-                df["scheme_name"].fillna("").str.strip().str.upper() + "|" +
-                df["installments_amt"].astype(str) + "|" +
-                df["frequency_type"].fillna("").str.strip().str.upper()
+            df["scheme_name"].fillna("").str.strip().str.upper() + "|" +
+            df["installments_amt"].astype(str) + "|" +
+            df["frequency_type"].fillna("").str.strip().str.upper()
         )
-
 
     frames_to_keep = []
     bse_keys = set()
@@ -1977,7 +2009,7 @@ elif mode == "💰 Brokerage Report":
     with get_conn() as conn:
         df = pd.read_sql(
             "SELECT account_number, amount, percentage, brokerage, gross_brokerage, brokerage_type "
-            "FROM kfin_mfsd205_brokerage LIMIT 20", conn
+            "FROM kfin_mfsd205_brokerage", conn
         )
     print(df.to_string())
 

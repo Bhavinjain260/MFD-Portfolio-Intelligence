@@ -1407,6 +1407,29 @@ def parse_kfin_mfsd205_brokerage(file, replace: bool) -> tuple[bool, str, dict]:
         cumulative_nav = raw_num(row.get(cum_nav_col, 0)) if cum_nav_col else 0.0
         average_assets = raw_num(row.get(avg_assets_col, 0)) if avg_assets_col else 0.0
 
+        # ═══ TEMPORARY DIAGNOSTIC ═══
+        # from collections import Counter
+        # keys = [(r[6], r[27]) for r in rows]  # account_number, transaction_number
+        # key_counts = Counter(keys)
+        # duplicates = {k: v for k, v in key_counts.items() if v > 1}
+        #
+        # print(f"Total rows parsed: {len(rows)}")
+        # print(f"Unique (account, txn) pairs: {len(key_counts)}")
+        # print(f"Pairs with duplicates: {len(duplicates)}")
+        # print(f"Duplicate pairs (showing first 10):")
+        # for (acc, txn), count in list(duplicates.items())[:10]:
+        #     print(f"  Account={acc!r}, Txn={txn!r} → {count} rows")
+        #
+        # # Show what distinguishes the duplicates — check fee_type / brokerage_type
+        # print("\nSample duplicate group details:")
+        # for (acc, txn), count in list(duplicates.items())[:3]:
+        #     group = [r for r in rows if r[6] == acc and r[27] == txn]
+        #     print(f"\n  Group: {acc!r} / {txn!r} ({count} rows)")
+        #     for i, row in enumerate(group):
+        #         # Indices: brokerage_type=26, fee_type=40, amount=17, brokerage=22
+        #         print(f"    Row {i + 1}: type={row[26]!r}, fee={row[40]!r}, amt={row[17]!r}, brok={row[22]!r}")
+        # # ═══ END DIAGNOSTIC ═══
+
         # DEBUG: Print parsed values for first row
         if idx == 0:
             log.warning("PARSED AMOUNT: %s", amount)
@@ -1484,14 +1507,15 @@ def parse_kfin_mfsd205_brokerage(file, replace: bool) -> tuple[bool, str, dict]:
         if replace:
             conn.execute("DELETE FROM kfin_mfsd205_brokerage")
             conn.executemany(insert_sql, rows)
-            inserted = len(rows)
+            # BUG FIX: Actually count what was inserted instead of trusting list length
+            inserted = _count_before_after(conn, "kfin_mfsd205_brokerage")
+            dupes = len(rows) - inserted
         else:
             before = _count_before_after(conn, "kfin_mfsd205_brokerage")
             conn.executemany(insert_sql, rows)
             inserted, dupes = _inserted_dupes(before, conn, "kfin_mfsd205_brokerage", len(rows))
 
-    msg = f"Imported {inserted} records | Skipped: {skipped}"
-    if dupes: msg += f" | Duplicates: {dupes}"
+    msg = f"Imported {inserted} records | Skipped: {skipped} | Duplicates Ignored: {dupes}"
     return True, msg, {"rows": inserted, "skipped": skipped, "duplicates": dupes}
 
 

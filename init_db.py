@@ -1032,7 +1032,7 @@ def init_db() -> None:
         educess_amount         REAL,
         tran_type_code          TEXT,
         upload_batch            TEXT,
-        UNIQUE(transaction_number, account_number, fund, process_date)
+        UNIQUE(transaction_number, account_number)
     );
     
     -- =====================================================================
