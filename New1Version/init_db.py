@@ -867,7 +867,7 @@ def init_db() -> None:
         holder2_aadhaar             TEXT,
         holder3_aadhaar             TEXT,
         guardian_aadhaar            TEXT,
-        imported_at                 TEXT DEFAULT (datetime('now')),
+        upload_batch            TEXT,
         UNIQUE(folio,fund,  product_code)
     );
 
@@ -932,7 +932,7 @@ def init_db() -> None:
         elecTrxnflag        TEXT,
         cleared             TEXT,
         invstate            TEXT,
-        
+        upload_batch            TEXT,
         UNIQUE(td_acno, td_trno, td_fund)
     );
 
@@ -978,7 +978,7 @@ def init_db() -> None:
         dp_inv_name             TEXT,
         modify_flag             TEXT,
         umrncode                TEXT,
-        imported_at             TEXT DEFAULT (datetime('now')),
+        upload_batch            TEXT,
         UNIQUE(reg_slno, folio, scheme)
     );
 
@@ -1029,9 +1029,9 @@ def init_db() -> None:
         switch_flag             TEXT,
         gross_brokerage         REAL,
         stt_amount              REAL,
-        educcess_amount         REAL,
+        educess_amount         REAL,
         tran_type_code          TEXT,
-        imported_at             TEXT DEFAULT (datetime('now')),
+        upload_batch            TEXT,
         UNIQUE(transaction_number, account_number, fund, process_date)
     );
     

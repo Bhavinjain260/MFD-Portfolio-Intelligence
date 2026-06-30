@@ -94,14 +94,20 @@ def _batch_id(prefix: str, name: str = "") -> str:
     return f"{prefix}_{name}_{ts}" if name else f"{prefix}_{ts}"
 
 
+# def _clean_cols(df: pd.DataFrame) -> pd.DataFrame:
+#     """Strip quotes/BOM/ZWS and uppercase all column names for mapping."""
+#     df.columns = [
+#         c.strip().replace("\u200b", "").replace("\ufeff", "").replace("\u00a0", "").strip("'\"").upper()
+#         for c in df.columns
+#     ]
+#     return df
 def _clean_cols(df: pd.DataFrame) -> pd.DataFrame:
-    """Strip quotes/BOM/ZWS and uppercase all column names for mapping."""
     df.columns = [
-        c.strip().replace("\u200b", "").replace("\ufeff", "").replace("\u00a0", "").strip("'\"").upper()
+        c.strip().replace("\u200b", "").replace("\ufeff", "").replace("\u00a0", "")
+         .strip("'\"").upper().replace(" ", "_").replace("-", "_")
         for c in df.columns
     ]
     return df
-
 
 def _read_csv_auto(file) -> pd.DataFrame | None:
     for sep in ("\t", ",", ";"):
@@ -1300,8 +1306,9 @@ def parse_kfin_mfsd205_brokerage(file, replace: bool) -> tuple[bool, str, dict]:
 
 def _execute_kfin_import(table: str, rows: list, batch: str, replace: bool, skipped: int) -> tuple[bool, str, dict]:
     if not rows: return False, "0 rows found", {}
-    cols = ", ".join([f[0] for f in kfin_table_column_map[table]])
-    placeholders = ", ".join(["?"] * len(kfin_table_column_map[table]))
+    col_list = kfin_table_column_map[table][0]
+    cols = ", ".join(col_list)
+    placeholders = ", ".join(["?"] * len(col_list))
     sql = f"INSERT OR IGNORE INTO {table} ({cols}, upload_batch) VALUES ({placeholders}, ?)"
     inserted = dupes = 0
     with get_conn() as conn:
