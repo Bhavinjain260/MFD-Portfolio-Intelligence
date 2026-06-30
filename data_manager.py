@@ -58,6 +58,49 @@ def raw_val(val) -> str:
         pass
     return str(val).strip()
 
+# def raw_num(val, default=0.0) -> float:
+#     """Convert value to float for REAL columns. Returns default on failure."""
+#     if val is None: return default
+#     try:
+#         if pd.isna(val): return default
+#     except (TypeError, ValueError):
+#         pass
+#     s = str(val).strip().replace(',', '').replace('"', '').replace("'", '')
+#     if not s: return default
+#     try:
+#         return float(s)
+#     except (ValueError, TypeError):
+#         return default
+
+
+def raw_num(val, default=0.0) -> float:
+    """Convert value to float for REAL columns. Handles Indian formats & currency symbols."""
+    if val is None: return default
+    try:
+        if pd.isna(val): return default
+    except (TypeError, ValueError):
+        pass
+
+    s = str(val).strip()
+
+    # Remove common prefixes/suffixes
+    s = s.replace("₹", "").replace("Rs", "").replace("RS", "").replace("rs", "")
+    s = s.replace("INR", "").replace("inr", "")
+    s = s.replace("Dr", "").replace("CR", "").replace("Cr", "").replace("dr", "").replace("cr", "")
+    s = s.replace('"', "").replace("'", "").replace(",", "").replace(" ", "")
+    s = s.strip()
+
+    if not s or s == "-": return default
+
+    # Handle parentheses for negative: (123.45) = -123.45
+    if s.startswith("(") and s.endswith(")"):
+        s = "-" + s[1:-1]
+
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return default
+
 
 def format_aum(val) -> str:
     """UI Helper to display AUM nicely."""
@@ -1271,52 +1314,185 @@ def parse_kfin_mfsd243_sip(file, replace: bool) -> tuple[bool, str, dict]:
 
 
 def parse_kfin_mfsd205_brokerage(file, replace: bool) -> tuple[bool, str, dict]:
+    """Parse KFintech MFSD 205 Brokerage file."""
     df = _read_csv_auto(file)
     if df is None: return False, "Could not parse file", {}
     df = _clean_cols(df)
-    rename_map = {
-        "AMOUNT (IN RS.)": "AMOUNT",
-        "BROKERAGE (IN RS.)": "BROKERAGE",
-        "PERCENTAGE (%)": "PERCENTAGE",
-        "ADDRESS #1": "ADDRESS1",
-        "ADDRESS #2": "ADDRESS2",
-        "ADDRESS #3": "ADDRESS3",
-        "SUB-BROKER": "SUB_BROKER",
-        "GROSSBROKERAGE": "GROSS_BROKERAGE",
-        "STTAMOUNT": "STT_AMOUNT",
-        "EDUCESSAMOUNT": "EDUCESS_AMOUNT",
-        "TRANTYPECODE": "TRAN_TYPE_CODE",
-    }
-    df.rename(columns=rename_map, inplace=True)
-    if "TRANSACTION_NUMBER" not in df.columns: return False, "Missing TRANSACTION_NUMBER", {}
-    batch = _batch_id("KFIN_205", file.name);
+
+    # DEBUG: Print all columns found
+    log.warning("KFIN 205 COLUMNS FOUND: %s", list(df.columns))
+
+    def _c(*cands):
+        return next((c for c in cands if c in df.columns), None)
+
+    # Column detection
+    prod_col = _c("PRODUCT_CODE", "PRODUCT", "PRODCODE")
+    fund_desc_col = _c("FUND_DESCRIPTION", "FUND_DESC", "SCHEME_NAME")
+    fund_col = _c("FUND", "FUND_CODE", "AMC_CODE")
+    scheme_col = _c("SCHEME", "SCHEME_NAME")
+    plan_col = _c("PLAN", "PLAN_TYPE")
+    option_col = _c("OPTION", "PLAN_OPTION")
+    acnt_col = _c("ACCOUNT_NUMBER", "ACCT_NO", "FOLIO", "FOLIO_NO")
+    app_no_col = _c("APPLICATION_NUMBER", "APP_NO", "TRXN_NO")
+    inv_name_col = _c("INVESTOR_NAME", "INV_NAME", "NAME")
+    addr1_col = _c("ADDRESS1", "ADDR1")
+    addr2_col = _c("ADDRESS2", "ADDR2")
+    addr3_col = _c("ADDRESS3", "ADDR3")
+    city_col = _c("CITY")
+    pin_col = _c("PINCODE", "PIN")
+    txn_desc_col = _c("TRANSACTION_DESCRIPTION", "TRXN_DESC", "DESCRIPTION")
+    from_dt_col = _c("FROM_DATE", "START_DATE")
+    to_dt_col = _c("TO_DATE", "END_DATE")
+    amt_col = _c("AMOUNT", "TRXN_AMT", "AMOUNT_IN_RS")
+    units_col = _c("UNITS")
+    txn_dt_col = _c("TRANSACTION_DATE", "TRXN_DATE", "TRADE_DATE")
+    proc_dt_col = _c("PROCESS_DATE", "PROCESSED_DATE")
+    pct_col = _c("PERCENTAGE", "BROKERAGE_PCT")
+    brokerage_col = _c("BROKERAGE", "BROK_AMT", "BROKERAGE_AMT", "BROKERAGE_AMOUNT", "COMMISSION", "BROKERAGE_IN_RS")
+    sub_broker_col = _c("SUB_BROKER", "SUB_BROKER_CODE")
+    acnt_type_col = _c("ACCOUNT_TYPE", "ACCT_TYPE")
+    brokerage_head_col = _c("BROKERAGE_HEAD", "BROK_HEAD")
+    brokerage_type_col = _c("BROKERAGE_TYPE", "BROK_TYPE")
+    txn_no_col = _c("TRANSACTION_NUMBER", "TRXN_NO", "TRANSACTION_NO")
+    branch_col = _c("BRANCH_CODE", "BRANCH")
+    cheque_col = _c("CHEQUE_NUMBER", "CHEQUE_NO")
+    start_dt_col = _c("STARTING_DATE")
+    end_dt_col = _c("ENDING_DATE")
+    warrant_no_col = _c("WARRANT_NUMBER", "WARRANT_NO")
+    warrant_dt_col = _c("WARRANT_DATE")
+    daily_prod_col = _c("DAILY_PRODUCT")
+    cum_nav_col = _c("CUMULATIVE_NAV")
+    avg_assets_col = _c("AVERAGE_ASSETS", "AVG_AUM")
+    txn_id_col = _c("TRANSACTION_ID", "TRXN_ID")
+    scheme_code_col = _c("SCHEME_CODE")
+    txn_head_col = _c("TRANSACTION_HEAD", "TRXN_HEAD")
+    fee_type_col = _c("FEE_TYPE")
+    adj_flag_col = _c("ADJUSTMENT_FLAG", "ADJ_FLAG")
+    switch_flag_col = _c("SWITCH_FLAG")
+    gross_brok_col = _c("GROSS_BROKERAGE", "GROSS_BROK", "GROSS_COMMISSION", "GROSSBROKERAGE")
+    stt_col = _c("STT_AMOUNT", "STT", "STTAMOUNT")
+    educess_col = _c("EDUCESS_AMOUNT", "EDUCESS", "CESS", "EDUCESSAMOUNT")
+    tran_type_col = _c("TRAN_TYPE_CODE", "TRXN_TYPE", "TRANTYPECODE")
+
+    # DEBUG: Log which numeric columns were found
+    log.warning("AMOUNT column: %s", amt_col)
+    log.warning("BROKERAGE column: %s", brokerage_col)
+    log.warning("UNITS column: %s", units_col)
+
+    batch = _batch_id("KFIN_205", file.name)
     rows, skipped = [], 0
-    for _, row in df.iterrows():
-        trxn_num = raw_val(row.get("TRANSACTION_NUMBER", ""))
-        if not trxn_num: skipped += 1; continue
-        rows.append((raw_val(row.get("PRODUCT_CODE", "")), raw_val(row.get("FUND_DESCRIPTION", "")),
-                     raw_val(row.get("FUND", "")), raw_val(row.get("SCHEME", "")), raw_val(row.get("PLAN", "")),
-                     raw_val(row.get("OPTION", "")), raw_val(row.get("ACCOUNT_NUMBER", "")),
-                     raw_val(row.get("APPLICATION_NUMBER", "")), raw_val(row.get("INVESTOR_NAME", "")),
-                     raw_val(row.get("ADDRESS1", "")), raw_val(row.get("ADDRESS2", "")),
-                     raw_val(row.get("ADDRESS3", "")), raw_val(row.get("CITY", "")), raw_val(row.get("PINCODE", "")),
-                     raw_val(row.get("TRANSACTION_DESCRIPTION", "")), raw_val(row.get("FROM_DATE", "")),
-                     raw_val(row.get("TO_DATE", "")), raw_val(row.get("AMOUNT", "")), raw_val(row.get("UNITS", "")),
-                     raw_val(row.get("TRANSACTION_DATE", "")), raw_val(row.get("PROCESS_DATE", "")),
-                     raw_val(row.get("PERCENTAGE", "")), raw_val(row.get("BROKERAGE", "")),
-                     raw_val(row.get("SUB_BROKER", "")), raw_val(row.get("ACCOUNT_TYPE", "")),
-                     raw_val(row.get("BROKERAGE_HEAD", "")), raw_val(row.get("BROKERAGE_TYPE", "")), trxn_num,
-                     raw_val(row.get("BRANCH_CODE", "")), raw_val(row.get("CHEQUE_NUMBER", "")),
-                     raw_val(row.get("STARTING_DATE", "")), raw_val(row.get("ENDING_DATE", "")),
-                     raw_val(row.get("WARRANT_NUMBER", "")), raw_val(row.get("WARRANT_DATE", "")),
-                     raw_val(row.get("DAILY_PRODUCT", "")), raw_val(row.get("CUMULATIVE_NAV", "")),
-                     raw_val(row.get("AVERAGE_ASSETS", "")), raw_val(row.get("TRANSACTION_ID", "")),
-                     raw_val(row.get("SCHEME_CODE", "")), raw_val(row.get("TRANSACTION_HEAD", "")),
-                     raw_val(row.get("FEE_TYPE", "")), raw_val(row.get("ADJUSTMENT_FLAG", "")),
-                     raw_val(row.get("SWITCH_FLAG", "")), raw_val(row.get("GROSS_BROKERAGE", "")),
-                     raw_val(row.get("STT_AMOUNT", "")), raw_val(row.get("EDUCESS_AMOUNT", "")),
-                     raw_val(row.get("TRAN_TYPE_CODE", "")), batch))
-    return _execute_kfin_import("kfin_mfsd205_brokerage", rows, batch, replace, skipped)
+
+    for idx, row in df.iterrows():
+        acnt = raw_val(row.get(acnt_col, "")) if acnt_col else ""
+        if not acnt:
+            skipped += 1
+            continue
+
+        # DEBUG: Print first row's raw values
+        if idx == 0:
+            log.warning("FIRST ROW RAW AMOUNT: '%s'", row.get(amt_col, "COL_NOT_FOUND"))
+            log.warning("FIRST ROW RAW BROKERAGE: '%s'", row.get(brokerage_col, "COL_NOT_FOUND"))
+            log.warning("FIRST ROW RAW UNITS: '%s'", row.get(units_col, "COL_NOT_FOUND"))
+            log.warning("FIRST ROW TYPE AMOUNT: %s", type(row.get(amt_col)))
+
+        # Use raw_num for REAL columns
+        amount = raw_num(row.get(amt_col, 0)) if amt_col else 0.0
+        units = raw_num(row.get(units_col, 0)) if units_col else 0.0
+        percentage = raw_num(row.get(pct_col, 0)) if pct_col else 0.0
+        brokerage = raw_num(row.get(brokerage_col, 0)) if brokerage_col else 0.0
+        gross_brokerage = raw_num(row.get(gross_brok_col, 0)) if gross_brok_col else 0.0
+        stt_amount = raw_num(row.get(stt_col, 0)) if stt_col else 0.0
+        educess_amount = raw_num(row.get(educess_col, 0)) if educess_col else 0.0
+        daily_product = raw_num(row.get(daily_prod_col, 0)) if daily_prod_col else 0.0
+        cumulative_nav = raw_num(row.get(cum_nav_col, 0)) if cum_nav_col else 0.0
+        average_assets = raw_num(row.get(avg_assets_col, 0)) if avg_assets_col else 0.0
+
+        # DEBUG: Print parsed values for first row
+        if idx == 0:
+            log.warning("PARSED AMOUNT: %s", amount)
+            log.warning("PARSED BROKERAGE: %s", brokerage)
+            log.warning("PARSED UNITS: %s", units)
+
+        rows.append((
+            raw_val(row.get(prod_col, "")) if prod_col else "",
+            raw_val(row.get(fund_desc_col, "")) if fund_desc_col else "",
+            raw_val(row.get(fund_col, "")) if fund_col else "",
+            raw_val(row.get(scheme_col, "")) if scheme_col else "",
+            raw_val(row.get(plan_col, "")) if plan_col else "",
+            raw_val(row.get(option_col, "")) if option_col else "",
+            acnt,
+            raw_val(row.get(app_no_col, "")) if app_no_col else "",
+            raw_val(row.get(inv_name_col, "")) if inv_name_col else "",
+            raw_val(row.get(addr1_col, "")) if addr1_col else "",
+            raw_val(row.get(addr2_col, "")) if addr2_col else "",
+            raw_val(row.get(addr3_col, "")) if addr3_col else "",
+            raw_val(row.get(city_col, "")) if city_col else "",
+            raw_val(row.get(pin_col, "")) if pin_col else "",
+            raw_val(row.get(txn_desc_col, "")) if txn_desc_col else "",
+            raw_val(row.get(from_dt_col, "")) if from_dt_col else "",
+            raw_val(row.get(to_dt_col, "")) if to_dt_col else "",
+            amount,
+            units,
+            raw_val(row.get(txn_dt_col, "")) if txn_dt_col else "",
+            raw_val(row.get(proc_dt_col, "")) if proc_dt_col else "",
+            percentage,
+            brokerage,
+            raw_val(row.get(sub_broker_col, "")) if sub_broker_col else "",
+            raw_val(row.get(acnt_type_col, "")) if acnt_type_col else "",
+            raw_val(row.get(brokerage_head_col, "")) if brokerage_head_col else "",
+            raw_val(row.get(brokerage_type_col, "")) if brokerage_type_col else "",
+            raw_val(row.get(txn_no_col, "")) if txn_no_col else "",
+            raw_val(row.get(branch_col, "")) if branch_col else "",
+            raw_val(row.get(cheque_col, "")) if cheque_col else "",
+            raw_val(row.get(start_dt_col, "")) if start_dt_col else "",
+            raw_val(row.get(end_dt_col, "")) if end_dt_col else "",
+            raw_val(row.get(warrant_no_col, "")) if warrant_no_col else "",
+            raw_val(row.get(warrant_dt_col, "")) if warrant_dt_col else "",
+            daily_product,
+            cumulative_nav,
+            average_assets,
+            raw_val(row.get(txn_id_col, "")) if txn_id_col else "",
+            raw_val(row.get(scheme_code_col, "")) if scheme_code_col else "",
+            raw_val(row.get(txn_head_col, "")) if txn_head_col else "",
+            raw_val(row.get(fee_type_col, "")) if fee_type_col else "",
+            raw_val(row.get(adj_flag_col, "")) if adj_flag_col else "",
+            raw_val(row.get(switch_flag_col, "")) if switch_flag_col else "",
+            gross_brokerage,
+            stt_amount,
+            educess_amount,
+            raw_val(row.get(tran_type_col, "")) if tran_type_col else "",
+            batch
+        ))
+
+    if not rows:
+        return False, "0 valid rows found", {}
+
+    insert_sql = """INSERT OR IGNORE INTO kfin_mfsd205_brokerage (
+        product_code, fund_description, fund, scheme, plan, option,
+        account_number, application_number, investor_name, address1, address2, address3,
+        city, pincode, transaction_description, from_date, to_date, amount, units,
+        transaction_date, process_date, percentage, brokerage, sub_broker, account_type,
+        brokerage_head, brokerage_type, transaction_number, branch_code, cheque_number,
+        starting_date, ending_date, warrant_number, warrant_date, daily_product,
+        cumulative_nav, average_assets, transaction_id, scheme_code, transaction_head,
+        fee_type, adjustment_flag, switch_flag, gross_brokerage, stt_amount, 
+        educess_amount, tran_type_code, upload_batch
+    ) VALUES (""" + ",".join(["?"] * 48) + ")"
+
+    inserted = dupes = 0
+    with get_conn() as conn:
+        if replace:
+            conn.execute("DELETE FROM kfin_mfsd205_brokerage")
+            conn.executemany(insert_sql, rows)
+            inserted = len(rows)
+        else:
+            before = _count_before_after(conn, "kfin_mfsd205_brokerage")
+            conn.executemany(insert_sql, rows)
+            inserted, dupes = _inserted_dupes(before, conn, "kfin_mfsd205_brokerage", len(rows))
+
+    msg = f"Imported {inserted} records | Skipped: {skipped}"
+    if dupes: msg += f" | Duplicates: {dupes}"
+    return True, msg, {"rows": inserted, "skipped": skipped, "duplicates": dupes}
 
 
 def _execute_kfin_import(table: str, rows: list, batch: str, replace: bool, skipped: int) -> tuple[bool, str, dict]:
