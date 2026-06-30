@@ -34,7 +34,6 @@ def ensure_db() -> None:
     """Run init_db() once per session. Schema lives in init.py — single source of truth."""
     if not st.session_state.get("db_initialized"):
         init_db()
-        print("Creating the DB.")
         st.session_state["db_initialized"] = True
 
 
@@ -1272,22 +1271,22 @@ if mode == "⚙️ Admin Panel":
 
         # DB Stats at bottom
         st.divider()
-        # st.subheader("🗄️ Database Stats")
-        # stats = load_db_stats()
-        #
-        # cols = st.columns(3)
-        # categories = {
-        #     "BSE": ["clients", "bse_xsip", "bse_scheme_master"],
-        #     "CAMS": ["cams_folio", "cams_transactions", "cams_sip", "cams_aum", "cams_brokerage"],
-        #     "KFinTech": ["kfin_folio", "kfin_transactions", "kfin_sip", "kfin_aum", "kfin_brokerage"],
-        # }
-        # for i, (cat, tables) in enumerate(categories.items()):
-        #     with cols[i]:
-        #         st.markdown(f"**{cat}**")
-        #         for t in tables:
-        #             st.caption(f"{t}: **{stats.get(t, 0):,}**")
-        #
-        # with cols[0]:
-        #     st.markdown("**Other**")
-        #     st.caption(f"monthly_brokerage: **{stats.get('monthly_brokerage', 0):,}**")
-        #     st.caption(f"amc_code_map: **{stats.get('amc_code_map', 0):,}**")
+        st.subheader("🗄️ Database Stats")
+        stats = load_db_stats()
+
+        cols = st.columns(3)
+        categories = {
+            "BSE": ["clients", "bse_xsip", "bse_scheme_master"],
+            "CAMS": ["cams_folio", "cams_transactions", "cams_sip", "cams_aum", "cams_brokerage"],
+            "KFinTech": ["kfin_folio", "kfin_transactions", "kfin_sip", "kfin_aum", "kfin_brokerage"],
+        }
+        for i, (cat, tables) in enumerate(categories.items()):
+            with cols[i]:
+                st.markdown(f"**{cat}**")
+                for t in tables:
+                    st.caption(f"{t}: **{stats.get(t, 0):,}**")
+
+        with cols[0]:
+            st.markdown("**Other**")
+            st.caption(f"monthly_brokerage: **{stats.get('monthly_brokerage', 0):,}**")
+            st.caption(f"amc_code_map: **{stats.get('amc_code_map', 0):,}**")
