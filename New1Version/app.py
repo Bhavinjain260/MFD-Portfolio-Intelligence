@@ -11,7 +11,6 @@ from datetime import datetime
 from typing import Optional
 
 import pandas as pd
-import plotly.express as px
 import requests
 import streamlit as st
 
@@ -915,7 +914,7 @@ def load_db_stats() -> dict:
     stats = {}
     with get_conn() as conn:
         tables = [
-            "clients", "clients_bank", "clients_nominee", "bse_xsip", "bse_scheme_master",
+            "clients", "bse_xsip", "bse_scheme_master",
             "cams_folio", "cams_transactions", "cams_sip", "cams_aum", "cams_brokerage",
             "kfin_folio", "kfin_transactions", "kfin_sip", "kfin_aum", "kfin_brokerage",
             "monthly_brokerage", "amc_code_map"
@@ -1204,14 +1203,12 @@ if mode == "⚙️ Admin Panel":
         if source == "BSE":
             data_type = st.radio(
                 "Select Data Type",
-                ["Clients", "Client Banks", "Client Nominees", "XSIP", "Scheme Master"],
+                ["Clients", "XSIP", "Scheme Master"],
                 horizontal=True,
                 key="raw_bse_type"
             )
             table_map = {
                 "Clients": "clients",
-                "Client Banks": "clients_bank",
-                "Client Nominees": "clients_nominee",
                 "XSIP": "bse_xsip",
                 "Scheme Master": "bse_scheme_master"
             }
@@ -1280,7 +1277,7 @@ if mode == "⚙️ Admin Panel":
 
         cols = st.columns(3)
         categories = {
-            "BSE": ["clients", "clients_bank", "clients_nominee", "bse_xsip", "bse_scheme_master"],
+            "BSE": ["clients", "bse_xsip", "bse_scheme_master"],
             "CAMS": ["cams_folio", "cams_transactions", "cams_sip", "cams_aum", "cams_brokerage"],
             "KFinTech": ["kfin_folio", "kfin_transactions", "kfin_sip", "kfin_aum", "kfin_brokerage"],
         }
