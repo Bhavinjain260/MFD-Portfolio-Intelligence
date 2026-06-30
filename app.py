@@ -9,15 +9,15 @@ import re
 import warnings
 from datetime import datetime
 from typing import Optional
+import plotly.express as px
 
 import pandas as pd
-import plotly.express as px
 import requests
 import streamlit as st
 
 import data_manager
-from Init import init_db, get_conn
-from theme_patch import THEME_WATCHER_JS
+from init_db import init_db, get_conn
+from theme_patch import THEME_WATCHER_JS, render_theme
 
 log = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ def load_brokerage_report(_get_conn) -> dict:
 
     AMC resolution path (matches Dashboard's proven join):
         brokerage.folio_no / account_number
-            -> cams_folio.foliochk / kfin_folio.folio   (get product code)
+            -> cams_wbr9_folio.foliochk / kfin_mfsd211_folio.folio   (get product code)
             -> Channel_Partner_Code (bse_scheme_master) -> ISIN
             -> _amfi.get_amc(isin)                       (canonical AMC name)
 
@@ -126,11 +126,11 @@ def load_brokerage_report(_get_conn) -> dict:
         GROUP BY UPPER(TRIM(Channel_Partner_Code))
     """
 
-    # ---- CAMS brokerage -> cams_folio (get product code) -> Channel_Partner_Code -> ISIN ----
+    # ---- CAMS brokerage -> cams_wbr9_folio (get product code) -> Channel_Partner_Code -> ISIN ----
     cams_sql = f"""
         SELECT
             cb.proc_date              AS proc_date,
-            cb.brokerage_acrual_month AS accrual_month,
+            cb.brokerage_accrual_month AS accrual_month,
             cb.inv_name               AS client,
             cb.folio_no               AS folio,
             cb.scheme_code            AS scheme_code,
@@ -143,14 +143,14 @@ def load_brokerage_report(_get_conn) -> dict:
             sm.ISIN                   AS isin,
             sm.bse_amc_name           AS bse_amc_name,
             'CAMS'                    AS rta
-        FROM cams_brokerage cb
-        LEFT JOIN cams_folio cf
+        FROM cams_wbr77_brokerage cb
+        LEFT JOIN cams_wbr9_folio cf
             ON UPPER(TRIM(cb.folio_no)) = UPPER(TRIM(cf.foliochk))
         LEFT JOIN ({bse_dedup}) sm
             ON UPPER(TRIM(cf.product)) = sm.cp_code
     """
 
-    # ---- KFin brokerage -> kfin_folio (get product_code) -> Channel_Partner_Code -> ISIN ----
+    # ---- KFin brokerage -> kfin_mfsd211_folio (get product_code) -> Channel_Partner_Code -> ISIN ----
     kfin_sql = f"""
         SELECT
             kb.process_date        AS proc_date,
@@ -159,16 +159,16 @@ def load_brokerage_report(_get_conn) -> dict:
             kb.account_number      AS folio,
             kb.scheme_code         AS scheme_code,
             kb.transaction_number  AS txn_no,
-            kb.amount_rs           AS txn_amount,
+            kb.amount           AS txn_amount,
             kb.percentage          AS brokerage_pct,
-            kb.brokerage_rs        AS brokerage_amount,
+            kb.brokerage        AS brokerage_amount,
             kb.brokerage_type      AS brokerage_type,
             kf.product_code        AS folio_product_code,
             sm.ISIN                AS isin,
             sm.bse_amc_name        AS bse_amc_name,
             'KFinTech'             AS rta
-        FROM kfin_brokerage kb
-        LEFT JOIN kfin_folio kf
+        FROM kfin_mfsd205_brokerage kb
+        LEFT JOIN kfin_mfsd211_folio kf
             ON UPPER(TRIM(kb.account_number)) = UPPER(TRIM(kf.folio))
         LEFT JOIN ({bse_dedup}) sm
             ON UPPER(TRIM(kf.product_code)) = sm.cp_code
@@ -651,7 +651,7 @@ def get_all_folios_with_isin_and_nav(get_conn, force_reload: bool = False) -> pd
         bsm.Scheme_Name     AS scheme_name,
         bsm.bse_amc_name    AS bse_amc_name,
         'CAMS'              AS rta
-    FROM cams_folio f
+    FROM cams_wbr9_folio f
     LEFT JOIN ({bse_dedup}) bsm
         ON UPPER(TRIM(f.product)) = bsm.cp_code
     WHERE f.product IS NOT NULL AND TRIM(f.product) != ''
@@ -670,13 +670,13 @@ def get_all_folios_with_isin_and_nav(get_conn, force_reload: bool = False) -> pd
         bsm.Scheme_Name     AS scheme_name,
         bsm.bse_amc_name    AS bse_amc_name,
         'KFinTech'          AS rta
-    FROM kfin_folio f
+    FROM kfin_mfsd211_folio f
     INNER JOIN (
         SELECT 
             td_acno AS folio_id,
             fmcode  AS product_code,
             SUM(td_units) AS total_units
-        FROM kfin_transactions
+        FROM kfin_mfsd201_transaction
         WHERE td_units IS NOT NULL
         GROUP BY td_acno, fmcode
         HAVING total_units != 0
@@ -766,8 +766,50 @@ def get_all_folios_with_isin_and_nav(get_conn, force_reload: bool = False) -> pd
     return result
 
 
+# def get_folio_nav_summary(get_conn, force_reload: bool = False) -> dict:
+#     """Quick stats for Streamlit metrics. Reads from saved file via get_all_folios_with_isin_and_nav."""
+#     log.info("[NAV-FLOW] Generating folio NAV summary...")
+#
+#     df = get_all_folios_with_isin_and_nav(get_conn, force_reload=force_reload)
+#     cams_df = df[df["rta"] == "CAMS"]
+#     kfin_df = df[df["rta"] == "KFinTech"]
+#
+#     cams_nav_aum = float(cams_df["nav_based_aum"].sum()) if "nav_based_aum" in cams_df.columns else 0.0
+#     cams_file_aum = float(cams_df["file_aum"].sum()) if "file_aum" in cams_df.columns else 0.0
+#     kfin_nav_aum = float(kfin_df["nav_based_aum"].sum()) if "nav_based_aum" in kfin_df.columns else 0.0
+#
+#     cams_unmatched = int((cams_df["has_isin"] & ~cams_df["has_nav"]).sum())
+#     kfin_unmatched = int((kfin_df["has_isin"] & ~kfin_df["has_nav"]).sum())
+#
+#     return {
+#         "total_folios": len(df),
+#         "cams_wbr9_folios": len(cams_df),
+#         "kfin_mfsd211_folios": len(kfin_df),
+#         "with_isin": int(df["has_isin"].sum()),
+#         "isin_coverage_pct": round(df["has_isin"].mean() * 100, 2) if len(df) else 0,
+#         "with_nav": int(df["has_nav"].sum()),
+#         "nav_coverage_pct": round(df["has_nav"].mean() * 100, 2) if len(df) else 0,
+#         "with_amc": int(df["has_amc"].sum()),
+#         "amc_coverage_pct": round(df["has_amc"].mean() * 100, 2) if len(df) else 0,
+#         "amc_resolved_via_amfi": int((df["amc_name_source"] == "AMFI").sum()),
+#
+#         "total_aum": cams_nav_aum + kfin_nav_aum,
+#         "cams_wbr4_aum": cams_nav_aum,
+#         "cams_file_aum": cams_file_aum,
+#         "cams_unmatched_nav": cams_unmatched,
+#         "kfin_mfsd203_aum": kfin_nav_aum,
+#         "kfin_unmatched_nav": kfin_unmatched,
+#
+#         "cams_with_nav": int(cams_df["has_nav"].sum()),
+#         "cams_total": len(cams_df),
+#         "kfin_with_nav": int(kfin_df["has_nav"].sum()),
+#         "kfin_total": len(kfin_df),
+#
+#         "df": df,
+#     }
+
 def get_folio_nav_summary(get_conn, force_reload: bool = False) -> dict:
-    """Quick stats for Streamlit metrics. Reads from saved file via get_all_folios_with_isin_and_nav."""
+    """Quick stats for Streamlit metrics."""
     log.info("[NAV-FLOW] Generating folio NAV summary...")
 
     df = get_all_folios_with_isin_and_nav(get_conn, force_reload=force_reload)
@@ -872,7 +914,7 @@ def get_kfin_invested_amount(folio_list):
         placeholders = ','.join(['?'] * len(folio_list))
         query = f"""
             SELECT COALESCE(SUM(td_amt), 0) as total_invested
-            FROM kfin_transactions 
+            FROM kfin_mfsd201_transaction 
             WHERE td_acno IN ({placeholders})
         """
         result = conn.execute(query, folio_list).fetchone()[0]
@@ -895,7 +937,7 @@ def get_kfin_invested_per_scheme(folio_list: list) -> pd.DataFrame:
                 td_acno   AS folio_id,
                 fmcode    AS product_code,
                 COALESCE(SUM(td_amt), 0) AS invested_amount
-            FROM kfin_transactions
+            FROM kfin_mfsd201_transaction
             WHERE td_acno IN ({placeholders})
             GROUP BY td_acno, fmcode
         """
@@ -914,9 +956,11 @@ def load_db_stats() -> dict:
     stats = {}
     with get_conn() as conn:
         tables = [
-            "clients", "clients_bank", "clients_nominee", "bse_xsip", "bse_scheme_master",
-            "cams_folio", "cams_transactions", "cams_sip", "cams_aum", "cams_brokerage",
-            "kfin_folio", "kfin_transactions", "kfin_sip", "kfin_aum", "kfin_brokerage",
+            "bse_client_master", "bse_sip", "bse_scheme_master",
+            "cams_wbr4_aum", "cams_wbr9_folio", "cams_wbr2_transaction",
+            "cams_wbr49_sip", "cams_wbr77_brokerage",
+            "kfin_mfsd203_aum", "kfin_mfsd211_folio", "kfin_mfsd201_transaction",
+            "kfin_mfsd243_sip", "kfin_mfsd205_brokerage",
             "monthly_brokerage", "amc_code_map"
         ]
         for t in tables:
@@ -927,47 +971,116 @@ def load_db_stats() -> dict:
     return stats
 
 
+# @st.cache_data(ttl=60, show_spinner=False)
+# def load_dashboard_summary() -> dict:
+#     """Load key metrics for dashboard."""
+#     summary = {}
+#     with get_conn() as conn:
+#         # ── BSE ──
+#         summary["total_clients"] = conn.execute("SELECT COUNT(*) FROM bse_client_master").fetchone()[0]
+#         summary["total_xsip"] = conn.execute("SELECT COUNT(*) FROM bse_sip").fetchone()[0]
+#         summary["active_xsip"] = conn.execute(
+#             "SELECT COUNT(*) FROM bse_sip WHERE LOWER(COALESCE(status, '')) LIKE '%active%'"
+#         ).fetchone()[0]
+#         summary["bse_schemes"] = conn.execute("SELECT COUNT(*) FROM bse_scheme_master").fetchone()[0]
+#
+#         # ── CAMS ──
+#         summary["cams_wbr9_folios"] = conn.execute(
+#             "SELECT COUNT(DISTINCT foliochk) FROM cams_wbr9_folio"
+#         ).fetchone()[0]
+#         summary["cams_txns"] = conn.execute("SELECT COUNT(*) FROM cams_wbr2_transaction").fetchone()[0]
+#         summary["cams_wbr49_sips"] = conn.execute("SELECT COUNT(*) FROM cams_wbr49_sip").fetchone()[0]
+#         summary["cams_wbr4_aum"] = conn.execute(
+#             "SELECT COALESCE(SUM(rupee_bal), 0) FROM cams_wbr4_aum"
+#         ).fetchone()[0]
+#         summary["cams_wbr77_brokerage"] = conn.execute(
+#             "SELECT COALESCE(SUM(brkage_amt), 0) FROM cams_wbr77_brokerage"
+#         ).fetchone()[0]
+#         summary["cams_amcs"] = conn.execute(
+#             "SELECT COUNT(DISTINCT amc_code) FROM cams_wbr9_folio WHERE COALESCE(amc_code, '') != ''"
+#         ).fetchone()[0]
+#
+#         # ── KFinTech ──
+#         summary["kfin_mfsd211_folios"] = conn.execute(
+#             "SELECT COUNT(DISTINCT Folio) FROM kfin_mfsd211_folio"
+#         ).fetchone()[0]
+#         summary["kfin_txns"] = conn.execute("SELECT COUNT(*) FROM kfin_mfsd201_transaction").fetchone()[0]
+#         summary["kfin_mfsd243_sips"] = conn.execute("SELECT COUNT(*) FROM kfin_mfsd243_sip").fetchone()[0]
+#         summary["kfin_mfsd205_brokerage"] = conn.execute(
+#             "SELECT COALESCE(SUM(brokerage_rs), 0) FROM kfin_mfsd205_brokerage"
+#         ).fetchone()[0]
+#         summary["kfin_amcs"] = conn.execute(
+#             "SELECT COUNT(DISTINCT Fund) FROM kfin_mfsd211_folio WHERE COALESCE(Fund, '') != ''"
+#         ).fetchone()[0]
+#
+#         # KFin AUM: sum td_amt grouped by td_acno from MFSD201
+#         try:
+#             kfin_mfsd203_aum_result = conn.execute("""
+#                 SELECT COALESCE(SUM(inner_sum), 0) FROM (
+#                     SELECT td_acno, SUM(td_amt) as inner_sum
+#                     FROM kfin_mfsd201_transaction
+#                     GROUP BY td_acno
+#                 )
+#             """).fetchone()[0]
+#             summary["kfin_mfsd203_aum"] = float(kfin_mfsd203_aum_result) if kfin_mfsd203_aum_result else 0.0
+#         except Exception as e:
+#             log.warning("KFin AUM calculation failed: %s", e)
+#             summary["kfin_mfsd203_aum"] = 0.0
+#
+#         # ── Totals ──
+#         summary["total_aum"] = summary["cams_wbr4_aum"] + summary["kfin_mfsd203_aum"]
+#         summary["total_brokerage"] = summary["cams_wbr77_brokerage"] + summary["kfin_mfsd205_brokerage"]
+#
+#     return summary
+
 @st.cache_data(ttl=60, show_spinner=False)
 def load_dashboard_summary() -> dict:
-    """Load key metrics for dashboard. Uses exact KFin schema: Folio, td_acno, td_amt, Fund."""
+    """Load key metrics for dashboard."""
     summary = {}
     with get_conn() as conn:
-        # ── Clients ──
-        summary["total_clients"] = conn.execute("SELECT COUNT(*) FROM clients").fetchone()[0]
-
-        # ── BSE XSIP ──
-        summary["total_xsip"] = conn.execute("SELECT COUNT(*) FROM bse_xsip").fetchone()[0]
+        # ── BSE ──
+        summary["total_clients"] = conn.execute("SELECT COUNT(*) FROM bse_client_master").fetchone()[0]
+        summary["total_xsip"] = conn.execute("SELECT COUNT(*) FROM bse_sip").fetchone()[0]
         summary["active_xsip"] = conn.execute(
-            "SELECT COUNT(*) FROM bse_xsip WHERE LOWER(COALESCE(status, '')) LIKE '%active%'"
+            "SELECT COUNT(*) FROM bse_sip WHERE LOWER(COALESCE(status, '')) LIKE '%active%'"
         ).fetchone()[0]
+        summary["bse_schemes"] = conn.execute("SELECT COUNT(*) FROM bse_scheme_master").fetchone()[0]
 
         # ── CAMS ──
         summary["cams_folios"] = conn.execute(
-            "SELECT COUNT(DISTINCT foliochk) FROM cams_folio"
+            "SELECT COUNT(DISTINCT foliochk) FROM cams_wbr9_folio"
         ).fetchone()[0]
-        summary["cams_txns"] = conn.execute("SELECT COUNT(*) FROM cams_transactions").fetchone()[0]
-        summary["cams_sips"] = conn.execute("SELECT COUNT(*) FROM cams_sip").fetchone()[0]
+        summary["cams_txns"] = conn.execute("SELECT COUNT(*) FROM cams_wbr2_transaction").fetchone()[0]
+        summary["cams_sips"] = conn.execute("SELECT COUNT(*) FROM cams_wbr49_sip").fetchone()[0]
         summary["cams_aum"] = conn.execute(
-            "SELECT COALESCE(SUM(rupee_bal), 0) FROM cams_folio"
+            "SELECT COALESCE(SUM(rupee_bal), 0) FROM cams_wbr4_aum"
         ).fetchone()[0]
         summary["cams_brokerage"] = conn.execute(
-            "SELECT COALESCE(SUM(brkage_amt), 0) FROM cams_brokerage"
+            "SELECT COALESCE(SUM(brkage_amt), 0) FROM cams_wbr77_brokerage"
+        ).fetchone()[0]
+        summary["cams_amcs"] = conn.execute(
+            "SELECT COUNT(DISTINCT amc_code) FROM cams_wbr9_folio WHERE COALESCE(amc_code, '') != ''"
         ).fetchone()[0]
 
         # ── KFinTech ──
-        # Folio Master: Folio, Fund, Product Code, Investor Name
         summary["kfin_folios"] = conn.execute(
-            "SELECT COUNT(DISTINCT Folio) FROM kfin_folio"
+            "SELECT COUNT(DISTINCT Folio) FROM kfin_mfsd211_folio"
         ).fetchone()[0]
-        summary["kfin_txns"] = conn.execute("SELECT COUNT(*) FROM kfin_transactions").fetchone()[0]
-        summary["kfin_sips"] = conn.execute("SELECT COUNT(*) FROM kfin_sip").fetchone()[0]
+        summary["kfin_txns"] = conn.execute("SELECT COUNT(*) FROM kfin_mfsd201_transaction").fetchone()[0]
+        summary["kfin_sips"] = conn.execute("SELECT COUNT(*) FROM kfin_mfsd243_sip").fetchone()[0]
+        summary["kfin_brokerage"] = conn.execute(
+            "SELECT COALESCE(SUM(brokerage), 0) FROM kfin_mfsd205_brokerage"
+        ).fetchone()[0]
+        summary["kfin_amcs"] = conn.execute(
+            "SELECT COUNT(DISTINCT Fund) FROM kfin_mfsd211_folio WHERE COALESCE(Fund, '') != ''"
+        ).fetchone()[0]
 
-        # KFin AUM: sum td_amt grouped by td_acno (folio) from MFSD201
+        # KFin AUM: sum td_amt grouped by td_acno from MFSD201
         try:
             kfin_aum_result = conn.execute("""
                 SELECT COALESCE(SUM(inner_sum), 0) FROM (
                     SELECT td_acno, SUM(td_amt) as inner_sum 
-                    FROM kfin_transactions 
+                    FROM kfin_mfsd201_transaction 
                     GROUP BY td_acno
                 )
             """).fetchone()[0]
@@ -976,64 +1089,45 @@ def load_dashboard_summary() -> dict:
             log.warning("KFin AUM calculation failed: %s", e)
             summary["kfin_aum"] = 0.0
 
-        summary["kfin_brokerage"] = conn.execute(
-            "SELECT COALESCE(SUM(brokerage_rs), 0) FROM kfin_brokerage"
-        ).fetchone()[0]
-
         # ── Totals ──
         summary["total_aum"] = summary["cams_aum"] + summary["kfin_aum"]
         summary["total_brokerage"] = summary["cams_brokerage"] + summary["kfin_brokerage"]
 
-        # ── AMC counts ──
-        summary["cams_amcs"] = conn.execute(
-            "SELECT COUNT(DISTINCT amc_code) FROM cams_folio WHERE COALESCE(amc_code, '') != ''"
-        ).fetchone()[0]
-
-        # KFin AMCs: count distinct Fund from kfin_folio
-        summary["kfin_amcs"] = conn.execute(
-            "SELECT COUNT(DISTINCT Fund) FROM kfin_folio WHERE COALESCE(Fund, '') != ''"
-        ).fetchone()[0]
-
-        summary["bse_schemes"] = conn.execute(
-            "SELECT COUNT(*) FROM bse_scheme_master"
-        ).fetchone()[0]
-
     return summary
-
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load_amc_breakdown() -> pd.DataFrame:
     """AMC-wise AUM and folio summary. KFin uses Fund column, td_acno for join."""
     with get_conn() as conn:
         # ── CAMS ──
-        cams_aum_df = pd.read_sql("""
+        cams_wbr4_aum_df = pd.read_sql("""
             SELECT amc_code as amc, 
                    COALESCE(SUM(rupee_bal), 0) as aum
-            FROM cams_folio 
+            FROM cams_wbr9_folio  
             WHERE COALESCE(amc_code, '') != ''
             GROUP BY amc_code
         """, conn)
 
-        cams_folio_df = pd.read_sql("""
+        cams_wbr9_folio_df = pd.read_sql("""
             SELECT amc_code as amc,
                    COUNT(DISTINCT foliochk) as folios,
                    COUNT(*) as records
-            FROM cams_folio
+            FROM cams_wbr9_folio 
             WHERE COALESCE(amc_code, '') != ''
             GROUP BY amc_code
         """, conn)
 
-        if cams_aum_df.empty and cams_folio_df.empty:
+        if cams_wbr4_aum_df.empty and cams_wbr9_folio_df.empty:
             cams_combined = pd.DataFrame()
-        elif cams_aum_df.empty:
-            cams_combined = cams_folio_df.copy()
+        elif cams_wbr4_aum_df.empty:
+            cams_combined = cams_wbr9_folio_df.copy()
             cams_combined["aum"] = 0.0
-        elif cams_folio_df.empty:
-            cams_combined = cams_aum_df.copy()
+        elif cams_wbr9_folio_df.empty:
+            cams_combined = cams_wbr4_aum_df.copy()
             cams_combined["folios"] = 0
             cams_combined["records"] = 0
         else:
-            cams_combined = cams_folio_df.merge(cams_aum_df, on="amc", how="outer").fillna(0)
+            cams_combined = cams_wbr9_folio_df.merge(cams_wbr4_aum_df, on="amc", how="outer").fillna(0)
 
         if not cams_combined.empty:
             cams_combined["rta"] = "CAMS"
@@ -1041,42 +1135,42 @@ def load_amc_breakdown() -> pd.DataFrame:
         # ── KFinTech ──
         # AUM from transactions grouped by Fund (AMC) via td_acno join
         try:
-            kfin_aum_df = pd.read_sql("""
+            kfin_mfsd203_aum_df = pd.read_sql("""
                 SELECT kf.Fund as amc,
                        COALESCE(SUM(kt.td_amt), 0) as aum
-                FROM kfin_transactions kt
-                JOIN kfin_folio kf ON kt.td_acno = kf.Folio
+                FROM kfin_mfsd201_transaction kt
+                JOIN kfin_mfsd211_folio kf ON kt.td_acno = kf.Folio
                 WHERE COALESCE(kf.Fund, '') != ''
                 GROUP BY kf.Fund
             """, conn)
         except Exception as e:
             log.warning("KFin AUM breakdown failed: %s", e)
-            kfin_aum_df = pd.DataFrame(columns=["amc", "aum"])
+            kfin_mfsd203_aum_df = pd.DataFrame(columns=["amc", "aum"])
 
         try:
-            kfin_folio_df = pd.read_sql("""
+            kfin_mfsd211_folio_df = pd.read_sql("""
                 SELECT Fund as amc,
                        COUNT(DISTINCT Folio) as folios,
                        COUNT(*) as records
-                FROM kfin_folio
+                FROM kfin_mfsd211_folio
                 WHERE COALESCE(Fund, '') != ''
                 GROUP BY Fund
             """, conn)
         except Exception as e:
             log.warning("KFin folio breakdown failed: %s", e)
-            kfin_folio_df = pd.DataFrame(columns=["amc", "folios", "records"])
+            kfin_mfsd211_folio_df = pd.DataFrame(columns=["amc", "folios", "records"])
 
-        if kfin_aum_df.empty and kfin_folio_df.empty:
+        if kfin_mfsd203_aum_df.empty and kfin_mfsd211_folio_df.empty:
             kfin_combined = pd.DataFrame()
-        elif kfin_aum_df.empty:
-            kfin_combined = kfin_folio_df.copy()
+        elif kfin_mfsd203_aum_df.empty:
+            kfin_combined = kfin_mfsd211_folio_df.copy()
             kfin_combined["aum"] = 0.0
-        elif kfin_folio_df.empty:
-            kfin_combined = kfin_aum_df.copy()
+        elif kfin_mfsd211_folio_df.empty:
+            kfin_combined = kfin_mfsd203_aum_df.copy()
             kfin_combined["folios"] = 0
             kfin_combined["records"] = 0
         else:
-            kfin_combined = kfin_folio_df.merge(kfin_aum_df, on="amc", how="outer").fillna(0)
+            kfin_combined = kfin_mfsd211_folio_df.merge(kfin_mfsd203_aum_df, on="amc", how="outer").fillna(0)
 
         if not kfin_combined.empty:
             kfin_combined["rta"] = "KFinTech"
@@ -1100,18 +1194,19 @@ def load_recent_uploads(limit: int = 10) -> pd.DataFrame:
     with get_conn() as conn:
         batches = []
         for table, batch_col in [
-            ("bse_xsip", "upload_batch"),
+            ("bse_client_master", "upload_batch"),
+            ("bse_sip", "upload_batch"),
             ("bse_scheme_master", "upload_batch"),
-            ("cams_folio", "upload_batch"),
-            ("cams_transactions", "upload_batch"),
-            ("cams_sip", "upload_batch"),
-            ("cams_aum", "upload_batch"),
-            ("cams_brokerage", "upload_batch"),
-            ("kfin_folio", "upload_batch"),
-            ("kfin_transactions", "upload_batch"),
-            ("kfin_sip", "upload_batch"),
-            ("kfin_aum", "upload_batch"),
-            ("kfin_brokerage", "upload_batch"),
+            ("cams_wbr4_aum", "upload_batch"),
+            ("cams_wbr9_folio", "upload_batch"),
+            ("cams_wbr2_transaction", "upload_batch"),
+            ("cams_wbr49_sip", "upload_batch"),
+            ("cams_wbr77_brokerage", "upload_batch"),
+            ("kfin_mfsd203_aum", "upload_batch"),
+            ("kfin_mfsd211_folio", "upload_batch"),
+            ("kfin_mfsd201_transaction", "upload_batch"),
+            ("kfin_mfsd243_sip", "upload_batch"),
+            ("kfin_mfsd205_brokerage", "upload_batch"),
         ]:
             try:
                 rows = conn.execute(f"""
@@ -1157,8 +1252,6 @@ elif st.session_state["last_theme"] != current_theme:
 
 dark = current_theme == "dark"
 
-from theme_patch import render_theme
-
 st.markdown(render_theme(dark), unsafe_allow_html=True)
 
 # ==================== Navigation ====================
@@ -1180,6 +1273,7 @@ for i, (opt, key) in enumerate(zip(nav_options, nav_keys)):
 mode = st.session_state.get("nav_mode", "📊 Dashboard")
 
 # ==================== 📊 DASHBOARD ====================
+
 if mode == "📊 Dashboard":
     st.header("📊 Portfolio Overview")
 
@@ -1191,7 +1285,6 @@ if mode == "📊 Dashboard":
     if "folio_nav_df" not in st.session_state:
         with st.spinner("⏳ Fetching ISIN mappings & latest NAVs from AMFI... (5–10s)"):
             try:
-                # CRITICAL FIX: Download NAV file if missing before loading index
                 download_and_save_nav_if_needed()
 
                 folio_nav_df = get_all_folios_with_isin_and_nav(get_conn)
@@ -1243,11 +1336,10 @@ if mode == "📊 Dashboard":
             st.cache_data.clear()
             st.session_state.pop("folio_nav_df", None)
             st.session_state.pop("folio_nav_summary", None)
-            _amfi.load(force=True)  # FIXED: was .refresh() which doesn't exist
+            _amfi.load(force=True)
             st.rerun()
 
     # ── AUM Cards (NAV-based only) ──
-
     nav_coverage = summary.get("nav_coverage_pct", 0)
     with_nav = summary.get("with_nav", 0)
     total = summary.get("total_folios", 0)
@@ -1287,15 +1379,15 @@ if mode == "📊 Dashboard":
 
     st.divider()
 
-    # ── Top metrics row (from base_summary) ──
+    # ── Top metrics row ──
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("👥 Clients", summary.get("total_clients", 0))
-    m2.metric("📋 BSE XSIPs", summary.get("total_xsip", 0))
-    m3.metric("✅ Active XSIPs", summary.get("active_xsip", 0))
+    m2.metric("📋 BSE SIPs", summary.get("total_xsip", 0))
+    m3.metric("✅ Active SIPs", summary.get("active_xsip", 0))
     m4.metric("🏢 CAMS AMCs", summary.get("cams_amcs", 0))
     m5.metric("🏢 KFinTech AMCs", summary.get("kfin_amcs", 0))
 
-    # ── Second metrics row (from base_summary) ──
+    # ── Second metrics row ──
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("📂 CAMS Folios", summary.get("cams_folios", 0))
     m2.metric("💱 CAMS Txns", summary.get("cams_txns", 0))
@@ -1317,80 +1409,75 @@ if mode == "📊 Dashboard":
     st.divider()
     st.subheader("📈 Folio-Level ISIN & Current NAV")
 
-    # REMOVED: Dead ImportError guard
-    _has_nav_module = True
+    if "folio_nav_df" in st.session_state:
+        df = st.session_state["folio_nav_df"]
 
-    if _has_nav_module:
-        if "folio_nav_df" in st.session_state:
-            df = st.session_state["folio_nav_df"]
+        f1, f2, f3 = st.columns([2, 2, 2])
+        with f1:
+            rta_filter = st.multiselect(
+                "RTA", df["rta"].unique(), default=df["rta"].unique(), key="nav_rta_filter"
+            )
+        with f2:
+            show_only = st.radio(
+                "Show", ["All", "With ISIN only", "With NAV only", "Missing ISIN", "Missing NAV"],
+                horizontal=True, key="nav_show_filter"
+            )
+        with f3:
+            search_folio = st.text_input("🔍 Search Folio / Investor", "", key="nav_search")
 
-            f1, f2, f3 = st.columns([2, 2, 2])
-            with f1:
-                rta_filter = st.multiselect(
-                    "RTA", df["rta"].unique(), default=df["rta"].unique(), key="nav_rta_filter"
-                )
-            with f2:
-                show_only = st.radio(
-                    "Show", ["All", "With ISIN only", "With NAV only", "Missing ISIN", "Missing NAV"],
-                    horizontal=True, key="nav_show_filter"
-                )
-            with f3:
-                search_folio = st.text_input("🔍 Search Folio / Investor", "", key="nav_search")
+        view = df[df["rta"].isin(rta_filter)]
 
-            view = df[df["rta"].isin(rta_filter)]
+        if show_only == "With ISIN only":
+            view = view[view["has_isin"]]
+        elif show_only == "With NAV only":
+            view = view[view["has_nav"]]
+        elif show_only == "Missing ISIN":
+            view = view[~view["has_isin"]]
+        elif show_only == "Missing NAV":
+            view = view[view["has_isin"] & ~view["has_nav"]]
 
-            if show_only == "With ISIN only":
-                view = view[view["has_isin"]]
-            elif show_only == "With NAV only":
-                view = view[view["has_nav"]]
-            elif show_only == "Missing ISIN":
-                view = view[~view["has_isin"]]
-            elif show_only == "Missing NAV":
-                view = view[view["has_isin"] & ~view["has_nav"]]
+        if search_folio.strip():
+            mask = (
+                    view["folio_id"].astype(str).str.contains(search_folio, case=False, na=False) |
+                    view["investor_name"].astype(str).str.contains(search_folio, case=False, na=False)
+            )
+            view = view[mask]
 
-            if search_folio.strip():
-                mask = (
-                        view["folio_id"].astype(str).str.contains(search_folio, case=False, na=False) |
-                        view["investor_name"].astype(str).str.contains(search_folio, case=False, na=False)
-                )
-                view = view[mask]
+        display_cols = [
+            "rta", "folio_id", "investor_name", "product_code",
+            "scheme_name", "isin", "current_nav", "nav_date",
+            "units", "file_aum", "nav_based_aum"
+        ]
+        display_cols = [c for c in display_cols if c in view.columns]
 
-            display_cols = [
-                "rta", "folio_id", "investor_name", "product_code",
-                "scheme_name", "isin", "current_nav", "nav_date",
-                "units", "file_aum", "nav_based_aum"
-            ]
-            display_cols = [c for c in display_cols if c in view.columns]
+        st.dataframe(
+            view[display_cols],
+            width='stretch',
+            hide_index=True,
+            column_config={
+                "current_nav": st.column_config.NumberColumn("Current NAV", format="₹ %.4f"),
+                "nav_based_aum": st.column_config.NumberColumn("NAV-based AUM", format="₹ %.2f"),
+                "file_aum": st.column_config.NumberColumn("File AUM", format="₹ %.2f"),
+                "units": st.column_config.NumberColumn("Units", format="%.4f"),
+            }
+        )
 
-            st.dataframe(
-                view[display_cols],
-                width='stretch',
-                hide_index=True,
-                column_config={
-                    "current_nav": st.column_config.NumberColumn("Current NAV", format="₹ %.4f"),
-                    "nav_based_aum": st.column_config.NumberColumn("NAV-based AUM", format="₹ %.2f"),
-                    "file_aum": st.column_config.NumberColumn("File AUM", format="₹ %.2f"),
-                    "units": st.column_config.NumberColumn("Units", format="%.4f"),
-                }
+        st.caption(f"Showing {len(view):,} of {len(df):,} folios")
+
+        if not view.empty:
+            csv = view.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Download NAV Report (CSV)",
+                csv,
+                "folio_nav_report.csv",
+                "text/csv",
             )
 
-            st.caption(f"Showing {len(view):,} of {len(df):,} folios")
-
-            if not view.empty:
-                csv = view.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    "⬇️ Download NAV Report (CSV)",
-                    csv,
-                    "folio_nav_report.csv",
-                    "text/csv",
-                )
-
-    # ── AMC Breakdown (using AMFI-resolved AMC names) ──
+    # ── AMC Breakdown ──
     st.divider()
     st.subheader("🏢 AMC-wise Breakdown")
 
     if nav_ready and not folio_nav_df.empty:
-        # Build breakdown from the NAV-enriched DataFrame already in session state
         amc_breakdown_df = folio_nav_df.copy()
         amc_breakdown_df["amc_name"] = amc_breakdown_df["amc_name"].fillna("⚠️ Unresolved (no ISIN match)")
 
@@ -1444,9 +1531,13 @@ elif mode == "👥 Clients":
         with get_conn() as conn:
             return pd.read_sql("""
                 SELECT client_code, 
-                       primary_holder_first_name || ' ' || primary_holder_last_name AS name, 
-                       primary_holder_pan AS pan, mobile, email, city
-                FROM clients WHERE primary_holder_pan IS NOT NULL
+                primary_holder_first_name || ' ' || primary_holder_last_name AS name, 
+                primary_holder_pan AS pan, 
+                indian_mobile_no AS mobile,  -- ← FIXED
+                email, 
+                city
+                    FROM bse_client_master             -- ← FIXED
+                    WHERE primary_holder_pan IS NOT NULL
             """, conn)
 
 
@@ -1499,10 +1590,10 @@ elif mode == "👥 Clients":
 
     # Get Folios
     with get_conn() as conn:
-        cams_f = pd.read_sql("SELECT foliochk FROM cams_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+        cams_f = pd.read_sql("SELECT foliochk FROM cams_wbr9_folio  WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
                              conn, params=(pan, name))
         kfin_f = pd.read_sql(
-            "SELECT folio FROM kfin_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
+            "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
             conn, params=(pan, name))
 
     all_folios = set(cams_f['foliochk'].tolist() + kfin_f['folio'].tolist())
@@ -1527,7 +1618,7 @@ elif mode == "👥 Clients":
                     td_acno AS folio_id, 
                     fmcode AS product_code,
                     COALESCE(SUM(td_amt), 0) AS invested_amount
-                FROM kfin_transactions 
+                FROM kfin_mfsd201_transaction 
                 WHERE td_acno IN ({ph})
                 GROUP BY td_acno, fmcode
             """, conn, params=folios)
@@ -1604,23 +1695,23 @@ elif mode == "👥 Clients":
         bse_sip = pd.read_sql("""
                 SELECT amc_name, scheme_name, installments_amt, status, frequency_type, 
                        'BSE' as source 
-                FROM bse_xsip WHERE client_code = ?
+                FROM bse_sip WHERE client_code = ?
             """, conn, params=(client_code,))
 
         # 2. Load CAMS SIP
-        cams_sip = pd.read_sql("""
+        cams_wbr49_sip = pd.read_sql("""
                 SELECT scheme as scheme_name, auto_amount as installments_amt, 
                        periodicity as frequency_type, 
                        CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END as status,
                        'CAMS' as source
-                FROM cams_sip WHERE folio_no IN (SELECT foliochk FROM cams_folio WHERE pan_no = ?)
+                FROM cams_wbr49_sip WHERE folio_no IN (SELECT foliochk FROM cams_wbr9_folio  WHERE pan_no = ?)
             """, conn, params=(pan,))
 
         # 3. Load KFin SIP
-        kfin_sip = pd.read_sql("""
+        kfin_mfsd243_sip = pd.read_sql("""
                 SELECT scheme_name, amount as installments_amt, frequency as frequency_type, 
                        status, 'KFin' as source
-                FROM kfin_sip WHERE folio IN (SELECT folio FROM kfin_folio WHERE pan_number = ?)
+                FROM kfin_mfsd243_sip WHERE folio IN (SELECT folio FROM kfin_mfsd211_folio WHERE pan_number = ?)
             """, conn, params=(pan,))
 
 
@@ -1643,16 +1734,16 @@ elif mode == "👥 Clients":
         bse_keys = set(bse_sip["_match_key"])
         frames_to_keep.append(bse_sip)
 
-    if not cams_sip.empty:
-        cams_sip["_match_key"] = _make_safe_key(cams_sip)
-        cams_direct = cams_sip[~cams_sip["_match_key"].isin(bse_keys)].copy()
+    if not cams_wbr49_sip.empty:
+        cams_wbr49_sip["_match_key"] = _make_safe_key(cams_wbr49_sip)
+        cams_direct = cams_wbr49_sip[~cams_wbr49_sip["_match_key"].isin(bse_keys)].copy()
         if not cams_direct.empty:
             cams_direct["source"] = "CAMS (Direct)"
             frames_to_keep.append(cams_direct)
 
-    if not kfin_sip.empty:
-        kfin_sip["_match_key"] = _make_safe_key(kfin_sip)
-        kfin_direct = kfin_sip[~kfin_sip["_match_key"].isin(bse_keys)].copy()
+    if not kfin_mfsd243_sip.empty:
+        kfin_mfsd243_sip["_match_key"] = _make_safe_key(kfin_mfsd243_sip)
+        kfin_direct = kfin_mfsd243_sip[~kfin_mfsd243_sip["_match_key"].isin(bse_keys)].copy()
         if not kfin_direct.empty:
             kfin_direct["source"] = "KFin (Direct)"
             frames_to_keep.append(kfin_direct)
@@ -1974,16 +2065,14 @@ elif mode == "⚙️ Admin Panel":
         if source == "BSE":
             data_type = st.radio(
                 "Select Data Type",
-                ["Clients", "Client Banks", "Client Nominees", "XSIP", "Scheme Master"],
+                ["Bse Client Master", "BSE SiP", "BSE Scheme Master"],
                 horizontal=True,
                 key="raw_bse_type"
             )
             table_map = {
-                "Clients": "clients",
-                "Client Banks": "clients_bank",
-                "Client Nominees": "clients_nominee",
-                "XSIP": "bse_xsip",
-                "Scheme Master": "bse_scheme_master"
+                "Bse Client Master": "bse_client_master",
+                "BSE SiP": "bse_sip",
+                "BSE Scheme Master": "bse_scheme_master"
             }
             table = table_map[data_type]
 
@@ -1995,11 +2084,11 @@ elif mode == "⚙️ Admin Panel":
                 key="raw_cams_type"
             )
             table_map = {
-                "Folio Master": "cams_folio",
-                "Transactions": "cams_transactions",
-                "SIP Master": "cams_sip",
-                "AUM": "cams_aum",
-                "Brokerage": "cams_brokerage"
+                "Folio Master": "cams_wbr9_folio",
+                "Transactions": "cams_wbr2_transaction",
+                "SIP Master": "cams_wbr49_sip",
+                "AUM": "cams_wbr4_aum",
+                "Brokerage": "cams_wbr77_brokerage"
             }
             table = table_map[data_type]
 
@@ -2011,11 +2100,11 @@ elif mode == "⚙️ Admin Panel":
                 key="raw_kfin_type"
             )
             table_map = {
-                "Folio Master": "kfin_folio",
-                "Transactions": "kfin_transactions",
-                "SIP Master": "kfin_sip",
-                "AUM": "kfin_aum",
-                "Brokerage": "kfin_brokerage"
+                "Folio Master": "kfin_mfsd211_folio",
+                "Transactions": "kfin_mfsd201_transaction",
+                "SIP Master": "kfin_mfsd243_sip",
+                "AUM": "kfin_mfsd203_aum",
+                "Brokerage": "kfin_mfsd205_brokerage"
             }
             table = table_map[data_type]
 
@@ -2050,9 +2139,11 @@ elif mode == "⚙️ Admin Panel":
 
         cols = st.columns(3)
         categories = {
-            "BSE": ["clients", "clients_bank", "clients_nominee", "bse_xsip", "bse_scheme_master"],
-            "CAMS": ["cams_folio", "cams_transactions", "cams_sip", "cams_aum", "cams_brokerage"],
-            "KFinTech": ["kfin_folio", "kfin_transactions", "kfin_sip", "kfin_aum", "kfin_brokerage"],
+            "BSE": ["bse_client_master", "bse_sip", "bse_scheme_master"],
+            "CAMS": ["cams_wbr4_aum", "cams_wbr9_folio", "cams_wbr2_transaction", "cams_wbr49_sip",
+                     "cams_wbr77_brokerage"],
+            "KFinTech": ["kfin_mfsd203_aum", "kfin_mfsd211_folio", "kfin_mfsd201_transaction", "kfin_mfsd243_sip",
+                         "kfin_mfsd205_brokerage"],
         }
         for i, (cat, tables) in enumerate(categories.items()):
             with cols[i]:
