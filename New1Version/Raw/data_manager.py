@@ -17,8 +17,7 @@ import pandas as pd
 import streamlit as st
 
 log = logging.getLogger(__name__)
-
-DB_PATH = os.path.join(os.path.dirname(__file__), "mfd_local.db")
+DB_PATH = os.environ.get("MFD_DB_PATH", "mfd_platform.db")
 
 
 def set_db_path(path: str):
@@ -306,8 +305,8 @@ def parse_bse_client_master(file, replace: bool) -> tuple[bool, str]:
     f_country_col = _c("foreign_country");
     f_resi_phone_col = _c("foreign_resi_phone");
     f_resi_fax_col = _c("foreign_resi_fax")
-    f_office_phone_col = _c("foreign_off_phone");
-    f_office_fax_col = _c("foreign_off_fax")
+    f_office_phone_col = _c("foreign_office_phone", "foreign_off_phone");
+    f_office_fax_col = _c("foreign_office_fax", "foreign_off_fax")
     cheque_name_col = _c("cheque_name");
     div_pay_col = _c("div_pay_mode")
     branch_col = _c("branch");
@@ -466,7 +465,7 @@ def parse_bse_client_master(file, replace: bool) -> tuple[bool, str]:
     if not client_rows: return False, "No valid rows found"
 
     insert_sql = """INSERT OR IGNORE INTO bse_client_master (member_code, client_code, primary_holder_first_name, primary_holder_middle_name, primary_holder_last_name, tax_status, gender, primary_holder_dob_incorporation, occupation_code, holding_nature, second_holder_first_name, second_holder_middle_name, second_holder_last_name, third_holder_first_name, third_holder_middle_name, third_holder_last_name, second_holder_dob, third_holder_dob, guardian_first_name, guardian_middle_name, guardian_last_name, guardian_dob, primary_holder_pan_exempt, second_holder_pan_exempt, third_holder_pan_exempt, guardian_pan_exempt, primary_holder_pan, second_holder_pan, third_holder_pan, guardian_pan, primary_holder_exempt_category, second_holder_exempt_category, third_holder_exempt_category, guardian_exempt_category, client_type, pms, default_dp, cdsl_dpid, cdsl_cltid, cmbp_id, nsdl_dpid, nsdl_cltid, account_type_1, account_no_1, micr_no_1, ifsc_code_1, bank_name_1, bank_branch_1, default_bank_flag_1, bank1_created_at, bank1_last_modified_at, bank1_status, account_type_2, account_no_2, micr_no_2, ifsc_code_2, bank_name_2, bank_branch_2, default_bank_flag_2, bank2_created_at, bank2_last_modified_at, bank2_status, account_type_3, account_no_3, micr_no_3, ifsc_code_3, bank_name_3, bank_branch_3, default_bank_flag_3, bank3_created_at, bank3_last_modified_at, bank3_status, account_type_4, account_no_4, micr_no_4, ifsc_code_4, bank_name_4, bank_branch_4, default_bank_flag_4, bank4_created_at, bank4_last_modified_at, bank4_status, account_type_5, account_no_5, micr_no_5, ifsc_code_5, bank_name_5, bank_branch_5, default_bank_flag_5, bank5_created_at, bank5_last_modified_at, bank5_status, cheque_name, div_pay_mode, address1, address2, address3, city, state, pincode, country, resi_phone, resi_fax, office_phone, office_fax, email, communication_mode, foreign_address1, foreign_address2, foreign_address3, foreign_city, foreign_pincode, foreign_state, foreign_country, foreign_resi_phone, foreign_resi_fax, foreign_off_phone, foreign_off_fax, indian_mobile_no, primary_holder_kyc_type, primary_holder_ckyc_no, second_holder_kyc_type, second_holder_ckyc_no, third_holder_kyc_type, third_holder_ckyc_no, guardian_kyc_type, guardian_ckyc_no, primary_holder_kra_exempt, second_holder_kra_exempt, third_holder_kra_exempt, guardian_kra_exempt, aadhaar_updated, mapin_id, paperless_flag, lei_no, lei_validity, email_declaration_flag, mobile_declaration_flag, branch, dealer, nomination_opt, nomination_auth_mode, nominee1_name, nominee1_relationship, nominee1_applicable_pct, nominee1_minor_flag, nominee1_dob, nominee1_guardian, nominee1_guardian_pan, nom1_id_typ, nom1_idno, nom1_email, nom1_mob, nom1_add1, nom1_add2, nom1_add3, nom1_city, nom1_pin, nom1_con, nominee2_name, nominee2_relationship, nominee2_applicable_pct, nominee2_dob, nominee2_minor_flag, nominee2_guardian, nominee2_guardian_pan, nom2_id_typ, nom2_idno, nom2_email, nom2_mob, nom2_add1, nom2_add2, nom2_add3, nom2_city, nom2_pin, nom2_con, nominee3_name, nominee3_relationship, nominee3_applicable_pct, nominee3_dob, nominee3_minor_flag, nominee3_guardian, nominee3_guardian_pan, nom3_id_typ, nom3_idno, nom3_email, nom3_mob, nom3_add1, nom3_add2, nom3_add3, nom3_city, nom3_pin, nom3_con, nom_soa, second_holder_email, second_holder_email_declaration, second_holder_mobile, second_holder_mobile_declaration, third_holder_email, third_holder_email_declaration, third_holder_mobile, third_holder_mobile_declaration, nomination_flag, nomination_auth_date, guardian_relationship, created_by, created_at, last_modified_by, last_modified_at, upload_batch) VALUES (""" + ",".join(
-        ["?"] * 210) + ")"
+        ["?"] * 209) + ")"
 
     inserted = skipped = 0
     with get_conn() as conn:
@@ -498,14 +497,17 @@ def _build_nominee(row, _c_func, seq: int) -> tuple:
             raw_val(row.get(F(f"{pfx}minor_flag", f"{pfx}is_minor") or "", "")),
             raw_val(row.get(F(f"{pfx}dob") or "", "")),
             raw_val(row.get(F(f"{pfx}guardian", f"{pfx}guardian_name") or "", "")),
-            raw_val(row.get(F(f"{pfx}guardian_pan") or "", "")), raw_val(row.get(F(f"{npfx}id_typ") or "", "")),
-            raw_val(row.get(F(f"{npfx}idno") or "", "")), raw_val(row.get(F(f"{pfx}email", f"{npfx}email") or "", "")),
+            raw_val(row.get(F(f"{pfx}guardian_pan") or "", "")),
+            raw_val(row.get(F(f"{npfx}id_typ") or "", "")),
+            raw_val(row.get(F(f"{npfx}idno") or "", "")),
+            raw_val(row.get(F(f"{pfx}email", f"{npfx}email") or "", "")),
             raw_val(row.get(F(f"{pfx}mobile", f"{npfx}mob") or "", "")),
             raw_val(row.get(F(f"{pfx}address1", f"{npfx}add1") or "", "")),
             raw_val(row.get(F(f"{pfx}address2", f"{npfx}add2") or "", "")),
             raw_val(row.get(F(f"{pfx}address3", f"{npfx}add3") or "", "")),
             raw_val(row.get(F(f"{pfx}city", f"{npfx}city") or "", "")),
-            raw_val(row.get(F(f"{pfx}pincode", f"{npfx}pin") or "", "")), raw_val(row.get(F(f"{npfx}con") or "", "")))
+            raw_val(row.get(F(f"{pfx}pincode", f"{npfx}pin") or "", "")),
+            raw_val(row.get(F(f"{npfx}con") or "", "")))
 
 
 def parse_bse_sip(file, replace: bool) -> tuple[bool, str, dict]:

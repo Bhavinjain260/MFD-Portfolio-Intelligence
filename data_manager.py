@@ -1,5 +1,5 @@
 """
-data_manager.py
+Old - data_manager.py
 All Upload / Parse / Delete logic for BSE, CAMS, and KFinTech data.
 Every parser inserts RAW file data into the exact tables defined in init.py's init_db().
 Call render_data_manager() inside the Admin Panel tab.

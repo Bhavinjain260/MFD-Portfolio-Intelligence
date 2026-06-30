@@ -1,13 +1,13 @@
 """New Structure """
-import os
+
 import sqlite3
 from contextlib import contextmanager
 
-DB_PATH = "mfd_local.db"
+# DB_PATH = "mfd_local.db"
 
+import os
 
-
-# DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mfd_local.db")
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mfd_local.db")
 
 
 @contextmanager
@@ -1085,3 +1085,7 @@ def init_db() -> None:
     CREATE INDEX IF NOT EXISTS idx_kfin_brk_proc        ON kfin_mfsd205_brokerage(process_date);
 
     """)
+
+
+if __name__ == "__main__":
+    init_db()
