@@ -14,9 +14,11 @@ from contextlib import contextmanager
 from datetime import datetime
 import re
 
-
 import pandas as pd
 import streamlit as st
+
+import data_manager
+print(data_manager.__file__)
 
 log = logging.getLogger(__name__)
 
@@ -103,11 +105,12 @@ def _batch_id(prefix: str, name: str = "") -> str:
 #     return df
 def _clean_cols(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = [
-        c.strip().replace("\u200b", "").replace("\ufeff", "").replace("\u00a0", "")
-         .strip("'\"").upper().replace(" ", "_").replace("-", "_")
+        re.sub(r"[^A-Z0-9]+", "_", c.strip().replace("\u200b", "").replace("\ufeff", "")
+               .replace("\u00a0", "").strip("'\"").upper()).strip("_")
         for c in df.columns
     ]
     return df
+
 
 def _read_csv_auto(file) -> pd.DataFrame | None:
     for sep in ("\t", ",", ";"):
@@ -292,7 +295,8 @@ def parse_bse_client_master(file, replace: bool) -> tuple[bool, str]:
     email_decl_col = _c("email_declaration_flag", "email_decl_flag")
     mobile_decl_col = _c("mobile_declaration_flag", "mobile_decl_flag")
     email_col = _c("email", "primary_holder_email");
-    mobile_col = _c("indian_mobile_no", "mobile", "mobile_no", "mobile_number", "phone", "contact_no", "primary_holder_mobile")
+    mobile_col = _c("indian_mobile_no", "mobile", "mobile_no", "mobile_number", "phone", "contact_no",
+                    "primary_holder_mobile")
     resi_phone_col = _c("resi_phone");
     resi_fax_col = _c("resi_fax")
     office_phone_col = _c("office_phone");
@@ -1057,67 +1061,67 @@ def _execute_cams_import(table: str, rows: list, batch: str, replace: bool, skip
 
 table_column_map = {
     "cams_wbr4_aum": ["FOLIOCHK", "INV_NAME", "ADDRESS1", "ADDRESS2", "ADDRESS3", "CITY", "PINCODE", "PRODUCT",
-                       "SCH_NAME", "REP_DATE", "CLOS_BAL", "RUPEE_BAL", "SUBBROK", "REINV_FLAG", "JOINT1_NAME",
-                       "JOINT2_NAME", "PHONE_OFF", "PHONE_RES", "EMAIL", "HOLDING_NATURE", "UIN_NO", "BROKER_CODE",
-                       "PAN_NO", "JOINT1_PAN", "JOINT2_PAN", "GUARD_PAN", "TAX_STATUS", "INV_IIN", "ALTFOLIO", "EUIN",
-                       "EXCHANGE_FLAG", "TPA_LINKED", "FH_CKYC_NO", "JH1_CKYC", "JH2_CKYC", "G_CKYC_NO", "JH1_DOB",
-                       "JH2_DOB", "GUARDIAN_DOB", "AMC_CODE", "GST_STATE_CODE", "FOLIO_OLD", "SCHEME_FOLIO_NUMBER",
-                       "COUNTRY"],
+                      "SCH_NAME", "REP_DATE", "CLOS_BAL", "RUPEE_BAL", "SUBBROK", "REINV_FLAG", "JOINT1_NAME",
+                      "JOINT2_NAME", "PHONE_OFF", "PHONE_RES", "EMAIL", "HOLDING_NATURE", "UIN_NO", "BROKER_CODE",
+                      "PAN_NO", "JOINT1_PAN", "JOINT2_PAN", "GUARD_PAN", "TAX_STATUS", "INV_IIN", "ALTFOLIO", "EUIN",
+                      "EXCHANGE_FLAG", "TPA_LINKED", "FH_CKYC_NO", "JH1_CKYC", "JH2_CKYC", "G_CKYC_NO", "JH1_DOB",
+                      "JH2_DOB", "GUARDIAN_DOB", "AMC_CODE", "GST_STATE_CODE", "FOLIO_OLD", "SCHEME_FOLIO_NUMBER",
+                      "COUNTRY"],
     "cams_wbr9_folio": ["FOLIOCHK", "INV_NAME", "ADDRESS1", "ADDRESS2", "ADDRESS3", "CITY", "PINCODE", "PRODUCT",
-                         "SCH_NAME", "REP_DATE", "CLOS_BAL", "RUPEE_BAL", "JNT_NAME1", "JNT_NAME2", "PHONE_OFF",
-                         "PHONE_RES", "EMAIL", "HOLDING_NATURE", "UIN_NO", "PAN_NO", "JOINT1_PAN", "JOINT2_PAN",
-                         "GUARD_PAN", "TAX_STATUS", "BROKER_CODE", "SUBBROKER", "REINV_FLAG", "BANK_NAME", "BRANCH",
-                         "AC_TYPE", "AC_NO", "B_ADDRESS1", "B_ADDRESS2", "B_ADDRESS3", "B_CITY", "B_PINCODE", "INV_DOB",
-                         "MOBILE_NO", "OCCUPATION", "INV_IIN", "NOM_NAME", "RELATION", "NOM_ADDR1", "NOM_ADDR2",
-                         "NOM_ADDR3", "NOM_CITY", "NOM_STATE", "NOM_PINCODE", "NOM_PH_OFF", "NOM_PH_RES", "NOM_EMAIL",
-                         "NOM_PERCENTAGE", "NOM2_NAME", "NOM2_RELATION", "NOM2_ADDR1", "NOM2_ADDR2", "NOM2_ADDR3",
-                         "NOM2_CITY", "NOM2_STATE", "NOM2_PINCODE", "NOM2_PH_OFF", "NOM2_PH_RES", "NOM2_EMAIL",
-                         "NOM2_PERCENTAGE", "NOM3_NAME", "NOM3_RELATION", "NOM3_ADDR1", "NOM3_ADDR2", "NOM3_ADDR3",
-                         "NOM3_CITY", "NOM3_STATE", "NOM3_PINCODE", "NOM3_PH_OFF", "NOM3_PH_RES", "NOM3_EMAIL",
-                         "NOM3_PERCENTAGE", "IFSC_CODE", "DP_ID", "DEMAT", "GUARD_NAME", "BROKCODE", "FOLIO_DATE",
-                         "AADHAAR", "TPA_LINKED", "FH_CKYC_NO", "JH1_CKYC", "JH2_CKYC", "G_CKYC_NO", "JH1_DOB",
-                         "JH2_DOB", "GUARDIAN_DOB", "AMC_CODE", "GST_STATE_CODE", "FOLIO_OLD", "SCHEME_FOLIO_NUMBER",
-                         "COUNTRY", "REMARKS", "JH1_EMAIL", "JH2_EMAIL", "JH1_MOBILE_NO", "JH2_MOBILE_NO"],
+                        "SCH_NAME", "REP_DATE", "CLOS_BAL", "RUPEE_BAL", "JNT_NAME1", "JNT_NAME2", "PHONE_OFF",
+                        "PHONE_RES", "EMAIL", "HOLDING_NATURE", "UIN_NO", "PAN_NO", "JOINT1_PAN", "JOINT2_PAN",
+                        "GUARD_PAN", "TAX_STATUS", "BROKER_CODE", "SUBBROKER", "REINV_FLAG", "BANK_NAME", "BRANCH",
+                        "AC_TYPE", "AC_NO", "B_ADDRESS1", "B_ADDRESS2", "B_ADDRESS3", "B_CITY", "B_PINCODE", "INV_DOB",
+                        "MOBILE_NO", "OCCUPATION", "INV_IIN", "NOM_NAME", "RELATION", "NOM_ADDR1", "NOM_ADDR2",
+                        "NOM_ADDR3", "NOM_CITY", "NOM_STATE", "NOM_PINCODE", "NOM_PH_OFF", "NOM_PH_RES", "NOM_EMAIL",
+                        "NOM_PERCENTAGE", "NOM2_NAME", "NOM2_RELATION", "NOM2_ADDR1", "NOM2_ADDR2", "NOM2_ADDR3",
+                        "NOM2_CITY", "NOM2_STATE", "NOM2_PINCODE", "NOM2_PH_OFF", "NOM2_PH_RES", "NOM2_EMAIL",
+                        "NOM2_PERCENTAGE", "NOM3_NAME", "NOM3_RELATION", "NOM3_ADDR1", "NOM3_ADDR2", "NOM3_ADDR3",
+                        "NOM3_CITY", "NOM3_STATE", "NOM3_PINCODE", "NOM3_PH_OFF", "NOM3_PH_RES", "NOM3_EMAIL",
+                        "NOM3_PERCENTAGE", "IFSC_CODE", "DP_ID", "DEMAT", "GUARD_NAME", "BROKCODE", "FOLIO_DATE",
+                        "AADHAAR", "TPA_LINKED", "FH_CKYC_NO", "JH1_CKYC", "JH2_CKYC", "G_CKYC_NO", "JH1_DOB",
+                        "JH2_DOB", "GUARDIAN_DOB", "AMC_CODE", "GST_STATE_CODE", "FOLIO_OLD", "SCHEME_FOLIO_NUMBER",
+                        "COUNTRY", "REMARKS", "JH1_EMAIL", "JH2_EMAIL", "JH1_MOBILE_NO", "JH2_MOBILE_NO"],
     "cams_wbr2_transaction": ["AMC_CODE", "FOLIO_NO", "PRODCODE", "SCHEME", "INV_NAME", "TRXNTYPE", "TRXNNO",
-                               "TRXNMODE", "TRXNSTAT", "USERCODE", "USRTRXNO", "TRADDATE", "POSTDATE", "PURPRICE",
-                               "UNITS", "AMOUNT", "BROKCODE", "SUBBROK", "BROKPERC", "BROKCOMM", "ALTFOLIO", "REP_DATE",
-                               "TIME1", "TRXNSUBTYP", "APPLICATION_NO", "TRXN_NATURE", "TAX", "TOTAL_TAX", "TE_15H",
-                               "MICR_NO", "REMARKS", "SWFLAG", "OLD_FOLIO", "SEQ_NO", "REINVEST_FLAG", "MULT_BROK",
-                               "STT", "LOCATION", "SCHEME_TYPE", "TAX_STATUS", "LOAD", "SCANREFNO", "PAN", "INV_IIN",
-                               "TARG_SRC_SCHEME", "TRXN_TYPE_FLAG", "TICOB_TRTYPE", "TICOB_TRNO", "TICOB_POSTED_DATE",
-                               "DP_ID", "TRXN_CHARGES", "ELIGIB_AMT", "SRC_OF_TXN", "TRXN_SUFFIX", "SIPTRXNNO",
-                               "TER_LOCATION", "EUIN", "EUIN_VALID", "EUIN_OPTED", "SUB_BRK_ARN", "EXCH_DC_FLAG",
-                               "SRC_BRK_CODE", "SYS_REGN_DATE", "AC_NO", "BANK_NAME", "REVERSAL_CODE", "EXCHANGE_FLAG",
-                               "CA_INITIATED_DATE", "GST_STATE_CODE", "IGST_AMOUNT", "CGST_AMOUNT", "SGST_AMOUNT",
-                               "REV_REMARK", "ORIGINAL_TRXNNO", "STAMP_DUTY", "FOLIO_OLD", "SCHEME_FOLIO_NUMBER",
-                               "AMC_REF_NO", "REQUEST_REF_NO", "TRANSMISSION_FLAG"],
+                              "TRXNMODE", "TRXNSTAT", "USERCODE", "USRTRXNO", "TRADDATE", "POSTDATE", "PURPRICE",
+                              "UNITS", "AMOUNT", "BROKCODE", "SUBBROK", "BROKPERC", "BROKCOMM", "ALTFOLIO", "REP_DATE",
+                              "TIME1", "TRXNSUBTYP", "APPLICATION_NO", "TRXN_NATURE", "TAX", "TOTAL_TAX", "TE_15H",
+                              "MICR_NO", "REMARKS", "SWFLAG", "OLD_FOLIO", "SEQ_NO", "REINVEST_FLAG", "MULT_BROK",
+                              "STT", "LOCATION", "SCHEME_TYPE", "TAX_STATUS", "LOAD", "SCANREFNO", "PAN", "INV_IIN",
+                              "TARG_SRC_SCHEME", "TRXN_TYPE_FLAG", "TICOB_TRTYPE", "TICOB_TRNO", "TICOB_POSTED_DATE",
+                              "DP_ID", "TRXN_CHARGES", "ELIGIB_AMT", "SRC_OF_TXN", "TRXN_SUFFIX", "SIPTRXNNO",
+                              "TER_LOCATION", "EUIN", "EUIN_VALID", "EUIN_OPTED", "SUB_BRK_ARN", "EXCH_DC_FLAG",
+                              "SRC_BRK_CODE", "SYS_REGN_DATE", "AC_NO", "BANK_NAME", "REVERSAL_CODE", "EXCHANGE_FLAG",
+                              "CA_INITIATED_DATE", "GST_STATE_CODE", "IGST_AMOUNT", "CGST_AMOUNT", "SGST_AMOUNT",
+                              "REV_REMARK", "ORIGINAL_TRXNNO", "STAMP_DUTY", "FOLIO_OLD", "SCHEME_FOLIO_NUMBER",
+                              "AMC_REF_NO", "REQUEST_REF_NO", "TRANSMISSION_FLAG"],
     "cams_wbr49_sip": ["PRODUCT", "SCHEME", "FOLIO_NO", "INV_NAME", "AUT_TRNTYP", "AUTO_TRNO", "AUTO_AMOUNT",
-                        "FROM_DATE", "TO_DATE", "CEASE_DATE", "PERIODICITY", "PERIOD_DAY", "INV_IIN", "PAYMENT_MODE",
-                        "TARGET_SCHEME", "REG_DATE", "SUBBROKER", "REMARKS", "TOP_UP_FRQ", "TOP_UP_AMT", "AC_TYPE",
-                        "BANK", "BRANCH", "INSTRM_NO", "CHEQ_MICR_NO", "AC_HOLDER_NAME", "PAN", "TOP_UP_PERC", "EUIN",
-                        "SUB_ARN_CODE", "TER_LOCATION", "SCHEME_CODE", "TARGET_SCHEME_CODE", "AMC_CODE", "USER_CODE",
-                        "PACKAGE_NAME", "SPECIAL_PRODUCT", "SUBTRXNDESC", "PAUSE_FROM_DATE", "PAUSE_TO_DATE",
-                        "FOLIO_OLD", "FT_SIP_REGNO", "SCHEME_FOLIO_NUMBER", "REQUEST_REF_NO"],
+                       "FROM_DATE", "TO_DATE", "CEASE_DATE", "PERIODICITY", "PERIOD_DAY", "INV_IIN", "PAYMENT_MODE",
+                       "TARGET_SCHEME", "REG_DATE", "SUBBROKER", "REMARKS", "TOP_UP_FRQ", "TOP_UP_AMT", "AC_TYPE",
+                       "BANK", "BRANCH", "INSTRM_NO", "CHEQ_MICR_NO", "AC_HOLDER_NAME", "PAN", "TOP_UP_PERC", "EUIN",
+                       "SUB_ARN_CODE", "TER_LOCATION", "SCHEME_CODE", "TARGET_SCHEME_CODE", "AMC_CODE", "USER_CODE",
+                       "PACKAGE_NAME", "SPECIAL_PRODUCT", "SUBTRXNDESC", "PAUSE_FROM_DATE", "PAUSE_TO_DATE",
+                       "FOLIO_OLD", "FT_SIP_REGNO", "SCHEME_FOLIO_NUMBER", "REQUEST_REF_NO"],
     "cams_wbr77_brokerage": ["AMC_CODE", "PROC_DATE", "FOLIO_NO", "SCHEME_CODE", "TRXN_TYPE", "TRXN_NO", "PLOT_AMOUNT",
-                              "PLOT_UNITS", "POST_DATE", "TRADE_DATE_TIME", "ENTRY_DATE", "USER_CODE", "USER_TRXNNO",
-                              "TRXN_NATURE", "TER_LOCATION", "SYS_REG_DATE", "AUT_TXN_NO", "AUTO_AMOUNT",
-                              "AUT_TXN_TYPE", "CEASE_DATE", "REMED_DATE", "FORF_DATE", "SRC_BRK_CODE", "BROK_CODE",
-                              "BRH_CODE", "SUB_BRK_ARN", "AE_CODE", "ARN_EMP_CODE", "EUIN_OPTED", "EUIN_VALID",
-                              "BRK_COMM_PAID", "ADJ_FLAG", "BRKAGE_TYPE", "BRKAGE_RATE", "TOTAL_UPFRONT",
-                              "DEFER_FREQUENCY", "DEFER_NO_OF_INSTALLMENT", "PAY_INSTALLMENT_NO", "BRKAGE_AMT",
-                              "BRKAGE_FROM", "BRKAGE_TO", "PROC_FROM_DATE", "PROC_TO_DATE", "TRXN_DESC",
-                              "SPL_UPF_TENURE", "UPF_TENURE_END_DATE", "BRK_PAY_DT", "CLW_TYPE", "CLW_PERIOD",
-                              "REC_FLAG", "P_SI_DATE", "REC_PERIOD", "CLW_AMT", "UPF_PAID", "FEE_ID", "AM_CODE",
-                              "AM_COMM", "AM_RATE", "AVG_ASSETS", "CAM_COMM", "CAM_RATE", "MAM_COMM", "MAM_RATE",
-                              "NO_OF_DAYS", "ORIG_AE_CODE", "ORIG_BRH_CODE", "ORIG_BRK_CODE", "RATE_REF_ID", "REF_NO",
-                              "TRXN_APP_NO", "TXN_SCH_CODE", "CLW_PRD", "CLW_REQUIRED", "P_SI_MIS_CODE",
-                              "P_SI_USER_TRXNNO", "SEQ_NO", "P_SI_AMT", "P_SI_TR_NO", "P_SI_TYPE", "PUR_SI_UNITS",
-                              "REMARKS", "TO_SCHEME", "TRXN_SIGN", "BRK_POSTED", "INV_NAME", "BROK_GST_STATE_CODE",
-                              "IGST_RATE", "CGST_RATE", "SGST_RATE", "IGST_VALUE", "CGST_VALUE", "SGST_VALUE",
-                              "LOCATION_CODE", "PREV_FOLIO", "BROK_CATEGORY", "P_SCHEME_CODE", "P_TRXN_TYPE",
-                              "P_TRXN_NO", "P_FOLIO_NO", "P_PLOT_AMOUNT", "P_PLOT_UNITS", "FOLIO_OLD",
-                              "SCHEME_FOLIO_NUMBER", "AMC_REF_NO", "REQUEST_REF_NO", "WRITE_OFF_REASON", "HOLD_REASON",
-                              "BROKERAGE_ACCRUAL_MONTH", "PREV_TRXN_NO", "PREV_TRXN_DATE"]
+                             "PLOT_UNITS", "POST_DATE", "TRADE_DATE_TIME", "ENTRY_DATE", "USER_CODE", "USER_TRXNNO",
+                             "TRXN_NATURE", "TER_LOCATION", "SYS_REG_DATE", "AUT_TXN_NO", "AUTO_AMOUNT",
+                             "AUT_TXN_TYPE", "CEASE_DATE", "REMED_DATE", "FORF_DATE", "SRC_BRK_CODE", "BROK_CODE",
+                             "BRH_CODE", "SUB_BRK_ARN", "AE_CODE", "ARN_EMP_CODE", "EUIN_OPTED", "EUIN_VALID",
+                             "BRK_COMM_PAID", "ADJ_FLAG", "BRKAGE_TYPE", "BRKAGE_RATE", "TOTAL_UPFRONT",
+                             "DEFER_FREQUENCY", "DEFER_NO_OF_INSTALLMENT", "PAY_INSTALLMENT_NO", "BRKAGE_AMT",
+                             "BRKAGE_FROM", "BRKAGE_TO", "PROC_FROM_DATE", "PROC_TO_DATE", "TRXN_DESC",
+                             "SPL_UPF_TENURE", "UPF_TENURE_END_DATE", "BRK_PAY_DT", "CLW_TYPE", "CLW_PERIOD",
+                             "REC_FLAG", "P_SI_DATE", "REC_PERIOD", "CLW_AMT", "UPF_PAID", "FEE_ID", "AM_CODE",
+                             "AM_COMM", "AM_RATE", "AVG_ASSETS", "CAM_COMM", "CAM_RATE", "MAM_COMM", "MAM_RATE",
+                             "NO_OF_DAYS", "ORIG_AE_CODE", "ORIG_BRH_CODE", "ORIG_BRK_CODE", "RATE_REF_ID", "REF_NO",
+                             "TRXN_APP_NO", "TXN_SCH_CODE", "CLW_PRD", "CLW_REQUIRED", "P_SI_MIS_CODE",
+                             "P_SI_USER_TRXNNO", "SEQ_NO", "P_SI_AMT", "P_SI_TR_NO", "P_SI_TYPE", "PUR_SI_UNITS",
+                             "REMARKS", "TO_SCHEME", "TRXN_SIGN", "BRK_POSTED", "INV_NAME", "BROK_GST_STATE_CODE",
+                             "IGST_RATE", "CGST_RATE", "SGST_RATE", "IGST_VALUE", "CGST_VALUE", "SGST_VALUE",
+                             "LOCATION_CODE", "PREV_FOLIO", "BROK_CATEGORY", "P_SCHEME_CODE", "P_TRXN_TYPE",
+                             "P_TRXN_NO", "P_FOLIO_NO", "P_PLOT_AMOUNT", "P_PLOT_UNITS", "FOLIO_OLD",
+                             "SCHEME_FOLIO_NUMBER", "AMC_REF_NO", "REQUEST_REF_NO", "WRITE_OFF_REASON", "HOLD_REASON",
+                             "BROKERAGE_ACCRUAL_MONTH", "PREV_TRXN_NO", "PREV_TRXN_DATE"]
 }
 
 
@@ -1270,8 +1274,19 @@ def parse_kfin_mfsd205_brokerage(file, replace: bool) -> tuple[bool, str, dict]:
     df = _read_csv_auto(file)
     if df is None: return False, "Could not parse file", {}
     df = _clean_cols(df)
-    rename_map = {"AMOUNT_RS": "AMOUNT", "BROKERAGE_RS": "BROKERAGE", "GROSSBROKERAGE": "GROSS_BROKERAGE",
-                  "STTAMOUNT": "STT_AMOUNT", "EDUCESSAMOUNT": "EDUCESS_AMOUNT", "TRANTYPECODE": "TRAN_TYPE_CODE"}
+    rename_map = {
+        "AMOUNT (IN RS.)": "AMOUNT",
+        "BROKERAGE (IN RS.)": "BROKERAGE",
+        "PERCENTAGE (%)": "PERCENTAGE",
+        "ADDRESS #1": "ADDRESS1",
+        "ADDRESS #2": "ADDRESS2",
+        "ADDRESS #3": "ADDRESS3",
+        "SUB-BROKER": "SUB_BROKER",
+        "GROSSBROKERAGE": "GROSS_BROKERAGE",
+        "STTAMOUNT": "STT_AMOUNT",
+        "EDUCESSAMOUNT": "EDUCESS_AMOUNT",
+        "TRANTYPECODE": "TRAN_TYPE_CODE",
+    }
     df.rename(columns=rename_map, inplace=True)
     if "TRANSACTION_NUMBER" not in df.columns: return False, "Missing TRANSACTION_NUMBER", {}
     batch = _batch_id("KFIN_205", file.name);

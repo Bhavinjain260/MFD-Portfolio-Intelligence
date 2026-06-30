@@ -1971,7 +1971,56 @@ elif mode == "💰 Brokerage Report":
     # ════════════════════════════════════════════════════════════
     st.subheader("🔍 AMC Drilldown — Client-level Detail")
 
-    all_amcs = sorted(detail["amc"].dropna().unique()) if not detail.empty else []
+    with get_conn() as conn:
+        print([r[1] for r in conn.execute("PRAGMA table_info(kfin_mfsd205_brokerage)").fetchall()])
+
+    with get_conn() as conn:
+        df = pd.read_sql(
+            "SELECT account_number, amount, percentage, brokerage, gross_brokerage, brokerage_type "
+            "FROM kfin_mfsd205_brokerage LIMIT 20", conn
+        )
+    print(df.to_string())
+
+    # ── NORMALIZE COLUMN NAMES (CAMS vs KFinTech) ──
+    # CAMS WBR77 uses: BRKAGE_AMT, BRKAGE_RATE, BRKAGE_TYPE, INV_NAME, FOLIO_NO, PLOT_AMOUNT, TRADE_DATE_TIME
+    # KFinTech MFSD205 uses: BROKERAGE, PERCENTAGE, BROKERAGE_TYPE, INVESTOR_NAME, ACCOUNT_NUMBER, AMOUNT, TRANSACTION_DATE
+    detail_norm = detail.copy()
+    col_map = {}
+    if "BRKAGE_AMT" in detail_norm.columns:
+        col_map["BRKAGE_AMT"] = "brokerage_amount"
+    if "BROKERAGE" in detail_norm.columns:
+        col_map["BROKERAGE"] = "brokerage_amount"
+    if "BRKAGE_RATE" in detail_norm.columns:
+        col_map["BRKAGE_RATE"] = "brokerage_pct"
+    if "PERCENTAGE" in detail_norm.columns:
+        col_map["PERCENTAGE"] = "brokerage_pct"
+    if "BRKAGE_TYPE" in detail_norm.columns:
+        col_map["BRKAGE_TYPE"] = "brokerage_type"
+    if "BROKERAGE_TYPE" in detail_norm.columns:
+        col_map["BROKERAGE_TYPE"] = "brokerage_type"
+    if "INV_NAME" in detail_norm.columns:
+        col_map["INV_NAME"] = "client"
+    if "INVESTOR_NAME" in detail_norm.columns:
+        col_map["INVESTOR_NAME"] = "client"
+    if "FOLIO_NO" in detail_norm.columns:
+        col_map["FOLIO_NO"] = "folio"
+    if "ACCOUNT_NUMBER" in detail_norm.columns:
+        col_map["ACCOUNT_NUMBER"] = "folio"
+    if "PLOT_AMOUNT" in detail_norm.columns:
+        col_map["PLOT_AMOUNT"] = "txn_amount"
+    if "AMOUNT" in detail_norm.columns:
+        col_map["AMOUNT"] = "txn_amount"
+    if "TRADE_DATE_TIME" in detail_norm.columns:
+        col_map["TRADE_DATE_TIME"] = "txn_date"
+    if "TRANSACTION_DATE" in detail_norm.columns:
+        col_map["TRANSACTION_DATE"] = "txn_date"
+    if "SCHEME_CODE" in detail_norm.columns:
+        col_map["SCHEME_CODE"] = "scheme_code"
+    if col_map:
+        detail_norm = detail_norm.rename(columns=col_map)
+
+    # ── DRILLDOWN LOGIC ──
+    all_amcs = sorted(detail_norm["amc"].dropna().unique()) if not detail_norm.empty else []
     if not all_amcs:
         st.info("No detail rows available.")
     else:
@@ -1979,9 +2028,9 @@ elif mode == "💰 Brokerage Report":
         selected_amc = st.selectbox("Select AMC", amc_options, key="brok_drilldown_amc")
 
         if selected_amc == "All":
-            amc_detail = detail.copy()
+            amc_detail = detail_norm.copy()
         else:
-            amc_detail = detail[detail["amc"] == selected_amc].copy()
+            amc_detail = detail_norm[detail_norm["amc"] == selected_amc].copy()
 
         dc1, dc2 = st.columns([2, 2])
         with dc1:
@@ -2033,6 +2082,13 @@ elif mode == "💰 Brokerage Report":
                 csv, f"brokerage_{label.replace(' ', '_')}.csv", "text/csv",
                 key="brok_drilldown_download"
             )
+
+            detail = data["detail"]
+            st.write("Detail columns:", detail.columns.tolist())
+            st.write("Sample brokerage_amount values:", detail["brokerage_amount"].head(10).tolist())
+            st.write("Non-null brokerage count:", detail["brokerage_amount"].notna().sum())
+            st.write("Zero brokerage count:", (detail["brokerage_amount"] == 0.0).sum())
+            st.write("Total brokerage sum:", detail["brokerage_amount"].sum())
 
     st.divider()
 
