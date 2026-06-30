@@ -284,7 +284,7 @@ def parse_bse_client_master(file, replace: bool) -> tuple[bool, str]:
     email_decl_col = _c("email_declaration_flag", "email_decl_flag")
     mobile_decl_col = _c("mobile_declaration_flag", "mobile_decl_flag")
     email_col = _c("email", "primary_holder_email");
-    mobile_col = _c("indian_mobile_no", "mobile", "mobile_no")
+    mobile_col = _c("indian_mobile_no", "mobile", "mobile_no", "mobile_number", "phone", "contact_no", "primary_holder_mobile")
     resi_phone_col = _c("resi_phone");
     resi_fax_col = _c("resi_fax")
     office_phone_col = _c("office_phone");
