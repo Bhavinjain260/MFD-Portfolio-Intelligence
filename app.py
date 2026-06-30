@@ -1515,6 +1515,7 @@ if mode == "📊 Dashboard":
     uploads_df = load_recent_uploads()
     if not uploads_df.empty:
         st.dataframe(uploads_df, width='stretch', hide_index=True)
+        st.dataframe(uploads_df, width='stretch', hide_index=True)
     else:
         st.info("No uploads yet. Go to Admin Panel to upload data.")
 
