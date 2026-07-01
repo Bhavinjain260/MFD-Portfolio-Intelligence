@@ -1628,12 +1628,86 @@ def render_data_manager():
                     else:
                         st.error(msg)
 
+        # ═══════════════════════════════════════════════════════════
+        # BSE Scheme Master — Auto Download + Manual Upload
+        # ═══════════════════════════════════════════════════════════
         st.subheader("BSE Scheme Master")
+
+        from bse_auto import (
+            get_download_status, start_background_download,
+            should_auto_download, get_latest_file_path, get_download_dir,
+            parse_and_import_latest
+        )
+
+        # ── Live status check ──
+        status = get_download_status()
+
+        # If a background download just finished, show result
+        if status["done"] and not st.session_state.get("bse_notified", False):
+            st.session_state["bse_notified"] = True
+            if status["ok"]:
+                st.toast(f"✅ BSE Scheme Master ready: {status['msg']}")
+                st.success(f"✅ {status['msg']}")
+            else:
+                st.toast(f"❌ BSE download failed")
+                st.error(f"❌ {status['msg']}")
+
+        # ── Auto Download Controls ──
+        auto_col1, auto_col2, auto_col3 = st.columns([2, 2, 3])
+        with auto_col1:
+            auto_enabled = st.toggle("🤖 Auto-download daily", value=True, key="bse_auto_toggle")
+        with auto_col2:
+            if status["running"]:
+                st.button("⏳ Downloading...", disabled=True, key="btn_bse_auto_busy")
+            else:
+                if st.button("⬇️ Download Now", type="primary", key="btn_bse_auto_now"):
+                    st.session_state["bse_notified"] = False
+                    start_background_download()
+                    st.rerun()
+        with auto_col3:
+            latest = get_latest_file_path()
+            if latest:
+                st.caption(f"📁 Latest: `{Path(latest).name}`")
+            else:
+                st.caption("⏳ No file yet")
+
+        # ── Live spinner while background thread runs ──
+        if status["running"]:
+            st.info(
+                "⏳ Downloading BSE Scheme Master in background... This may take 30–60s. You can keep using the app.")
+            # Auto-refresh every 3 seconds to poll status
+            time.sleep(3)
+            st.rerun()
+
+        # ── Parse into DB ──
+        latest_path = get_latest_file_path()
+        if latest_path and Path(latest_path).exists():
+            proc_col1, proc_col2 = st.columns([2, 4])
+            with proc_col1:
+                if st.button("📥 Parse Latest into DB", key="btn_bse_auto_parse"):
+                    with st.spinner("Parsing..."):
+                        result = parse_and_import_latest(parse_bse_scheme_master)
+                        if result["ok"] and result["db_ok"]:
+                            st.success(result["msg"])
+                            if result.get("preview"):
+                                st.json(result["preview"])
+                        elif result["ok"]:
+                            st.warning(f"Downloaded but DB import failed: {result['msg']}")
+                        else:
+                            st.error(result["msg"])
+
+        st.divider()
+        st.markdown("**— or upload manually —**")
+
+        # ── Manual Upload ──
         with st.container(border=True):
-            f_sm = st.file_uploader("Upload Scheme Master (Excel/CSV)", type=["xlsx", "xls", "csv", "tsv"],
-                                    key="up_bse_sm")
+            f_sm = st.file_uploader(
+                "Upload Scheme Master (Excel/CSV/TXT)",
+                type=["xlsx", "xls", "csv", "txt"],
+                key="up_bse_sm"
+            )
             c_sm = st.checkbox("Replace all existing data?", key="chk_bse_sm")
-            if st.button("Process Scheme Master", type="primary", key="btn_bse_sm") and f_sm:
+            if st.button("Process Scheme Master", type="secondary", key="btn_bse_sm") and f_sm:
                 with st.spinner("Processing BSE Scheme Master..."):
                     ok, msg, preview = parse_bse_scheme_master(f_sm, c_sm)
                     if ok:

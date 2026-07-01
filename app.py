@@ -1234,6 +1234,37 @@ st.set_page_config(page_title="MFD Portfolio Intelligence", layout="wide", page_
 
 ensure_db()
 
+
+# ==================== BSE SCHEME MASTER AUTO-DOWNLOAD ====================
+# ==================== BSE SCHEME MASTER AUTO-DOWNLOAD ====================
+def _auto_bse_scheme_master():
+    """Non-blocking: starts background download if needed, once per day."""
+    from bse_auto import should_auto_download, start_background_download, get_download_status
+
+    # Only run if user hasn't disabled it
+    if not st.session_state.get("bse_auto_toggle", True):
+        return
+
+    # Only schedule once per day
+    last_run = st.session_state.get("bse_auto_last_run")
+    today = datetime.now().strftime("%Y-%m-%d")
+    if last_run == today:
+        return
+
+    st.session_state["bse_auto_last_run"] = today
+
+    if should_auto_download():
+        log.info("[BSE-AUTO-STARTUP] Scheduling background download...")
+        start_background_download()
+        # Don't block — let the UI render. The status will show on next rerun.
+    else:
+        log.info("[BSE-AUTO-STARTUP] Today's file already exists.")
+
+
+
+
+_auto_bse_scheme_master()
+
 # -------------------- THEME (native Streamlit System/Light/Dark) --------------------
 current_theme = st.context.theme.type
 dark = current_theme == "dark"
