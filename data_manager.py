@@ -1593,15 +1593,15 @@ kfin_table_column_map = {
 # ══════════════════════════════════════════════════════════════════════════════
 
 def render_data_manager():
-    st.header("📁 Data Upload Manager")
     st.markdown(
         "Upload raw BSE, CAMS, and KFinTech files. Data is inserted exactly as provided in the files (no text case "
         "changes or date reformatting).")
 
-    tab_bse, tab_cams, tab_kfin = st.tabs(["⭐ BSE Star", "🏦 CAMS", "🟦 KFinTech"])
+    # ───────────────────────────── BSE ─────────────────────────────
+    with st.expander("⭐ BSE Star MF Uploads", expanded=False):
+        st.caption("Upload BSE Client Master, SIP, and Scheme Master files")
+        st.divider()
 
-    # --------------------- BSE TAB ---------------------
-    with tab_bse:
         st.subheader("BSE Client Master")
         with st.container(border=True):
             f_cm = st.file_uploader("Upload Client Master Excel", type=["xlsx", "xls"], key="up_bse_cm")
@@ -1623,7 +1623,8 @@ def render_data_manager():
                     ok, msg, preview = parse_bse_sip(f_sip, c_sip)
                     if ok:
                         st.success(msg)
-                        if preview: st.json(preview)
+                        if preview:
+                            st.json(preview)
                     else:
                         st.error(msg)
 
@@ -1637,90 +1638,107 @@ def render_data_manager():
                     ok, msg, preview = parse_bse_scheme_master(f_sm, c_sm)
                     if ok:
                         st.success(msg)
-                        if preview: st.json(preview)
+                        if preview:
+                            st.json(preview)
                     else:
                         st.error(msg)
 
-    # --------------------- CAMS TAB ---------------------
-    with tab_cams:
+    # ───────────────────────────── CAMS ─────────────────────────────
+    with st.expander("🏦 CAMS Uploads", expanded=False):
+        st.caption("Upload CAMS WBR4, WBR9, WBR2, WBR49, and WBR77 files")
+        st.divider()
+
         st.subheader("CAMS WBR4 - AUM")
         with st.container(border=True):
             f = st.file_uploader("Upload WBR4 Text/CSV", type=["txt", "csv"], key="up_cams_r4")
             c = st.checkbox("Replace all existing data?", key="chk_cams_r4")
             if st.button("Process WBR4 AUM", type="primary", key="btn_cams_r4") and f:
-                with st.spinner("Processing..."): ok, msg, p = parse_cams_wbr4_aum(f, c); (
-                    st.success(msg) if ok else st.error(msg))
+                with st.spinner("Processing..."):
+                    ok, msg, p = parse_cams_wbr4_aum(f, c)
+                    (st.success(msg) if ok else st.error(msg))
 
         st.subheader("CAMS WBR9 - Folio Master")
         with st.container(border=True):
             f = st.file_uploader("Upload WBR9 Text/CSV", type=["txt", "csv"], key="up_cams_r9")
             c = st.checkbox("Replace all existing data?", key="chk_cams_r9")
             if st.button("Process WBR9 Folio", type="primary", key="btn_cams_r9") and f:
-                with st.spinner("Processing..."): ok, msg, p = parse_cams_wbr9_folio(f, c); (
-                    st.success(msg) if ok else st.error(msg))
+                with st.spinner("Processing..."):
+                    ok, msg, p = parse_cams_wbr9_folio(f, c)
+                    (st.success(msg) if ok else st.error(msg))
 
         st.subheader("CAMS WBR2 - Transactions")
         with st.container(border=True):
             f = st.file_uploader("Upload WBR2 Text/CSV", type=["txt", "csv"], key="up_cams_r2")
             c = st.checkbox("Replace all existing data?", key="chk_cams_r2")
             if st.button("Process WBR2 Transactions", type="primary", key="btn_cams_r2") and f:
-                with st.spinner("Processing..."): ok, msg, p = parse_cams_wbr2_transaction(f, c); (
-                    st.success(msg) if ok else st.error(msg))
+                with st.spinner("Processing..."):
+                    ok, msg, p = parse_cams_wbr2_transaction(f, c)
+                    (st.success(msg) if ok else st.error(msg))
 
         st.subheader("CAMS WBR49 - SIP")
         with st.container(border=True):
             f = st.file_uploader("Upload WBR49 Text/CSV", type=["txt", "csv"], key="up_cams_r49")
             c = st.checkbox("Replace all existing data?", key="chk_cams_r49")
             if st.button("Process WBR49 SIP", type="primary", key="btn_cams_r49") and f:
-                with st.spinner("Processing..."): ok, msg, p = parse_cams_wbr49_sip(f, c); (
-                    st.success(msg) if ok else st.error(msg))
+                with st.spinner("Processing..."):
+                    ok, msg, p = parse_cams_wbr49_sip(f, c)
+                    (st.success(msg) if ok else st.error(msg))
 
         st.subheader("CAMS WBR77 - Brokerage")
         with st.container(border=True):
             f = st.file_uploader("Upload WBR77 Text/CSV", type=["txt", "csv"], key="up_cams_r77")
             c = st.checkbox("Replace all existing data?", key="chk_cams_r77")
             if st.button("Process WBR77 Brokerage", type="primary", key="btn_cams_r77") and f:
-                with st.spinner("Processing..."): ok, msg, p = parse_cams_wbr77_brokerage(f, c); (
-                    st.success(msg) if ok else st.error(msg))
+                with st.spinner("Processing..."):
+                    ok, msg, p = parse_cams_wbr77_brokerage(f, c)
+                    (st.success(msg) if ok else st.error(msg))
 
-    # --------------------- KFINTECH TAB ---------------------
-    with tab_kfin:
+    # ───────────────────────────── KFINTECH ─────────────────────────────
+    with st.expander("🟦 KFinTech Uploads", expanded=False):
+        st.caption("Upload KFinTech MFSD203, 211, 201, 243, and 205 files")
+        st.divider()
+
         st.subheader("KFin MFSD203 - AUM")
         with st.container(border=True):
             f = st.file_uploader("Upload MFSD203 Text/CSV", type=["txt", "csv"], key="up_kfin_203")
             c = st.checkbox("Replace all existing data?", key="chk_kfin_203")
             if st.button("Process MFSD203 AUM", type="primary", key="btn_kfin_203") and f:
-                with st.spinner("Processing..."): ok, msg, p = parse_kfin_mfsd203_aum(f, c); (
-                    st.success(msg) if ok else st.error(msg))
+                with st.spinner("Processing..."):
+                    ok, msg, p = parse_kfin_mfsd203_aum(f, c)
+                    (st.success(msg) if ok else st.error(msg))
 
         st.subheader("KFin MFSD211 - Folio Master")
         with st.container(border=True):
             f = st.file_uploader("Upload MFSD211 Text/CSV", type=["txt", "csv"], key="up_kfin_211")
             c = st.checkbox("Replace all existing data?", key="chk_kfin_211")
             if st.button("Process MFSD211 Folio", type="primary", key="btn_kfin_211") and f:
-                with st.spinner("Processing..."): ok, msg, p = parse_kfin_mfsd211_folio(f, c); (
-                    st.success(msg) if ok else st.error(msg))
+                with st.spinner("Processing..."):
+                    ok, msg, p = parse_kfin_mfsd211_folio(f, c)
+                    (st.success(msg) if ok else st.error(msg))
 
         st.subheader("KFin MFSD201 - Transactions")
         with st.container(border=True):
             f = st.file_uploader("Upload MFSD201 Text/CSV", type=["txt", "csv"], key="up_kfin_201")
             c = st.checkbox("Replace all existing data?", key="chk_kfin_201")
             if st.button("Process MFSD201 Transactions", type="primary", key="btn_kfin_201") and f:
-                with st.spinner("Processing..."): ok, msg, p = parse_kfin_mfsd201_transaction(f, c); (
-                    st.success(msg) if ok else st.error(msg))
+                with st.spinner("Processing..."):
+                    ok, msg, p = parse_kfin_mfsd201_transaction(f, c)
+                    (st.success(msg) if ok else st.error(msg))
 
         st.subheader("KFin MFSD243 - SIP")
         with st.container(border=True):
             f = st.file_uploader("Upload MFSD243 Text/CSV", type=["txt", "csv"], key="up_kfin_243")
             c = st.checkbox("Replace all existing data?", key="chk_kfin_243")
             if st.button("Process MFSD243 SIP", type="primary", key="btn_kfin_243") and f:
-                with st.spinner("Processing..."): ok, msg, p = parse_kfin_mfsd243_sip(f, c); (
-                    st.success(msg) if ok else st.error(msg))
+                with st.spinner("Processing..."):
+                    ok, msg, p = parse_kfin_mfsd243_sip(f, c)
+                    (st.success(msg) if ok else st.error(msg))
 
         st.subheader("KFin MFSD205 - Brokerage")
         with st.container(border=True):
             f = st.file_uploader("Upload MFSD205 Text/CSV", type=["txt", "csv"], key="up_kfin_205")
             c = st.checkbox("Replace all existing data?", key="chk_kfin_205")
             if st.button("Process MFSD205 Brokerage", type="primary", key="btn_kfin_205") and f:
-                with st.spinner("Processing..."): ok, msg, p = parse_kfin_mfsd205_brokerage(f, c); (
-                    st.success(msg) if ok else st.error(msg))
+                with st.spinner("Processing..."):
+                    ok, msg, p = parse_kfin_mfsd205_brokerage(f, c)
+                    (st.success(msg) if ok else st.error(msg))

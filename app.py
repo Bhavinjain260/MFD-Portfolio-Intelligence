@@ -905,10 +905,6 @@ def get_kfin_invested_amount(folio_list):
     if not folio_list:
         return 0.0
 
-    # ⬇️ TEMPORARY DEBUG: Remove after testing ⬇️
-    print(f"DEBUG KFIN INVESTED: Received {len(folio_list)} folios: {folio_list}")
-    st.write(f"**DEBUG:** Calculating invested for {len(folio_list)} folios:", folio_list)
-    # ⬆️ TEMPORARY DEBUG: Remove after testing ⬆️
 
     with get_conn() as conn:
         placeholders = ','.join(['?'] * len(folio_list))
@@ -1095,6 +1091,7 @@ def load_dashboard_summary() -> dict:
 
     return summary
 
+
 @st.cache_data(ttl=60, show_spinner=False)
 def load_amc_breakdown() -> pd.DataFrame:
     """AMC-wise AUM and folio summary. KFin uses Fund column, td_acno for join."""
@@ -1239,8 +1236,7 @@ ensure_db()
 
 # -------------------- THEME (native Streamlit System/Light/Dark) --------------------
 current_theme = st.context.theme.type
-
-dark = st.context.theme.type == "dark"
+dark = current_theme == "dark"
 
 st.html(THEME_WATCHER_JS)
 
@@ -1250,30 +1246,78 @@ elif st.session_state["last_theme"] != current_theme:
     st.session_state["last_theme"] = current_theme
     st.rerun()
 
-dark = current_theme == "dark"
-
 st.markdown(render_theme(dark), unsafe_allow_html=True)
 
-# ==================== Navigation ====================
-nav_cols = st.columns([1, 1, 1, 1])  # Changed to 4 columns
-nav_options = ["📊 Dashboard", "👥 Clients", "💰 Brokerage Report", "⚙️ Admin Panel"]
-nav_keys = ["nav_dash", "nav_clients", "nav_brokerage", "nav_admin"]
+# ==================== CSS FIXES ====================
+st.markdown("""
+<style>
+    .metric-card {
+        background: linear-gradient(135deg, #1a1a2e 0%, #202036 100%);
+        border-radius: 10px;
+        padding: 1.1rem;
+        border-left: 3px solid #2d2d44;
+        margin-bottom: 0.75rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .metric-card.primary { border-left-color: #6366f1; }
+    .metric-card.success { border-left-color: #10b981; }
+    .metric-card.info   { border-left-color: #3b82f6; }
+    .metric-card.warning{ border-left-color: #f59e0b; }
+    .metric-card .label {
+        color: #8b8b9a;
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 0.4rem;
+    }
+    .metric-card .value {
+        color: #e6edf3;
+        font-size: 1.35rem;
+        font-weight: 700;
+        font-family: 'SF Mono', ui-monospace, monospace;
+    }
+    .metric-card .sub {
+        color: #6b7280;
+        font-size: 0.78rem;
+        margin-top: 0.2rem;
+    }
+    [data-testid="stDataFrame"] > div[data-testid="stDataFrameContainer"] {
+        background-color: transparent !important;
+    }
+    [data-testid="stDataFrame"] th {
+        white-space: nowrap !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-if "nav_mode" not in st.session_state:
-    st.session_state["nav_mode"] = "📊 Dashboard"
+# ==================== SIDEBAR NAVIGATION ====================
+with st.sidebar:
+    st.markdown("## 📊 MFD Portfolio")
+    st.divider()
 
-for i, (opt, key) in enumerate(zip(nav_options, nav_keys)):
-    with nav_cols[i]:
-        btn_type = "primary" if st.session_state["nav_mode"] == opt else "secondary"
-        label = opt.split(" ")[1]
-        if st.button(label, key=key, type=btn_type, use_container_width=True):
-            st.session_state["nav_mode"] = opt
-            st.rerun()
+    nav_options = ["📊 Dashboard", "👥 Clients", "💰 Brokerage Report", "⚙️ Admin Panel"]
+
+    if "nav_mode" not in st.session_state:
+        st.session_state["nav_mode"] = "📊 Dashboard"
+
+    selected_nav = st.radio(
+        "Navigation",
+        nav_options,
+        index=nav_options.index(st.session_state["nav_mode"]),
+        label_visibility="collapsed"
+    )
+
+    if selected_nav != st.session_state["nav_mode"]:
+        st.session_state["nav_mode"] = selected_nav
+        st.rerun()
+
+    st.divider()
+    st.caption("Minimal UI v2.0")
 
 mode = st.session_state.get("nav_mode", "📊 Dashboard")
 
 # ==================== 📊 DASHBOARD ====================
-
 if mode == "📊 Dashboard":
     st.header("📊 Portfolio Overview")
 
@@ -1339,7 +1383,7 @@ if mode == "📊 Dashboard":
             _amfi.load(force=True)
             st.rerun()
 
-    # ── AUM Cards (NAV-based only) ──
+    # ── AUM Cards (muted) ──
     nav_coverage = summary.get("nav_coverage_pct", 0)
     with_nav = summary.get("with_nav", 0)
     total = summary.get("total_folios", 0)
@@ -1353,28 +1397,22 @@ if mode == "📊 Dashboard":
 
     with aum_col1:
         st.markdown(
-            f'<div class="aum-card-bse"><div class="label">📦 Total AUM (All RTAs)</div>'
+            f'<div class="metric-card primary"><div class="label">📦 Total AUM (All RTAs)</div>'
             f'<div class="value">{format_aum(summary.get("total_aum", 0))}</div></div>',
             unsafe_allow_html=True)
-
     with aum_col2:
-        cams_unmatched = summary.get("cams_unmatched_nav", 0)
-        cams_label = "🟢 CAMS Current Value"
-        if cams_unmatched > 0:
-            cams_label += f" ({cams_unmatched} unmatched)"
+        unmatched = summary.get("cams_unmatched_nav", 0)
+        sub = f'<div class="sub">{unmatched} unmatched NAV</div>' if unmatched else ''
         st.markdown(
-            f'<div class="aum-card"><div class="label">{cams_label}</div>'
-            f'<div class="value">{format_aum(summary.get("cams_aum", 0))}</div></div>',
+            f'<div class="metric-card success"><div class="label">🟢 CAMS Current Value</div>'
+            f'<div class="value">{format_aum(summary.get("cams_aum", 0))}</div>{sub}</div>',
             unsafe_allow_html=True)
-
     with aum_col3:
-        kfin_unmatched = summary.get("kfin_unmatched_nav", 0)
-        kfin_label = "🔵 KFinTech Current Value"
-        if kfin_unmatched > 0:
-            kfin_label += f" ({kfin_unmatched} unmatched)"
+        unmatched = summary.get("kfin_unmatched_nav", 0)
+        sub = f'<div class="sub">{unmatched} unmatched NAV</div>' if unmatched else ''
         st.markdown(
-            f'<div class="aum-card-kfin"><div class="label">{kfin_label}</div>'
-            f'<div class="value">{format_aum(summary.get("kfin_aum", 0))}</div></div>',
+            f'<div class="metric-card info"><div class="label">🔵 KFinTech Current Value</div>'
+            f'<div class="value">{format_aum(summary.get("kfin_aum", 0))}</div>{sub}</div>',
             unsafe_allow_html=True)
 
     st.divider()
@@ -1452,7 +1490,7 @@ if mode == "📊 Dashboard":
 
         st.dataframe(
             view[display_cols],
-            width='stretch',
+            use_container_width=True,
             hide_index=True,
             column_config={
                 "current_nav": st.column_config.NumberColumn("Current NAV", format="₹ %.4f"),
@@ -1500,9 +1538,14 @@ if mode == "📊 Dashboard":
             )
             st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-            fig = px.pie(amc_df, values="aum", names="amc_name", hole=0.4,
-                         title="AUM Distribution by AMC")
+            fig = px.pie(
+                amc_df, values="aum", names="amc_name", hole=0.4,
+                title="AUM Distribution by AMC",
+                color_discrete_sequence=px.colors.qualitative.Vivid
+            )
             fig = theme_plotly(fig, dark)
+            fig.update_traces(textposition='inside', textinfo='percent+label', pull=[0.02] * len(amc_df))
+            fig.update_layout(showlegend=False, margin=dict(t=40, b=20, l=20, r=20))
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No AMC breakdown data available.")
@@ -1514,8 +1557,7 @@ if mode == "📊 Dashboard":
     st.subheader("📤 Recent Uploads")
     uploads_df = load_recent_uploads()
     if not uploads_df.empty:
-        st.dataframe(uploads_df, width='stretch', hide_index=True)
-        st.dataframe(uploads_df, width='stretch', hide_index=True)
+        st.dataframe(uploads_df, use_container_width=True, hide_index=True)
     else:
         st.info("No uploads yet. Go to Admin Panel to upload data.")
 
@@ -1525,7 +1567,8 @@ if mode == "📊 Dashboard":
 elif mode == "👥 Clients":
     st.header("👤 Client Portfolio & Analytics")
 
-    # Client Search
+
+    # ── Client Search ──
     @st.cache_data(ttl=300)
     def load_clients_search():
         with get_conn() as conn:
@@ -1539,6 +1582,7 @@ elif mode == "👥 Clients":
                 FROM bse_client_master
                 WHERE primary_holder_pan IS NOT NULL
             """, conn)
+
 
     clients_df = load_clients_search()
     if clients_df.empty:
@@ -1569,17 +1613,24 @@ elif mode == "👥 Clients":
     pan = selected_client['pan']
     name = selected_client['name']
 
+    # ── Compact Header ──
     st.divider()
-    st.subheader(f"👤 {name}")
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Client Code", client_code)
-    c2.metric("PAN", pan)
-    c3.metric("Mobile", selected_client.get('mobile') or 'N/A')
-    c4.metric("Email", selected_client.get('email') or 'N/A')
-    c5.metric("City", selected_client.get('city') or 'N/A')
+    hc1, hc2, hc3, hc4, hc5 = st.columns([3, 1, 1, 1, 1])
+    with hc1:
+        st.markdown(f"### {name}")
+    with hc2:
+        st.markdown(f"**PAN:** `{pan}`")
+    with hc3:
+        st.markdown(f"**Code:** `{client_code}`")
+    with hc4:
+        st.markdown(f"📱 {selected_client.get('mobile') or 'N/A'}")
+    with hc5:
+        st.markdown(f"📍 {selected_client.get('city') or 'N/A'}")
+    if selected_client.get('email'):
+        st.markdown(f"✉️ {selected_client['email']}")
     st.divider()
 
-    # NAV Data
+    # ── NAV Data ──
     if "folio_nav_df" not in st.session_state:
         with st.spinner("Loading NAV..."):
             download_and_save_nav_if_needed()
@@ -1587,7 +1638,6 @@ elif mode == "👥 Clients":
 
     folio_nav_df = st.session_state["folio_nav_df"]
 
-    # Get Folios
     with get_conn() as conn:
         cams_f = pd.read_sql(
             "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
@@ -1597,217 +1647,257 @@ elif mode == "👥 Clients":
             conn, params=(pan, name))
 
     all_folios = set(cams_f['foliochk'].tolist() + kfin_f['folio'].tolist())
-
     if not all_folios:
         st.info("No folios found.")
         st.stop()
 
-    # KFin Invested Amount (Per Scheme)
-    @st.cache_data(ttl=180)
-    def get_kfin_invested_per_scheme(folios):
-        if not folios:
-            return pd.DataFrame(columns=["folio_id", "product_code", "invested_amount"])
-        with get_conn() as conn:
-            ph = ','.join(['?'] * len(folios))
-            return pd.read_sql(f"""
-                SELECT 
-                    td_acno AS folio_id, 
-                    fmcode AS product_code,
-                    COALESCE(SUM(td_amt), 0) AS invested_amount
-                FROM kfin_mfsd201_transaction 
-                WHERE td_acno IN ({ph})
-                GROUP BY td_acno, fmcode
-            """, conn, params=folios)
+    # ── Tabs: Portfolio | SIPs ──
+    tab_portfolio, tab_sips = st.tabs(["📈 Portfolio & AUM", "🔄 Active SIPs"])
 
-    # Holdings
-    holdings = folio_nav_df[folio_nav_df['folio_id'].isin(all_folios)].copy()
-
-    if not holdings.empty:
-        # Apply KFin fix: Merge per-scheme invested amounts
-        if 'KFinTech' in holdings['rta'].values:
-            kfin_invested_df = get_kfin_invested_per_scheme(kfin_f['folio'].tolist())
-            holdings = holdings.merge(kfin_invested_df, on=["folio_id", "product_code"], how="left")
-
-            # Update only KFin rows with their specific scheme invested amount
-            kfin_mask = holdings['rta'] == 'KFinTech'
-            holdings.loc[kfin_mask, 'file_aum'] = holdings.loc[kfin_mask, 'invested_amount']
-            holdings = holdings.drop(columns=['invested_amount'], errors='ignore')
-
-        total_invested = holdings['file_aum'].sum()
-        total_current = holdings['nav_based_aum'].sum() or 0
-        total_gain_loss = total_current - total_invested
-
-        h1, h2, h3, h4 = st.columns(4)
-        h1.metric("Total Invested", format_aum(total_invested))
-        h2.metric("Current Value", format_aum(total_current))
-        h3.metric("Gain / Loss", format_aum(total_gain_loss),
-                  delta=f"{(total_gain_loss / total_invested * 100):.2f}%" if total_invested > 0 else "0%")
-        h4.metric("Total Folios", len(all_folios))
-
-        # Display Holdings
-        holdings["gain_loss"] = holdings["nav_based_aum"] - holdings["file_aum"]
-        holdings["portfolio_pct"] = (holdings["nav_based_aum"] / total_current * 100).fillna(
-            0) if total_current > 0 else 0
-
-        display_holdings = holdings[[
-            'rta', 'folio_id', 'amc_name', 'scheme_name', 'units', 'file_aum',
-            'current_nav', 'nav_based_aum', 'gain_loss', 'portfolio_pct'
-        ]].rename(columns={
-            'rta': 'RTA', 'folio_id': 'Folio', 'amc_name': 'AMC', 'scheme_name': 'Scheme',
-            'file_aum': 'Invested', 'nav_based_aum': 'Current Value',
-            'gain_loss': 'Gain/Loss', 'portfolio_pct': '% Portfolio'
-        })
-
-        # CRITICAL FIX: Sort once, use same sorted DataFrame for display AND indexing
-        display_holdings_sorted = display_holdings.sort_values("Current Value", ascending=False).reset_index(drop=True)
-
-        selected = st.dataframe(
-            display_holdings_sorted,
-            use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
-            column_config={
-                "Units": st.column_config.NumberColumn(format="%.4f"),
-                "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
-                "Current Value": st.column_config.NumberColumn(format="₹ %.2f"),
-                "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
-                "% Portfolio": st.column_config.NumberColumn(format="%.2f%%"),
-            }
-        )
-
-        # Transaction View
-        if selected and len(selected["selection"]["rows"]) > 0:
-            idx = selected["selection"]["rows"][0]
-            row = display_holdings_sorted.iloc[idx]  # FIXED: Use sorted DataFrame
-            folio_id = row['Folio']
-            rta = row['RTA']
-            st.divider()
-            st.subheader(f"Transactions → {row['Scheme']} ({folio_id})")
-
+    # ═══════════════════════════════════════════════════════════
+    # TAB 1 — Portfolio & AUM
+    # ═══════════════════════════════════════════════════════════
+    with tab_portfolio:
+        @st.cache_data(ttl=180)
+        def get_kfin_invested_per_scheme(folios):
+            if not folios:
+                return pd.DataFrame(columns=["folio_id", "product_code", "invested_amount"])
             with get_conn() as conn:
-                if rta == 'CAMS':
-                    txn_df = pd.read_sql("""
-                        SELECT trxnno, traddate, trxntype, trxnmode, trxnstat, 
-                               purprice, units, amount, brokcode, subbrok, remarks
-                        FROM cams_wbr2_transaction
-                        WHERE folio_no = ?
-                        ORDER BY traddate DESC
-                    """, conn, params=(folio_id,))
-                else:  # KFinTech
-                    txn_df = pd.read_sql("""
-                        SELECT td_trno as trxnno, td_trdt as traddate, td_purred as trxntype,
-                               trnmode as trxnmode, trnstat as trxnstat, td_pop as purprice,
-                               td_units as units, td_amt as amount, td_broker as brokcode,
-                               '' as subbrok, trdesc as remarks
-                        FROM kfin_mfsd201_transaction
-                        WHERE td_acno = ?
-                        ORDER BY td_trdt DESC
-                    """, conn, params=(folio_id,))
+                ph = ','.join(['?'] * len(folios))
+                return pd.read_sql(f"""
+                    SELECT 
+                        td_acno AS folio_id, 
+                        fmcode AS product_code,
+                        COALESCE(SUM(td_amt), 0) AS invested_amount
+                    FROM kfin_mfsd201_transaction 
+                    WHERE td_acno IN ({ph})
+                    GROUP BY td_acno, fmcode
+                """, conn, params=folios)
 
-            if not txn_df.empty:
+
+        holdings = folio_nav_df[folio_nav_df['folio_id'].isin(all_folios)].copy()
+
+        if not holdings.empty:
+            if 'KFinTech' in holdings['rta'].values:
+                kfin_invested_df = get_kfin_invested_per_scheme(kfin_f['folio'].tolist())
+                holdings = holdings.merge(kfin_invested_df, on=["folio_id", "product_code"], how="left")
+                kfin_mask = holdings['rta'] == 'KFinTech'
+                holdings.loc[kfin_mask, 'file_aum'] = holdings.loc[kfin_mask, 'invested_amount']
+                holdings = holdings.drop(columns=['invested_amount'], errors='ignore')
+
+            total_invested = holdings['file_aum'].sum()
+            total_current = holdings['nav_based_aum'].sum() or 0
+            total_gain_loss = total_current - total_invested
+
+            h1, h2, h3, h4 = st.columns(4)
+            h1.metric("Total Invested", format_aum(total_invested))
+            h2.metric("Current Value", format_aum(total_current))
+            h3.metric("Gain / Loss", format_aum(total_gain_loss),
+                      delta=f"{(total_gain_loss / total_invested * 100):.2f}%" if total_invested > 0 else "0%")
+            h4.metric("Total Folios", len(all_folios))
+
+            holdings["gain_loss"] = holdings["nav_based_aum"] - holdings["file_aum"]
+            holdings["portfolio_pct"] = (holdings["nav_based_aum"] / total_current * 100).fillna(
+                0) if total_current > 0 else 0
+
+            display_holdings = holdings[[
+                'rta', 'folio_id', 'amc_name', 'scheme_name', 'units', 'file_aum',
+                'current_nav', 'nav_based_aum', 'gain_loss', 'portfolio_pct'
+            ]].rename(columns={
+                'rta': 'RTA', 'folio_id': 'Folio', 'amc_name': 'AMC', 'scheme_name': 'Scheme',
+                'file_aum': 'Invested', 'nav_based_aum': 'Current Value',
+                'gain_loss': 'Gain/Loss', 'portfolio_pct': '% Portfolio'
+            })
+
+            display_holdings_sorted = display_holdings.sort_values("Current Value", ascending=False).reset_index(
+                drop=True)
+
+            selected = st.dataframe(
+                display_holdings_sorted,
+                use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
+                column_config={
+                    "Units": st.column_config.NumberColumn(format="%.4f"),
+                    "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Current Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "% Portfolio": st.column_config.NumberColumn(format="%.2f%%"),
+                }
+            )
+
+            # Transaction View
+            if selected and len(selected["selection"]["rows"]) > 0:
+                idx = selected["selection"]["rows"][0]
+                row = display_holdings_sorted.iloc[idx]
+                folio_id = row['Folio']
+                rta = row['RTA']
+                st.divider()
+                st.subheader(f"📜 Transactions — {row['Scheme']} ({folio_id})")
+
+                with get_conn() as conn:
+                    if rta == 'CAMS':
+                        txn_df = pd.read_sql("""
+                            SELECT trxnno, traddate, trxntype, trxnmode, trxnstat, 
+                                   purprice, units, amount, brokcode, subbrok, remarks
+                            FROM cams_wbr2_transaction
+                            WHERE folio_no = ?
+                            ORDER BY traddate DESC
+                        """, conn, params=(folio_id,))
+                    else:
+                        txn_df = pd.read_sql("""
+                            SELECT td_trno as trxnno, td_trdt as traddate, td_purred as trxntype,
+                                   trnmode as trxnmode, trnstat as trxnstat, td_pop as purprice,
+                                   td_units as units, td_amt as amount, td_broker as brokcode,
+                                   '' as subbrok, trdesc as remarks
+                            FROM kfin_mfsd201_transaction
+                            WHERE td_acno = ?
+                            ORDER BY td_trdt DESC
+                        """, conn, params=(folio_id,))
+
+                if not txn_df.empty:
+                    try:
+                        from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+                        gb = GridOptionsBuilder.from_dataframe(txn_df)
+                        gb.configure_default_column(filter=True, sortable=True, resizable=True, flex=1)
+                        gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=15)
+                        gb.configure_grid_options(domLayout='normal')
+                        grid_opts = gb.build()
+                        AgGrid(
+                            txn_df,
+                            gridOptions=grid_opts,
+                            height=350,
+                            update_mode=GridUpdateMode.NO_UPDATE,
+                            fit_columns_on_grid_load=True,
+                            allow_unsafe_jscode=True,
+                            theme="alpine-dark" if dark else "alpine",
+                            key=f"txn_grid_{folio_id}"
+                        )
+                    except ImportError:
+                        st.dataframe(
+                            txn_df,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "units": st.column_config.NumberColumn(format="%.4f"),
+                                "amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                                "purprice": st.column_config.NumberColumn(format="₹ %.4f"),
+                            }
+                        )
+                else:
+                    st.info("No transactions found for this folio.")
+        else:
+            st.info("No holdings found.")
+
+    # ═══════════════════════════════════════════════════════════
+    # TAB 2 — Active SIPs
+    # ═══════════════════════════════════════════════════════════
+    with tab_sips:
+        st.subheader("🔄 All SIPs (Deduplicated)")
+
+        with get_conn() as conn:
+            bse_sip = pd.read_sql("""
+                SELECT amc_name, scheme_name, installments_amt, status, frequency_type, 
+                       'BSE' as source 
+                FROM bse_sip WHERE client_code = ?
+            """, conn, params=(client_code,))
+
+            cams_wbr49_sip = pd.read_sql("""
+                SELECT scheme as scheme_name, auto_amount as installments_amt, 
+                       periodicity as frequency_type, 
+                       CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END as status,
+                       'CAMS' as source
+                FROM cams_wbr49_sip 
+                WHERE folio_no IN (SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no)) = ?)
+            """, conn, params=(pan,))
+
+            kfin_folio_list = kfin_f['folio'].tolist()
+            if kfin_folio_list:
+                placeholders = ','.join(['?'] * len(kfin_folio_list))
+                kfin_mfsd243_sip = pd.read_sql(f"""
+                    SELECT scheme_name, amount as installments_amt, frequency as frequency_type, 
+                           status, 'KFin' as source
+                    FROM kfin_mfsd243_sip WHERE folio IN ({placeholders})
+                """, conn, params=tuple(kfin_folio_list))
+            else:
+                kfin_mfsd243_sip = pd.DataFrame()
+
+
+        def _make_safe_key(df):
+            return (
+                    df["scheme_name"].fillna("").str.strip().str.upper() + "|" +
+                    df["installments_amt"].astype(str) + "|" +
+                    df["frequency_type"].fillna("").str.strip().str.upper()
+            )
+
+
+        frames_to_keep = []
+        bse_keys = set()
+
+        if not bse_sip.empty:
+            bse_sip["_match_key"] = _make_safe_key(bse_sip)
+            bse_keys = set(bse_sip["_match_key"])
+            frames_to_keep.append(bse_sip)
+
+        if not cams_wbr49_sip.empty:
+            cams_wbr49_sip["_match_key"] = _make_safe_key(cams_wbr49_sip)
+            cams_direct = cams_wbr49_sip[~cams_wbr49_sip["_match_key"].isin(bse_keys)].copy()
+            if not cams_direct.empty:
+                cams_direct["source"] = "CAMS (Direct)"
+                frames_to_keep.append(cams_direct)
+
+        if not kfin_mfsd243_sip.empty:
+            kfin_mfsd243_sip["_match_key"] = _make_safe_key(kfin_mfsd243_sip)
+            kfin_direct = kfin_mfsd243_sip[~kfin_mfsd243_sip["_match_key"].isin(bse_keys)].copy()
+            if not kfin_direct.empty:
+                kfin_direct["source"] = "KFin (Direct)"
+                frames_to_keep.append(kfin_direct)
+
+        if frames_to_keep:
+            final_sips = pd.concat(frames_to_keep, ignore_index=True)
+            final_sips = final_sips.drop(columns=["_match_key"], errors='ignore')
+
+            active = len(final_sips[final_sips['status'].str.contains('Active', na=False, case=False)])
+            total_monthly = final_sips['installments_amt'].sum()
+
+            s1, s2, s3 = st.columns(3)
+            s1.metric("Total SIPs", len(final_sips))
+            s2.metric("Active SIPs", active)
+            s3.metric("Monthly Commitment", format_currency(total_monthly))
+
+            try:
+                from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+                gb = GridOptionsBuilder.from_dataframe(
+                    final_sips[['source', 'scheme_name', 'installments_amt', 'frequency_type', 'status']]
+                )
+                gb.configure_default_column(filter=True, sortable=True, resizable=True, flex=1)
+                gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=10)
+                grid_opts = gb.build()
+                AgGrid(
+                    final_sips[['source', 'scheme_name', 'installments_amt', 'frequency_type', 'status']],
+                    gridOptions=grid_opts,
+                    height=300,
+                    update_mode=GridUpdateMode.NO_UPDATE,
+                    fit_columns_on_grid_load=True,
+                    allow_unsafe_jscode=True,
+                    theme="alpine-dark" if dark else "alpine",
+                    key="sip_grid"
+                )
+            except ImportError:
                 st.dataframe(
-                    txn_df,
+                    final_sips[['source', 'scheme_name', 'installments_amt', 'frequency_type', 'status']].sort_values(
+                        'source'),
                     use_container_width=True,
                     hide_index=True,
                     column_config={
-                        "units": st.column_config.NumberColumn(format="%.4f"),
-                        "amount": st.column_config.NumberColumn(format="₹ %.2f"),
-                        "purprice": st.column_config.NumberColumn(format="₹ %.4f"),
+                        "installments_amt": st.column_config.NumberColumn("Amount", format="₹ %.2f"),
+                        "source": st.column_config.TextColumn("Source")
                     }
                 )
-            else:
-                st.info("No transactions found for this folio.")
-
-    st.divider()
-
-    # SIP Deduplication
-    st.subheader("🔄 All SIPs (Deduplicated)")
-
-    with get_conn() as conn:
-        # 1. Load BSE XSIP
-        bse_sip = pd.read_sql("""
-            SELECT amc_name, scheme_name, installments_amt, status, frequency_type, 
-                   'BSE' as source 
-            FROM bse_sip WHERE client_code = ?
-        """, conn, params=(client_code,))
-
-        # 2. Load CAMS SIP
-        cams_wbr49_sip = pd.read_sql("""
-            SELECT scheme as scheme_name, auto_amount as installments_amt, 
-                   periodicity as frequency_type, 
-                   CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END as status,
-                   'CAMS' as source
-            FROM cams_wbr49_sip 
-            WHERE folio_no IN (SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no)) = ?)
-        """, conn, params=(pan,))
-
-        # 3. Load KFin SIP — FIXED: Use folio list directly
-        kfin_folio_list = kfin_f['folio'].tolist()
-        if kfin_folio_list:
-            placeholders = ','.join(['?'] * len(kfin_folio_list))
-            kfin_mfsd243_sip = pd.read_sql(f"""
-                SELECT scheme_name, amount as installments_amt, frequency as frequency_type, 
-                       status, 'KFin' as source
-                FROM kfin_mfsd243_sip WHERE folio IN ({placeholders})
-            """, conn, params=tuple(kfin_folio_list))
         else:
-            kfin_mfsd243_sip = pd.DataFrame()
+            st.info("No SIP records found.")
 
-    # Deduplication Logic (BSE Priority)
-    def _make_safe_key(df):
-        return (
-            df["scheme_name"].fillna("").str.strip().str.upper() + "|" +
-            df["installments_amt"].astype(str) + "|" +
-            df["frequency_type"].fillna("").str.strip().str.upper()
-        )
-
-    frames_to_keep = []
-    bse_keys = set()
-
-    if not bse_sip.empty:
-        bse_sip["_match_key"] = _make_safe_key(bse_sip)
-        bse_keys = set(bse_sip["_match_key"])
-        frames_to_keep.append(bse_sip)
-
-    if not cams_wbr49_sip.empty:
-        cams_wbr49_sip["_match_key"] = _make_safe_key(cams_wbr49_sip)
-        cams_direct = cams_wbr49_sip[~cams_wbr49_sip["_match_key"].isin(bse_keys)].copy()
-        if not cams_direct.empty:
-            cams_direct["source"] = "CAMS (Direct)"
-            frames_to_keep.append(cams_direct)
-
-    if not kfin_mfsd243_sip.empty:
-        kfin_mfsd243_sip["_match_key"] = _make_safe_key(kfin_mfsd243_sip)
-        kfin_direct = kfin_mfsd243_sip[~kfin_mfsd243_sip["_match_key"].isin(bse_keys)].copy()
-        if not kfin_direct.empty:
-            kfin_direct["source"] = "KFin (Direct)"
-            frames_to_keep.append(kfin_direct)
-
-    if frames_to_keep:
-        final_sips = pd.concat(frames_to_keep, ignore_index=True)
-        final_sips = final_sips.drop(columns=["_match_key"], errors='ignore')
-
-        # Summary
-        active = len(final_sips[final_sips['status'].str.contains('Active', na=False, case=False)])
-        total_monthly = final_sips['installments_amt'].sum()
-
-        s1, s2, s3 = st.columns(3)
-        s1.metric("Total SIPs", len(final_sips))
-        s2.metric("Active SIPs", active)
-        s3.metric("Monthly Commitment", format_currency(total_monthly))
-
-        st.dataframe(
-            final_sips[['source', 'scheme_name', 'installments_amt', 'frequency_type', 'status']].sort_values('source'),
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "installments_amt": st.column_config.NumberColumn("Amount", format="₹ %.2f"),
-                "source": st.column_config.TextColumn("Source")
-            }
-        )
-    else:
-        st.info("No SIP records found.")
-
-# ==================== 💰 Brokerage Report ====================
-
+# ==================== 💰 BROKERAGE REPORT ====================
 elif mode == "💰 Brokerage Report":
     st.header("💰 Brokerage Report")
     st.caption(
@@ -1838,14 +1928,10 @@ elif mode == "💰 Brokerage Report":
     st.divider()
 
     # ════════════════════════════════════════════════════════════
-    # SECTION 3 — Record a manual brokerage receipt (AMC dropdown)
+    # SECTION 1 — Record a manual brokerage receipt
     # ════════════════════════════════════════════════════════════
     st.subheader("✍️ Record Manual Brokerage Receipt")
 
-    # AMC options = every AMC seen in resolved file data, so manual entries
-    # always line up with bifurcation/drilldown — no typos creating AMC
-    # names that never match a file row. "Add new AMC" covers the case
-    # where you've received brokerage for an AMC with no file data yet.
     known_amcs = sorted(detail["amc"].dropna().unique()) if not detail.empty else []
     amc_dropdown_options = known_amcs + ["➕ Add new AMC..."]
 
@@ -1885,7 +1971,7 @@ elif mode == "💰 Brokerage Report":
                 st.success(f"Logged {format_brokerage_inr(m_amount)} for {m_amc_final} ({m_month}-{m_year}).")
                 st.rerun()
 
-    # ── Existing manual log (view + delete) ──
+    # ── Existing manual log ──
     with st.expander("📜 View / Delete Manual Entry Log", expanded=False):
         with get_conn() as conn:
             log_df = pd.read_sql(
@@ -1897,7 +1983,7 @@ elif mode == "💰 Brokerage Report":
             st.info("No manual entries logged yet.")
         else:
             st.dataframe(
-                log_df, width='stretch', hide_index=True,
+                log_df, use_container_width=True, hide_index=True,
                 column_config={"amount": st.column_config.NumberColumn(format="₹ %.2f")}
             )
 
@@ -1928,7 +2014,7 @@ elif mode == "💰 Brokerage Report":
                     st.rerun()
 
     # ════════════════════════════════════════════════════════════
-    # SECTION 2 — AMC-wise bifurcation (with month filter)
+    # SECTION 2 — AMC-wise bifurcation
     # ════════════════════════════════════════════════════════════
     st.subheader("🏢 AMC-wise Bifurcation")
 
@@ -1958,7 +2044,7 @@ elif mode == "💰 Brokerage Report":
             "manual_amount": "Received (Manual)", "variance": "Variance", "status": "Status"
         })
         st.dataframe(
-            display_amc, width='stretch', hide_index=True,
+            display_amc, use_container_width=True, hide_index=True,
             column_config={
                 "File Brokerage": st.column_config.NumberColumn(format="₹ %.2f"),
                 "Received (Manual)": st.column_config.NumberColumn(format="₹ %.2f"),
@@ -1985,9 +2071,14 @@ elif mode == "💰 Brokerage Report":
             fig = px.bar(
                 chart_long, x="amc", y="amount", color="type",
                 barmode="group", title="File vs Received, by AMC",
-                labels={"amount": "Amount (₹)", "amc": "AMC", "type": "Type"}
+                labels={"amount": "Amount (₹)", "amc": "AMC", "type": "Type"},
+                color_discrete_sequence=px.colors.qualitative.Bold
             )
             fig = theme_plotly(fig, dark)
+            fig.update_layout(
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                xaxis_tickangle=-45
+            )
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No data for the selected month(s).")
@@ -1998,25 +2089,10 @@ elif mode == "💰 Brokerage Report":
 
     # ════════════════════════════════════════════════════════════
     # SECTION 3 — AMC Drilldown: client-level detail
-    #   - "All" AMC option
-    #   - month filter
-    #   - RTA filter REMOVED (RTA still shown as a column in the table)
     # ════════════════════════════════════════════════════════════
     st.subheader("🔍 AMC Drilldown — Client-level Detail")
 
-    with get_conn() as conn:
-        print([r[1] for r in conn.execute("PRAGMA table_info(kfin_mfsd205_brokerage)").fetchall()])
-
-    with get_conn() as conn:
-        df = pd.read_sql(
-            "SELECT account_number, amount, percentage, brokerage, gross_brokerage, brokerage_type "
-            "FROM kfin_mfsd205_brokerage", conn
-        )
-    print(df.to_string())
-
-    # ── NORMALIZE COLUMN NAMES (CAMS vs KFinTech) ──
-    # CAMS WBR77 uses: BRKAGE_AMT, BRKAGE_RATE, BRKAGE_TYPE, INV_NAME, FOLIO_NO, PLOT_AMOUNT, TRADE_DATE_TIME
-    # KFinTech MFSD205 uses: BROKERAGE, PERCENTAGE, BROKERAGE_TYPE, INVESTOR_NAME, ACCOUNT_NUMBER, AMOUNT, TRANSACTION_DATE
+    # ── NORMALIZE COLUMN NAMES ──
     detail_norm = detail.copy()
     col_map = {}
     if "BRKAGE_AMT" in detail_norm.columns:
@@ -2052,7 +2128,7 @@ elif mode == "💰 Brokerage Report":
     if col_map:
         detail_norm = detail_norm.rename(columns=col_map)
 
-    # ── DRILLDOWN LOGIC ──
+    # ── DRILLDOWN ──
     all_amcs = sorted(detail_norm["amc"].dropna().unique()) if not detail_norm.empty else []
     if not all_amcs:
         st.info("No detail rows available.")
@@ -2097,15 +2173,37 @@ elif mode == "💰 Brokerage Report":
             "txn_date": "Date", "txn_amount": "Txn Amount", "brokerage_pct": "Brokerage %",
             "brokerage_amount": "Brokerage Amount", "brokerage_type": "Type",
         })
-        st.dataframe(
-            display_detail.sort_values("Date", ascending=False) if "Date" in display_detail.columns else display_detail,
-            width='stretch', hide_index=True,
-            column_config={
-                "Txn Amount": st.column_config.NumberColumn(format="₹ %.2f"),
-                "Brokerage %": st.column_config.NumberColumn(format="%.4f"),
-                "Brokerage Amount": st.column_config.NumberColumn(format="₹ %.2f"),
-            }
-        )
+
+        # ── AgGrid for Brokerage Drilldown ──
+        try:
+            from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+            gb = GridOptionsBuilder.from_dataframe(display_detail)
+            gb.configure_default_column(filter=True, sortable=True, resizable=True, flex=1, minWidth=120)
+            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=25)
+            gb.configure_grid_options(domLayout='normal')
+            grid_opts = gb.build()
+            AgGrid(
+                display_detail,
+                gridOptions=grid_opts,
+                height=500,
+                update_mode=GridUpdateMode.NO_UPDATE,
+                fit_columns_on_grid_load=True,
+                allow_unsafe_jscode=True,
+                theme="alpine-dark" if dark else "alpine",
+                key="brokerage_drilldown_grid"
+            )
+        except ImportError:
+            st.dataframe(
+                display_detail.sort_values("Date",
+                                           ascending=False) if "Date" in display_detail.columns else display_detail,
+                use_container_width=True, hide_index=True,
+                column_config={
+                    "Txn Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Brokerage %": st.column_config.NumberColumn(format="%.4f"),
+                    "Brokerage Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                }
+            )
         st.caption(f"Showing {len(amc_detail):,} brokerage records for {label}")
 
         if not amc_detail.empty:
@@ -2116,18 +2214,7 @@ elif mode == "💰 Brokerage Report":
                 key="brok_drilldown_download"
             )
 
-            detail = data["detail"]
-            st.write("Detail columns:", detail.columns.tolist())
-            st.write("Sample brokerage_amount values:", detail["brokerage_amount"].head(10).tolist())
-            st.write("Non-null brokerage count:", detail["brokerage_amount"].notna().sum())
-            st.write("Zero brokerage count:", (detail["brokerage_amount"] == 0.0).sum())
-            st.write("Total brokerage sum:", detail["brokerage_amount"].sum())
-
     st.divider()
-
-
-
-
 
 # ==================== ⚙️ ADMIN PANEL ====================
 elif mode == "⚙️ Admin Panel":
@@ -2207,7 +2294,66 @@ elif mode == "⚙️ Admin Panel":
         if total_rows > 0:
             df_raw = load_table_summary(table)
             if not df_raw.empty:
-                st.dataframe(df_raw, width='stretch', hide_index=True)
+                # ── View options ──
+                view_col1, view_col2 = st.columns([1, 3])
+                with view_col1:
+                    auto_fit = st.toggle("🔍 Auto-fit columns", value=True,
+                                         help="Resize columns to fit content so full headers are visible")
+                with view_col2:
+                    st.caption(f"Showing {len(df_raw):,} rows × {len(df_raw.columns)} columns")
+
+                # ── AgGrid with dark mode support and auto-sizing ──
+                try:
+                    from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+                    gb = GridOptionsBuilder.from_dataframe(df_raw)
+                    gb.configure_default_column(
+                        filter=True,
+                        sortable=True,
+                        resizable=True,
+                        wrapText=True,
+                        autoHeaderHeight=True,
+                        minWidth=100
+                    )
+
+                    if auto_fit:
+                        gb.configure_grid_options(
+                            autoSizeStrategy={'type': 'fitCellContents'},
+                            suppressColumnVirtualisation=True
+                        )
+                    else:
+                        gb.configure_grid_options(
+                            autoSizeStrategy={'type': 'fitGridWidth'},
+                            suppressColumnVirtualisation=True
+                        )
+
+                    gb.configure_pagination(
+                        paginationAutoPageSize=False,
+                        paginationPageSize=50
+                    )
+
+                    grid_opts = gb.build()
+
+                    AgGrid(
+                        df_raw,
+                        gridOptions=grid_opts,
+                        height=600,
+                        update_mode=GridUpdateMode.NO_UPDATE,
+                        fit_columns_on_grid_load=not auto_fit,
+                        allow_unsafe_jscode=True,
+                        theme="alpine-dark" if dark else "alpine",
+                        key=f"raw_{table}_{auto_fit}"
+                    )
+                except ImportError:
+                    st.dataframe(
+                        df_raw,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            col: st.column_config.Column(label=col, width="large")
+                            for col in df_raw.columns
+                        }
+                    )
 
                 csv = df_raw.to_csv(index=False).encode("utf-8")
                 st.download_button(
