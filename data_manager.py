@@ -1594,11 +1594,6 @@ kfin_table_column_map = {
 # STREAMLIT UI
 # ══════════════════════════════════════════════════════════════════════════════
 
-from pathlib import Path
-
-
-from pathlib import Path
-
 
 def render_data_manager():
     st.markdown(
@@ -1675,7 +1670,11 @@ def render_data_manager():
         with auto_col3:
             latest = get_latest_file_path()
             if latest:
-                st.caption(f"📁 Latest: `{Path(latest).name}`")
+                name = Path(latest).name
+                if name.endswith("_done.txt"):
+                    st.caption(f"✅ Uploaded: `{name}`")
+                else:
+                    st.caption(f"📁 Latest: `{name}` (not uploaded)")
             else:
                 st.caption("⏳ No file yet")
 

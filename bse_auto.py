@@ -30,18 +30,12 @@ def _today_stamp() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def _find_latest_download(download_dir: Path, pattern: str = r"SCHMSTRPHY.*\.txt") -> Path | None:
-    candidates = [f for f in download_dir.iterdir() if f.is_file() and re.search(pattern, f.name, re.I)]
-    if not candidates:
-        return None
-    return max(candidates, key=lambda p: p.stat().st_mtime)
+def _today_filename() -> str:
+    return f"bse_scheme_master_physical_{_today_stamp()}.txt"
 
 
-def _is_today_file(path: Path) -> bool:
-    if not path or not path.exists():
-        return False
-    mtime = datetime.fromtimestamp(path.stat().st_mtime)
-    return mtime.strftime("%Y-%m-%d") == _today_stamp()
+def _today_done_filename() -> str:
+    return f"bse_scheme_master_physical_{_today_stamp()}_done.txt"
 
 
 def get_download_dir() -> Path:
@@ -49,6 +43,25 @@ def get_download_dir() -> Path:
     p = Path(dir_path)
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def _find_latest_download(download_dir: Path, pattern: str = r"SCHMSTRPHY.*\.txt") -> Path | None:
+    candidates = [f for f in download_dir.iterdir() if f.is_file() and re.search(pattern, f.name, re.I)]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
+def is_uploaded() -> bool:
+    """True if today's file already has the _done suffix (DB import completed)."""
+    out = get_download_dir()
+    return (out / _today_done_filename()).exists()
+
+
+def has_todays_file() -> bool:
+    """True if today's file exists, either pending or already marked done."""
+    out = get_download_dir()
+    return (out / _today_filename()).exists() or (out / _today_done_filename()).exists()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -90,7 +103,6 @@ def _wait_for_download(out: Path, before: set, timeout: int) -> Path | None:
     while waited < timeout:
         time.sleep(1)
         waited += 1
-        log.info(f"[BSE-AUTO] Time Lapsed:{waited}")
         current = set(f.name for f in out.iterdir())
         added = current - before
         if any(f.endswith(".crdownload") for f in added):
@@ -104,14 +116,13 @@ def _wait_for_download(out: Path, before: set, timeout: int) -> Path | None:
 def _do_download() -> dict:
     out = get_download_dir()
 
-    existing = _find_latest_download(out)
-    if existing and _is_today_file(existing):
-        return {
-            "ok": True,
-            "path": str(existing),
-            "msg": f"Already have today's file: {existing.name}",
-            "source": "cache"
-        }
+    # Skip if today's file already exists (pending or done)
+    pending = out / _today_filename()
+    done = out / _today_done_filename()
+    if done.exists():
+        return {"ok": True, "path": str(done), "msg": f"Already uploaded: {done.name}", "source": "cache"}
+    if pending.exists():
+        return {"ok": True, "path": str(pending), "msg": f"Already have today's file: {pending.name}", "source": "cache"}
 
     try:
         from selenium import webdriver
@@ -185,16 +196,15 @@ def _do_download() -> dict:
                 "source": "auto"
             }
 
-        today_file = out / f"bse_scheme_master_physical_{_today_stamp()}.txt"
-        if today_file.exists():
-            today_file.unlink()
-        downloaded.rename(today_file)
+        if pending.exists():
+            pending.unlink()
+        downloaded.rename(pending)
 
-        log.info("[BSE-AUTO] Saved %s (%s bytes)", today_file.name, today_file.stat().st_size)
+        log.info("[BSE-AUTO] Saved %s (%s bytes)", pending.name, pending.stat().st_size)
         return {
             "ok": True,
-            "path": str(today_file),
-            "msg": f"Downloaded {today_file.name}",
+            "path": str(pending),
+            "msg": f"Downloaded {pending.name}",
             "source": "auto"
         }
 
@@ -235,13 +245,17 @@ def start_background_download() -> None:
 
 
 def should_auto_download() -> bool:
-    out = get_download_dir()
-    existing = _find_latest_download(out)
-    return not (existing and _is_today_file(existing))
+    return not has_todays_file()
 
 
 def get_latest_file_path() -> str | None:
     out = get_download_dir()
+    done = out / _today_done_filename()
+    if done.exists():
+        return str(done)
+    pending = out / _today_filename()
+    if pending.exists():
+        return str(pending)
     latest = _find_latest_download(out)
     return str(latest) if latest else None
 
@@ -251,17 +265,25 @@ def parse_and_import_latest(parse_func) -> dict:
     if not result["ok"]:
         return {"ok": False, "db_ok": False, "msg": result["msg"]}
 
-    path = result["path"]
-    if not path or not Path(path).exists():
+    path = Path(result["path"])
+    if not path.exists():
         return {"ok": False, "db_ok": False, "msg": "Download succeeded but file not found."}
+
+    if path.name.endswith("_done.txt"):
+        return {"ok": True, "db_ok": True, "msg": "Already uploaded to DB.", "path": str(path)}
 
     with open(path, "rb") as f:
         db_ok, db_msg, preview = parse_func(f, replace=False)
+
+    if db_ok:
+        done_path = path.with_name(_today_done_filename())
+        path.rename(done_path)
+        path = done_path
 
     return {
         "ok": True,
         "db_ok": db_ok,
         "msg": f"{result['msg']} | DB: {db_msg}",
-        "path": path,
+        "path": str(path),
         "preview": preview,
     }
