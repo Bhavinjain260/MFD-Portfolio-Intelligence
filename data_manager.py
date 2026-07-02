@@ -720,7 +720,7 @@ def parse_bse_scheme_master(file, replace: bool) -> tuple[bool, str, dict]:
             df = pd.read_excel(file, dtype=str)
         else:
             df = None
-            for sep in ("\t", ","):
+            for sep in ("\t", ",", "|"):
                 file.seek(0)
                 try:
                     candidate = pd.read_csv(file, sep=sep, dtype=str, encoding="utf-8", encoding_errors="replace")
