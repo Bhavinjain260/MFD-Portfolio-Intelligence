@@ -10,14 +10,16 @@ import logging
 import os
 import re
 import sqlite3
+import time
 from contextlib import contextmanager
 from datetime import datetime
-import re
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
 import data_manager
+
 print(data_manager.__file__)
 
 log = logging.getLogger(__name__)
@@ -1592,6 +1594,12 @@ kfin_table_column_map = {
 # STREAMLIT UI
 # ══════════════════════════════════════════════════════════════════════════════
 
+from pathlib import Path
+
+
+from pathlib import Path
+
+
 def render_data_manager():
     st.markdown(
         "Upload raw BSE, CAMS, and KFinTech files. Data is inserted exactly as provided in the files (no text case "
@@ -1671,11 +1679,15 @@ def render_data_manager():
             else:
                 st.caption("⏳ No file yet")
 
+        # ── Trigger auto-download if enabled and needed ──
+        if auto_enabled and should_auto_download() and not status["running"] and not status["done"]:
+            start_background_download()
+            st.rerun()
+
         # ── Live spinner while background thread runs ──
-        if status["running"]:
+        if status["running"] or (auto_enabled and not status["done"] and should_auto_download()):
             st.info(
                 "⏳ Downloading BSE Scheme Master in background... This may take 30–60s. You can keep using the app.")
-            # Auto-refresh every 3 seconds to poll status
             time.sleep(3)
             st.rerun()
 

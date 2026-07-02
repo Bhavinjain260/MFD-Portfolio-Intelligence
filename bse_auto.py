@@ -21,16 +21,16 @@ log = logging.getLogger(__name__)
 DEFAULT_DOWNLOAD_DIR = "Reports/Bse/scheme_master_auto_download"
 
 BSE_SCHEME_URL = "https://www.bsestarmf.in/RptSchemeMaster.aspx"
-REPORT_LABEL = "Scheme Code Master Physical"
-DOWNLOAD_TIMEOUT = 120  # Increased for slow site
-PAGE_LOAD_TIMEOUT = 45
+REPORT_VALUE = "SCHEMEMASTERPHYSICAL"
+DOWNLOAD_TIMEOUT = 350
+PAGE_LOAD_TIMEOUT = 120
 
 
 def _today_stamp() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def _find_latest_download(download_dir: Path, pattern: str = r"Scheme.*\.txt|Scheme.*\.csv|bse_scheme.*\.txt") -> Path | None:
+def _find_latest_download(download_dir: Path, pattern: str = r"SCHMSTRPHY.*\.txt") -> Path | None:
     candidates = [f for f in download_dir.iterdir() if f.is_file() and re.search(pattern, f.name, re.I)]
     if not candidates:
         return None
@@ -66,7 +66,6 @@ _download_status = {
 
 
 def get_download_status() -> dict:
-    """Thread-safe read of current download status."""
     return _download_status.copy()
 
 
@@ -86,11 +85,25 @@ def _reset_status():
     })
 
 
+def _wait_for_download(out: Path, before: set, timeout: int) -> Path | None:
+    waited = 0
+    while waited < timeout:
+        time.sleep(1)
+        waited += 1
+        log.info(f"[BSE-AUTO] Time Lapsed:{waited}")
+        current = set(f.name for f in out.iterdir())
+        added = current - before
+        if any(f.endswith(".crdownload") for f in added):
+            continue
+        txt_files = [f for f in added if f.endswith(".txt")]
+        if txt_files:
+            return out / txt_files[0]
+    return None
+
+
 def _do_download() -> dict:
-    """The actual blocking Selenium work. Runs in background thread."""
     out = get_download_dir()
 
-    # Already have today's file?
     existing = _find_latest_download(out)
     if existing and _is_today_file(existing):
         return {
@@ -122,7 +135,6 @@ def _do_download() -> dict:
     chrome_opts.add_argument("--disable-dev-shm-usage")
     chrome_opts.add_argument("--disable-gpu")
     chrome_opts.add_argument("--window-size=1920,1080")
-    # Reduce noise
     chrome_opts.add_argument("--log-level=3")
     chrome_opts.add_experimental_option("excludeSwitches", ["enable-logging"])
 
@@ -144,30 +156,26 @@ def _do_download() -> dict:
         log.info("[BSE-AUTO] Opening %s", BSE_SCHEME_URL)
         driver.get(BSE_SCHEME_URL)
 
-        # Wait for dropdown
         ddl = wait.until(
-            EC.presence_of_element_located((By.ID, "ContentPlaceHolder1_ddlschememaster"))
+            EC.presence_of_element_located((By.ID, "ddlTypeOption"))
         )
         select = Select(ddl)
-        select.select_by_visible_text(REPORT_LABEL)
-        log.info("[BSE-AUTO] Selected '%s'", REPORT_LABEL)
+        select.select_by_value(REPORT_VALUE)
+        log.info("[BSE-AUTO] Selected '%s'", REPORT_VALUE)
 
-        # Click download
+        time.sleep(1)
+        before = set(f.name for f in out.iterdir())
+
         btn = wait.until(
-            EC.element_to_be_clickable((By.ID, "ContentPlaceHolder1_btnTextDownload"))
+            EC.element_to_be_clickable((By.ID, "btnText"))
         )
-        btn.click()
+        try:
+            driver.execute_script("arguments[0].click();", btn)
+        except Exception:
+            pass
         log.info("[BSE-AUTO] Download clicked")
 
-        # Wait for file
-        deadline = time.time() + DOWNLOAD_TIMEOUT
-        downloaded = None
-        while time.time() < deadline:
-            latest = _find_latest_download(out)
-            if latest and latest.stat().st_size > 0 and (time.time() - latest.stat().st_mtime) > 2:
-                downloaded = latest
-                break
-            time.sleep(1)
+        downloaded = _wait_for_download(out, before, DOWNLOAD_TIMEOUT)
 
         if not downloaded:
             return {
@@ -177,7 +185,6 @@ def _do_download() -> dict:
                 "source": "auto"
             }
 
-        # Rename to canonical name
         today_file = out / f"bse_scheme_master_physical_{_today_stamp()}.txt"
         if today_file.exists():
             today_file.unlink()
@@ -206,7 +213,6 @@ def _do_download() -> dict:
 
 
 def _download_worker():
-    """Runs _do_download() in background and updates shared status."""
     _set_status(running=True, done=False, started_at=datetime.now().isoformat())
     result = _do_download()
     _set_status(
@@ -220,9 +226,8 @@ def _download_worker():
 
 
 def start_background_download() -> None:
-    """Kick off a background thread to do the download. Non-blocking."""
     if _download_status["running"]:
-        return  # Already running
+        return
 
     _reset_status()
     t = threading.Thread(target=_download_worker, daemon=True)
@@ -230,7 +235,6 @@ def start_background_download() -> None:
 
 
 def should_auto_download() -> bool:
-    """True if today's file does not yet exist."""
     out = get_download_dir()
     existing = _find_latest_download(out)
     return not (existing and _is_today_file(existing))
@@ -243,10 +247,6 @@ def get_latest_file_path() -> str | None:
 
 
 def parse_and_import_latest(parse_func) -> dict:
-    """
-    One-shot: download (or use cache) → parse → return result dict.
-    Blocking — use only from explicit button clicks, not startup.
-    """
     result = _do_download()
     if not result["ok"]:
         return {"ok": False, "db_ok": False, "msg": result["msg"]}
