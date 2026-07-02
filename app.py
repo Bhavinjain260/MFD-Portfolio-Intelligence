@@ -2047,77 +2047,128 @@ elif mode == "👥 Clients":
         st.subheader("🔄 All SIPs (Deduplicated)")
 
         with get_conn() as conn:
-            bse_sip = pd.read_sql("""
-                                  SELECT amc_name,
-                                         scheme_name,
-                                         installments_amt,
-                                         status,
-                                         frequency_type,
-                                         'BSE' as source
-                                  FROM bse_sip
-                                  WHERE client_code = ?
-                                  """, conn, params=(client_code,))
+            # ── Probe BSE SIP columns ──
+            bse_cols = [row[1] for row in conn.execute("PRAGMA table_info(bse_sip)").fetchall()]
 
-            cams_wbr49_sip = pd.read_sql("""
-                                         SELECT scheme                as scheme_name,
-                                                auto_amount           as installments_amt,
-                                                periodicity           as frequency_type,
-                                                CASE
-                                                    WHEN cease_date IS NULL OR cease_date = '' THEN 'Active'
-                                                    ELSE 'Ceased' END as status,
-                                                'CAMS'                as source
-                                         FROM cams_wbr49_sip
-                                         WHERE folio_no IN
-                                               (SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no)) = ?)
-                                         """, conn, params=(pan,))
+            bse_select = ["amc_name", "scheme_name", "installments_amt", "status", "frequency_type", "'BSE' as source",
+                          "client_code"]
+            for opt_col in ["umrn", "sip_reg_no", "mandate_id", "reference_no", "transaction_id"]:
+                if opt_col in bse_cols:
+                    bse_select.append(f"COALESCE({opt_col}, '') as {opt_col}")
+
+            bse_sql = f"SELECT {', '.join(bse_select)} FROM bse_sip WHERE client_code = ?"
+            bse_sip = pd.read_sql(bse_sql, conn, params=(client_code,))
+
+            # ── Probe CAMS SIP columns ──
+            cams_cols = [row[1] for row in conn.execute("PRAGMA table_info(cams_wbr49_sip)").fetchall()]
+
+            cams_select = ["scheme as scheme_name", "auto_amount as installments_amt",
+                           "periodicity as frequency_type",
+                           "CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END as status",
+                           "folio_no", "'CAMS' as source"]
+            for opt_col in ["umrn", "sip_reg_no", "mandate_id", "reference_no", "transaction_id"]:
+                if opt_col in cams_cols:
+                    cams_select.append(f"COALESCE({opt_col}, '') as {opt_col}")
+
+            cams_sql = f"SELECT {', '.join(cams_select)} FROM cams_wbr49_sip WHERE folio_no IN (SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no)) = ?)"
+            cams_wbr49_sip = pd.read_sql(cams_sql, conn, params=(pan,))
+
+            # ── Probe KFin SIP columns ──
+            kfin_cols = [row[1] for row in conn.execute("PRAGMA table_info(kfin_mfsd243_sip)").fetchall()]
+
+            kfin_select = ["scheme_name", "amount as installments_amt", "frequency as frequency_type",
+                           "status", "folio", "'KFin' as source"]
+            for opt_col in ["umrn", "sip_reg_no", "mandate_id", "reference_no", "transaction_id"]:
+                if opt_col in kfin_cols:
+                    kfin_select.append(f"COALESCE({opt_col}, '') as {opt_col}")
 
             kfin_folio_list = kfin_f['folio'].tolist()
             if kfin_folio_list:
                 placeholders = ','.join(['?'] * len(kfin_folio_list))
-                kfin_mfsd243_sip = pd.read_sql(f"""
-                    SELECT scheme_name, amount as installments_amt, frequency as frequency_type, 
-                           status, 'KFin' as source
-                    FROM kfin_mfsd243_sip WHERE folio IN ({placeholders})
-                """, conn, params=tuple(kfin_folio_list))
+                kfin_sql = f"SELECT {', '.join(kfin_select)} FROM kfin_mfsd243_sip WHERE folio IN ({placeholders})"
+                kfin_mfsd243_sip = pd.read_sql(kfin_sql, conn, params=tuple(kfin_folio_list))
             else:
                 kfin_mfsd243_sip = pd.DataFrame()
 
 
-        def _make_safe_key(df):
-            return (
-                    df["scheme_name"].fillna("").str.strip().str.upper() + "|" +
-                    df["installments_amt"].astype(str) + "|" +
-                    df["frequency_type"].fillna("").str.strip().str.upper()
-            )
+        # ── SMART DEDUPLICATION LOGIC ──
+
+        def _normalize_scheme_name(name):
+            """Extract core scheme identity: AMC + fund type + plan"""
+            if pd.isna(name):
+                return ""
+            n = str(name).upper().strip()
+            # Remove common suffixes/prefixes that vary between sources
+            n = re.sub(r'\s+REGULAR\s+', ' ', n)
+            n = re.sub(r'\s+REGULAR$', '', n)
+            n = re.sub(r'\s+REG\.\.\.', '', n)  # BSE truncation
+            n = re.sub(r'\s+REG$', '', n)
+            n = re.sub(r'\s+PLAN\s*-\s*', ' ', n)
+            n = re.sub(r'\s+PLAN$', '', n)
+            n = re.sub(r'\s+GROWTH\s*', ' ', n)
+            n = re.sub(r'\s+GROWTH$', '', n)
+            n = re.sub(r'\s+DIRECT\s+', ' ', n)
+            n = re.sub(r'\s+DIRECT$', '', n)
+            n = re.sub(r'[^A-Z0-9]', '', n)  # Keep only alphanumeric
+            return n
 
 
-        frames_to_keep = []
+        def _normalize_frequency(freq):
+            """Map various frequency codes to standard"""
+            if pd.isna(freq):
+                return "MONTHLY"
+            f = str(freq).upper().strip()
+            if f in ('M', 'MONTHLY', 'MON', 'OM'):  # OM = Old Monthly? or just Monthly
+                return "MONTHLY"
+            if f in ('Q', 'QUARTERLY', 'QUART', 'OQ'):
+                return "QUARTERLY"
+            if f in ('W', 'WEEKLY', 'OW'):
+                return "WEEKLY"
+            if f in ('D', 'DAILY', 'OD'):
+                return "DAILY"
+            if f in ('F', 'FORTNIGHT', 'FORTNIGHTLY', 'OF'):
+                return "FORTNIGHTLY"
+            return f
+
+
+        def _make_match_key(df):
+            """Create deduplication key from normalized scheme + amount + frequency"""
+            scheme_norm = df["scheme_name"].apply(_normalize_scheme_name)
+            freq_norm = df["frequency_type"].apply(_normalize_frequency)
+            amt_norm = df["installments_amt"].astype(str).str.replace('.0', '', regex=False)
+            return scheme_norm + "|" + amt_norm + "|" + freq_norm
+
+
+        # BSE SIPs are the primary source
+        all_sips = []
         bse_keys = set()
 
         if not bse_sip.empty:
-            bse_sip["_match_key"] = _make_safe_key(bse_sip)
+            bse_sip["_match_key"] = _make_match_key(bse_sip)
             bse_keys = set(bse_sip["_match_key"])
-            frames_to_keep.append(bse_sip)
+            all_sips.append(bse_sip)
 
+        # Add CAMS SIPs only if they DON'T match a BSE SIP
         if not cams_wbr49_sip.empty:
-            cams_wbr49_sip["_match_key"] = _make_safe_key(cams_wbr49_sip)
+            cams_wbr49_sip["_match_key"] = _make_match_key(cams_wbr49_sip)
             cams_direct = cams_wbr49_sip[~cams_wbr49_sip["_match_key"].isin(bse_keys)].copy()
             if not cams_direct.empty:
                 cams_direct["source"] = "CAMS (Direct)"
-                frames_to_keep.append(cams_direct)
+                all_sips.append(cams_direct)
 
+        # Add KFin SIPs only if they DON'T match a BSE SIP
         if not kfin_mfsd243_sip.empty:
-            kfin_mfsd243_sip["_match_key"] = _make_safe_key(kfin_mfsd243_sip)
+            kfin_mfsd243_sip["_match_key"] = _make_match_key(kfin_mfsd243_sip)
             kfin_direct = kfin_mfsd243_sip[~kfin_mfsd243_sip["_match_key"].isin(bse_keys)].copy()
             if not kfin_direct.empty:
                 kfin_direct["source"] = "KFin (Direct)"
-                frames_to_keep.append(kfin_direct)
+                all_sips.append(kfin_direct)
 
-        if frames_to_keep:
-            final_sips = pd.concat(frames_to_keep, ignore_index=True)
+        if all_sips:
+            final_sips = pd.concat(all_sips, ignore_index=True)
             final_sips = final_sips.drop(columns=["_match_key"], errors='ignore')
 
-            active = len(final_sips[final_sips['status'].str.contains('Active', na=False, case=False)])
+            active = len(final_sips[final_sips['status'].str.contains('Active|Live', na=False, case=False)])
             total_monthly = final_sips['installments_amt'].sum()
 
             s1, s2, s3 = st.columns(3)
@@ -2125,17 +2176,22 @@ elif mode == "👥 Clients":
             s2.metric("Active SIPs", active)
             s3.metric("Monthly Commitment", format_currency(total_monthly))
 
+            # Show breakdown by source
+            source_breakdown = final_sips['source'].value_counts().to_dict()
+            st.caption("Sources: " + " | ".join([f"{k}: {v}" for k, v in source_breakdown.items()]))
+
             try:
                 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
-                gb = GridOptionsBuilder.from_dataframe(
-                    final_sips[['source', 'scheme_name', 'installments_amt', 'frequency_type', 'status']]
-                )
+                display_cols = ['source', 'scheme_name', 'installments_amt', 'frequency_type', 'status']
+                display_cols = [c for c in display_cols if c in final_sips.columns]
+
+                gb = GridOptionsBuilder.from_dataframe(final_sips[display_cols])
                 gb.configure_default_column(filter=True, sortable=True, resizable=True, flex=1)
                 gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=10)
                 grid_opts = gb.build()
                 AgGrid(
-                    final_sips[['source', 'scheme_name', 'installments_amt', 'frequency_type', 'status']],
+                    final_sips[display_cols],
                     gridOptions=grid_opts,
                     height=300,
                     update_mode=GridUpdateMode.NO_UPDATE,
@@ -2146,8 +2202,7 @@ elif mode == "👥 Clients":
                 )
             except ImportError:
                 st.dataframe(
-                    final_sips[['source', 'scheme_name', 'installments_amt', 'frequency_type', 'status']].sort_values(
-                        'source'),
+                    final_sips[display_cols].sort_values('source'),
                     use_container_width=True,
                     hide_index=True,
                     column_config={
@@ -2157,7 +2212,6 @@ elif mode == "👥 Clients":
                 )
         else:
             st.info("No SIP records found.")
-
 # ==================== 💰 BROKERAGE REPORT ====================
 elif mode == "💰 Brokerage Report":
     st.header("💰 Brokerage Report")
