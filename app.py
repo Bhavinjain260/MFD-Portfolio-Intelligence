@@ -9,9 +9,9 @@ import re
 import warnings
 from datetime import datetime
 from typing import Optional
-import plotly.express as px
 
 import pandas as pd
+import plotly.express as px
 import requests
 import streamlit as st
 
@@ -905,7 +905,6 @@ def get_kfin_invested_amount(folio_list):
     if not folio_list:
         return 0.0
 
-
     with get_conn() as conn:
         placeholders = ','.join(['?'] * len(folio_list))
         query = f"""
@@ -931,13 +930,67 @@ def get_kfin_invested_per_scheme(folio_list: list) -> pd.DataFrame:
         query = f"""
             SELECT
                 td_acno   AS folio_id,
-                fmcode    AS product_code,
+                UPPER(TRIM(fmcode)) AS product_code,
                 COALESCE(SUM(td_amt), 0) AS invested_amount
             FROM kfin_mfsd201_transaction
             WHERE td_acno IN ({placeholders})
-            GROUP BY td_acno, fmcode
+            GROUP BY td_acno, UPPER(TRIM(fmcode))
         """
         return pd.read_sql(query, conn, params=folio_list)
+
+
+@st.cache_data(ttl=180, show_spinner=False)
+def get_cams_invested_per_scheme(folio_list: list) -> pd.DataFrame:
+    """
+    Return invested amount AND total units PER SCHEME for CAMS folios.
+    Auto-detects the scheme column. Prioritizes 'prodcode' because it
+    matches cams_wbr9_folio.product (short code, e.g. HMCOG).
+    Falls back to 'scheme' (long name) only if prodcode is missing.
+    """
+    if not folio_list:
+        return pd.DataFrame(columns=["folio_id", "product_code", "invested_amount", "total_units"])
+
+    # ── Prioritize prodcode (short code) over scheme (long name) ──
+    scheme_col_candidates = [
+        "prodcode", "product_code", "scheme_code", "schemecode",
+        "scheme", "product", "fund_code", "fundcode", "plan_code", "plancode"
+    ]
+    scheme_col = None
+    with get_conn() as conn:
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(cams_wbr2_transaction)").fetchall()]
+
+    for c in scheme_col_candidates:
+        if c in cols:
+            scheme_col = c
+            break
+
+    placeholders = ",".join(["?"] * len(folio_list))
+    with get_conn() as conn:
+        if scheme_col:
+            query = f"""
+                SELECT
+                    folio_no      AS folio_id,
+                    UPPER(TRIM({scheme_col})) AS product_code,
+                    COALESCE(SUM(amount), 0)   AS invested_amount,
+                    COALESCE(SUM(units), 0)     AS total_units
+                FROM cams_wbr2_transaction
+                WHERE folio_no IN ({placeholders})
+                GROUP BY folio_no, UPPER(TRIM({scheme_col}))
+            """
+        else:
+            query = f"""
+                SELECT
+                    folio_no      AS folio_id,
+                    NULL          AS product_code,
+                    COALESCE(SUM(amount), 0)   AS invested_amount,
+                    COALESCE(SUM(units), 0)     AS total_units
+                FROM cams_wbr2_transaction
+                WHERE folio_no IN ({placeholders})
+                GROUP BY folio_no
+            """
+        df = pd.read_sql(query, conn, params=folio_list)
+
+    return df
 
 
 # ==================== DATA LOADERS ====================
@@ -1048,8 +1101,9 @@ def load_dashboard_summary() -> dict:
         ).fetchone()[0]
         summary["cams_txns"] = conn.execute("SELECT COUNT(*) FROM cams_wbr2_transaction").fetchone()[0]
         summary["cams_sips"] = conn.execute("SELECT COUNT(*) FROM cams_wbr49_sip").fetchone()[0]
+        # Invested amount = sum of transaction amounts (same logic as KFin)
         summary["cams_aum"] = conn.execute(
-            "SELECT COALESCE(SUM(rupee_bal), 0) FROM cams_wbr4_aum"
+            "SELECT COALESCE(SUM(amount), 0) FROM cams_wbr2_transaction"
         ).fetchone()[0]
         summary["cams_brokerage"] = conn.execute(
             "SELECT COALESCE(SUM(brkage_amt), 0) FROM cams_wbr77_brokerage"
@@ -1074,12 +1128,11 @@ def load_dashboard_summary() -> dict:
         # KFin AUM: sum td_amt grouped by td_acno from MFSD201
         try:
             kfin_aum_result = conn.execute("""
-                SELECT COALESCE(SUM(inner_sum), 0) FROM (
-                    SELECT td_acno, SUM(td_amt) as inner_sum 
-                    FROM kfin_mfsd201_transaction 
-                    GROUP BY td_acno
-                )
-            """).fetchone()[0]
+                                           SELECT COALESCE(SUM(inner_sum), 0)
+                                           FROM (SELECT td_acno, SUM(td_amt) as inner_sum
+                                                 FROM kfin_mfsd201_transaction
+                                                 GROUP BY td_acno)
+                                           """).fetchone()[0]
             summary["kfin_aum"] = float(kfin_aum_result) if kfin_aum_result else 0.0
         except Exception as e:
             log.warning("KFin AUM calculation failed: %s", e)
@@ -1097,14 +1150,8 @@ def load_amc_breakdown() -> pd.DataFrame:
     """AMC-wise AUM and folio summary. KFin uses Fund column, td_acno for join."""
     with get_conn() as conn:
         # ── CAMS ──
-        cams_wbr4_aum_df = pd.read_sql("""
-            SELECT amc_code as amc, 
-                   COALESCE(SUM(rupee_bal), 0) as aum
-            FROM cams_wbr9_folio  
-            WHERE COALESCE(amc_code, '') != ''
-            GROUP BY amc_code
-        """, conn)
-
+        # ── CAMS ──
+        # Folio counts from folio master
         cams_wbr9_folio_df = pd.read_sql("""
             SELECT amc_code as amc,
                    COUNT(DISTINCT foliochk) as folios,
@@ -1114,17 +1161,26 @@ def load_amc_breakdown() -> pd.DataFrame:
             GROUP BY amc_code
         """, conn)
 
-        if cams_wbr4_aum_df.empty and cams_wbr9_folio_df.empty:
+        # AUM from transactions (invested amount) instead of rupee_bal
+        cams_txn_aum_df = pd.read_sql("""
+            SELECT amc_code as amc,
+                   COALESCE(SUM(amount), 0) as aum
+            FROM cams_wbr2_transaction
+            WHERE COALESCE(amc_code, '') != ''
+            GROUP BY amc_code
+        """, conn)
+
+        if cams_wbr9_folio_df.empty and cams_txn_aum_df.empty:
             cams_combined = pd.DataFrame()
-        elif cams_wbr4_aum_df.empty:
-            cams_combined = cams_wbr9_folio_df.copy()
-            cams_combined["aum"] = 0.0
         elif cams_wbr9_folio_df.empty:
-            cams_combined = cams_wbr4_aum_df.copy()
+            cams_combined = cams_txn_aum_df.copy()
             cams_combined["folios"] = 0
             cams_combined["records"] = 0
+        elif cams_txn_aum_df.empty:
+            cams_combined = cams_wbr9_folio_df.copy()
+            cams_combined["aum"] = 0.0
         else:
-            cams_combined = cams_wbr9_folio_df.merge(cams_wbr4_aum_df, on="amc", how="outer").fillna(0)
+            cams_combined = cams_wbr9_folio_df.merge(cams_txn_aum_df, on="amc", how="outer").fillna(0)
 
         if not cams_combined.empty:
             cams_combined["rta"] = "CAMS"
@@ -1133,26 +1189,26 @@ def load_amc_breakdown() -> pd.DataFrame:
         # AUM from transactions grouped by Fund (AMC) via td_acno join
         try:
             kfin_mfsd203_aum_df = pd.read_sql("""
-                SELECT kf.Fund as amc,
-                       COALESCE(SUM(kt.td_amt), 0) as aum
-                FROM kfin_mfsd201_transaction kt
-                JOIN kfin_mfsd211_folio kf ON kt.td_acno = kf.Folio
-                WHERE COALESCE(kf.Fund, '') != ''
-                GROUP BY kf.Fund
-            """, conn)
+                                              SELECT kf.Fund                     as amc,
+                                                     COALESCE(SUM(kt.td_amt), 0) as aum
+                                              FROM kfin_mfsd201_transaction kt
+                                                       JOIN kfin_mfsd211_folio kf ON kt.td_acno = kf.Folio
+                                              WHERE COALESCE(kf.Fund, '') != ''
+                                              GROUP BY kf.Fund
+                                              """, conn)
         except Exception as e:
             log.warning("KFin AUM breakdown failed: %s", e)
             kfin_mfsd203_aum_df = pd.DataFrame(columns=["amc", "aum"])
 
         try:
             kfin_mfsd211_folio_df = pd.read_sql("""
-                SELECT Fund as amc,
-                       COUNT(DISTINCT Folio) as folios,
-                       COUNT(*) as records
-                FROM kfin_mfsd211_folio
-                WHERE COALESCE(Fund, '') != ''
-                GROUP BY Fund
-            """, conn)
+                                                SELECT Fund                  as amc,
+                                                       COUNT(DISTINCT Folio) as folios,
+                                                       COUNT(*)              as records
+                                                FROM kfin_mfsd211_folio
+                                                WHERE COALESCE(Fund, '') != ''
+                                                GROUP BY Fund
+                                                """, conn)
         except Exception as e:
             log.warning("KFin folio breakdown failed: %s", e)
             kfin_mfsd211_folio_df = pd.DataFrame(columns=["amc", "folios", "records"])
@@ -1239,7 +1295,7 @@ ensure_db()
 # ==================== BSE SCHEME MASTER AUTO-DOWNLOAD ====================
 def _auto_bse_scheme_master():
     """Non-blocking: starts background download if needed, once per day."""
-    from bse_auto import should_auto_download, start_background_download, get_download_status
+    from bse_auto import should_auto_download, start_background_download
 
     # Only run if user hasn't disabled it
     if not st.session_state.get("bse_auto_toggle", True):
@@ -1259,8 +1315,6 @@ def _auto_bse_scheme_master():
         # Don't block — let the UI render. The status will show on next rerun.
     else:
         log.info("[BSE-AUTO-STARTUP] Today's file already exists.")
-
-
 
 
 _auto_bse_scheme_master()
@@ -1363,6 +1417,68 @@ if mode == "📊 Dashboard":
                 download_and_save_nav_if_needed()
 
                 folio_nav_df = get_all_folios_with_isin_and_nav(get_conn)
+
+                # ── Normalize product_code once for all merges ──
+                folio_nav_df['product_code_norm'] = folio_nav_df['product_code'].astype(str).str.strip().str.upper()
+
+                # ═══════════════════════════════════════════════════════════
+                # CAMS: overwrite file_aum & units from transaction sums
+                # ═══════════════════════════════════════════════════════════
+                cams_folios_all = folio_nav_df[folio_nav_df['rta'] == 'CAMS']['folio_id'].unique().tolist()
+                if cams_folios_all:
+                    cams_invested_all = get_cams_invested_per_scheme(cams_folios_all)
+                    if not cams_invested_all.empty:
+                        cams_invested_all['product_code_norm'] = cams_invested_all['product_code'].astype(
+                            str).str.strip().str.upper()
+                        folio_nav_df = folio_nav_df.merge(
+                            cams_invested_all,
+                            left_on=['folio_id', 'product_code_norm'],
+                            right_on=['folio_id', 'product_code_norm'],
+                            how='left',
+                            suffixes=('', '_cams')
+                        )
+                        cams_mask = folio_nav_df['rta'] == 'CAMS'
+                        has_txn = cams_mask & folio_nav_df['invested_amount'].notna()
+                        folio_nav_df.loc[has_txn, 'file_aum'] = folio_nav_df.loc[has_txn, 'invested_amount']
+                        folio_nav_df.loc[has_txn, 'units'] = folio_nav_df.loc[has_txn, 'total_units']
+                        folio_nav_df.loc[has_txn, 'nav_based_aum'] = (
+                                folio_nav_df.loc[has_txn, 'units'] * folio_nav_df.loc[has_txn, 'current_nav']
+                        )
+                        folio_nav_df = folio_nav_df.drop(
+                            columns=['invested_amount', 'total_units', 'product_code_norm_cams'], errors='ignore'
+                        )
+
+                # ═══════════════════════════════════════════════════════════
+                # KFinTech: overwrite file_aum from transaction sums
+                # (units are already correct from the master query)
+                # ═══════════════════════════════════════════════════════════
+                kfin_folios_all = folio_nav_df[folio_nav_df['rta'] == 'KFinTech']['folio_id'].unique().tolist()
+                if kfin_folios_all:
+                    kfin_invested_all = get_kfin_invested_per_scheme(kfin_folios_all)
+                    if not kfin_invested_all.empty:
+                        kfin_invested_all['product_code_norm'] = kfin_invested_all['product_code'].astype(
+                            str).str.strip().str.upper()
+                        folio_nav_df = folio_nav_df.merge(
+                            kfin_invested_all,
+                            left_on=['folio_id', 'product_code_norm'],
+                            right_on=['folio_id', 'product_code_norm'],
+                            how='left',
+                            suffixes=('', '_kfin')
+                        )
+                        kfin_mask = folio_nav_df['rta'] == 'KFinTech'
+                        has_txn = kfin_mask & folio_nav_df['invested_amount'].notna()
+                        folio_nav_df.loc[has_txn, 'file_aum'] = folio_nav_df.loc[has_txn, 'invested_amount']
+                        # Recalculate NAV-based AUM even though units haven't changed
+                        folio_nav_df.loc[has_txn, 'nav_based_aum'] = (
+                                folio_nav_df.loc[has_txn, 'units'] * folio_nav_df.loc[has_txn, 'current_nav']
+                        )
+                        folio_nav_df = folio_nav_df.drop(
+                            columns=['invested_amount', 'product_code_norm_kfin'], errors='ignore'
+                        )
+
+                # Clean up temp column
+                folio_nav_df = folio_nav_df.drop(columns=['product_code_norm'], errors='ignore')
+
                 nav_stats = get_folio_nav_summary(get_conn)
                 st.session_state["folio_nav_df"] = folio_nav_df
                 st.session_state["folio_nav_summary"] = nav_stats
@@ -1567,7 +1683,10 @@ if mode == "📊 Dashboard":
                 columns={"amc_name": "AMC Name", "rta": "RTA", "folios": "Folios",
                          "records": "Records", "aum_display": "AUM"}
             )
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            amc_select = st.dataframe(
+                display_df, use_container_width=True, hide_index=True,
+                on_select="rerun", selection_mode="single-row", key="amc_breakdown_select"
+            )
 
             fig = px.pie(
                 amc_df, values="aum", names="amc_name", hole=0.4,
@@ -1578,6 +1697,53 @@ if mode == "📊 Dashboard":
             fig.update_traces(textposition='inside', textinfo='percent+label', pull=[0.02] * len(amc_df))
             fig.update_layout(showlegend=False, margin=dict(t=40, b=20, l=20, r=20))
             st.plotly_chart(fig, use_container_width=True)
+
+            # ── Client-wise bifurcation for selected AMC ──
+            if amc_select and len(amc_select["selection"]["rows"]) > 0:
+                sel_idx = amc_select["selection"]["rows"][0]
+                sel_amc = display_df.iloc[sel_idx]["AMC Name"]
+
+                st.divider()
+                st.subheader(f"👥 Client-wise Investment — {sel_amc}")
+
+                amc_clients = amc_breakdown_df[amc_breakdown_df["amc_name"] == sel_amc].copy()
+
+                client_summary = (
+                    amc_clients.groupby("investor_name", dropna=False)
+                    .agg(
+                        folios=("folio_id", "nunique"),
+                        units=("units", "sum"),
+                        invested=("file_aum", "sum"),
+                        current_value=("nav_based_aum", "sum"),
+                    )
+                    .reset_index()
+                )
+                client_summary["gain_loss"] = client_summary["current_value"] - client_summary["invested"]
+                client_summary = client_summary.sort_values("current_value", ascending=False)
+
+                cc1, cc2, cc3 = st.columns(3)
+                cc1.metric("👤 Clients", client_summary["investor_name"].nunique())
+                cc2.metric("💰 Total Invested", format_aum(client_summary["invested"].sum()))
+                cc3.metric("📈 Current Value", format_aum(client_summary["current_value"].sum()))
+
+                client_display = client_summary.rename(columns={
+                    "investor_name": "Client", "folios": "Folios",
+                    "current_value": "Current Value",
+                })
+                st.dataframe(
+                    client_display, use_container_width=True, hide_index=True,
+                    column_config={
+
+                        "Current Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                    }
+                )
+
+                csv = client_display.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    f"⬇️ Download {sel_amc} Client Breakdown (CSV)",
+                    csv, f"amc_{sel_amc.replace(' ', '_')}_clients.csv", "text/csv",
+                    key="amc_client_download"
+                )
         else:
             st.info("No AMC breakdown data available.")
     else:
@@ -1604,15 +1770,15 @@ elif mode == "👥 Clients":
     def load_clients_search():
         with get_conn() as conn:
             return pd.read_sql("""
-                SELECT client_code, 
-                primary_holder_first_name || ' ' || primary_holder_last_name AS name, 
-                primary_holder_pan AS pan, 
-                indian_mobile_no AS mobile,
-                email, 
-                city
-                FROM bse_client_master
-                WHERE primary_holder_pan IS NOT NULL
-            """, conn)
+                               SELECT client_code,
+                                      primary_holder_first_name || ' ' || primary_holder_last_name AS name,
+                                      primary_holder_pan                                           AS pan,
+                                      indian_mobile_no                                             AS mobile,
+                                      email,
+                                      city
+                               FROM bse_client_master
+                               WHERE primary_holder_pan IS NOT NULL
+                               """, conn)
 
 
     clients_df = load_clients_search()
@@ -1685,6 +1851,9 @@ elif mode == "👥 Clients":
     # ── Tabs: Portfolio | SIPs ──
     tab_portfolio, tab_sips = st.tabs(["📈 Portfolio & AUM", "🔄 Active SIPs"])
 
+    with tab_portfolio:
+        show_debug = st.toggle("🐞 Show debug logs", value=False, key="cams_debug_toggle")
+
     # ═══════════════════════════════════════════════════════════
     # TAB 1 — Portfolio & AUM
     # ═══════════════════════════════════════════════════════════
@@ -1709,12 +1878,52 @@ elif mode == "👥 Clients":
         holdings = folio_nav_df[folio_nav_df['folio_id'].isin(all_folios)].copy()
 
         if not holdings.empty:
+            holdings['product_code_norm'] = holdings['product_code'].astype(str).str.strip().str.upper()
+
+            # ── KFinTech: replace file_aum with transaction-summed invested amount ──
             if 'KFinTech' in holdings['rta'].values:
                 kfin_invested_df = get_kfin_invested_per_scheme(kfin_f['folio'].tolist())
-                holdings = holdings.merge(kfin_invested_df, on=["folio_id", "product_code"], how="left")
-                kfin_mask = holdings['rta'] == 'KFinTech'
-                holdings.loc[kfin_mask, 'file_aum'] = holdings.loc[kfin_mask, 'invested_amount']
-                holdings = holdings.drop(columns=['invested_amount'], errors='ignore')
+                if not kfin_invested_df.empty:
+                    kfin_invested_df['product_code_norm'] = kfin_invested_df['product_code'].astype(
+                        str).str.strip().str.upper()
+                    holdings = holdings.merge(
+                        kfin_invested_df,
+                        on=['folio_id', 'product_code_norm'],
+                        how='left',
+                        suffixes=('', '_kfin')
+                    )
+                    kfin_mask = holdings['rta'] == 'KFinTech'
+                    has_txn = kfin_mask & holdings['invested_amount'].notna()
+                    holdings.loc[has_txn, 'file_aum'] = holdings.loc[has_txn, 'invested_amount']
+                    holdings.loc[has_txn, 'nav_based_aum'] = (
+                            holdings.loc[has_txn, 'units'] * holdings.loc[has_txn, 'current_nav']
+                    )
+                    holdings = holdings.drop(columns=['invested_amount', 'product_code_norm_kfin'], errors='ignore')
+
+            # ── CAMS: replace file_aum AND units with transaction-summed values ──
+            if 'CAMS' in holdings['rta'].values:
+                cams_invested_df = get_cams_invested_per_scheme(cams_f['foliochk'].tolist())
+                if not cams_invested_df.empty:
+                    cams_invested_df['product_code_norm'] = cams_invested_df['product_code'].astype(
+                        str).str.strip().str.upper()
+                    holdings = holdings.merge(
+                        cams_invested_df,
+                        on=['folio_id', 'product_code_norm'],
+                        how='left',
+                        suffixes=('', '_cams')
+                    )
+                    cams_mask = holdings['rta'] == 'CAMS'
+                    has_txn = cams_mask & holdings['invested_amount'].notna()
+                    holdings.loc[has_txn, 'file_aum'] = holdings.loc[has_txn, 'invested_amount']
+                    holdings.loc[has_txn, 'units'] = holdings.loc[has_txn, 'total_units']
+                    holdings.loc[has_txn, 'nav_based_aum'] = (
+                            holdings.loc[has_txn, 'units'] * holdings.loc[has_txn, 'current_nav']
+                    )
+                    holdings = holdings.drop(columns=['invested_amount', 'total_units', 'product_code_norm_cams'],
+                                             errors='ignore')
+
+            # Clean up temp column
+            holdings = holdings.drop(columns=['product_code_norm'], errors='ignore')
 
             total_invested = holdings['file_aum'].sum()
             total_current = holdings['nav_based_aum'].sum() or 0
@@ -1767,22 +1976,38 @@ elif mode == "👥 Clients":
                 with get_conn() as conn:
                     if rta == 'CAMS':
                         txn_df = pd.read_sql("""
-                            SELECT trxnno, traddate, trxntype, trxnmode, trxnstat, 
-                                   purprice, units, amount, brokcode, subbrok, remarks
-                            FROM cams_wbr2_transaction
-                            WHERE folio_no = ?
-                            ORDER BY traddate DESC
-                        """, conn, params=(folio_id,))
+                                             SELECT trxnno,
+                                                    traddate,
+                                                    trxntype,
+                                                    trxnmode,
+                                                    trxnstat,
+                                                    purprice,
+                                                    units,
+                                                    amount,
+                                                    brokcode,
+                                                    subbrok,
+                                                    remarks
+                                             FROM cams_wbr2_transaction
+                                             WHERE folio_no = ?
+                                             ORDER BY traddate DESC
+                                             """, conn, params=(folio_id,))
                     else:
                         txn_df = pd.read_sql("""
-                            SELECT td_trno as trxnno, td_trdt as traddate, td_purred as trxntype,
-                                   trnmode as trxnmode, trnstat as trxnstat, td_pop as purprice,
-                                   td_units as units, td_amt as amount, td_broker as brokcode,
-                                   '' as subbrok, trdesc as remarks
-                            FROM kfin_mfsd201_transaction
-                            WHERE td_acno = ?
-                            ORDER BY td_trdt DESC
-                        """, conn, params=(folio_id,))
+                                             SELECT td_trno   as trxnno,
+                                                    td_trdt   as traddate,
+                                                    td_purred as trxntype,
+                                                    trnmode   as trxnmode,
+                                                    trnstat   as trxnstat,
+                                                    td_pop    as purprice,
+                                                    td_units  as units,
+                                                    td_amt    as amount,
+                                                    td_broker as brokcode,
+                                                    ''        as subbrok,
+                                                    trdesc    as remarks
+                                             FROM kfin_mfsd201_transaction
+                                             WHERE td_acno = ?
+                                             ORDER BY td_trdt DESC
+                                             """, conn, params=(folio_id,))
 
                 if not txn_df.empty:
                     try:
@@ -1827,19 +2052,28 @@ elif mode == "👥 Clients":
 
         with get_conn() as conn:
             bse_sip = pd.read_sql("""
-                SELECT amc_name, scheme_name, installments_amt, status, frequency_type, 
-                       'BSE' as source 
-                FROM bse_sip WHERE client_code = ?
-            """, conn, params=(client_code,))
+                                  SELECT amc_name,
+                                         scheme_name,
+                                         installments_amt,
+                                         status,
+                                         frequency_type,
+                                         'BSE' as source
+                                  FROM bse_sip
+                                  WHERE client_code = ?
+                                  """, conn, params=(client_code,))
 
             cams_wbr49_sip = pd.read_sql("""
-                SELECT scheme as scheme_name, auto_amount as installments_amt, 
-                       periodicity as frequency_type, 
-                       CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END as status,
-                       'CAMS' as source
-                FROM cams_wbr49_sip 
-                WHERE folio_no IN (SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no)) = ?)
-            """, conn, params=(pan,))
+                                         SELECT scheme                as scheme_name,
+                                                auto_amount           as installments_amt,
+                                                periodicity           as frequency_type,
+                                                CASE
+                                                    WHEN cease_date IS NULL OR cease_date = '' THEN 'Active'
+                                                    ELSE 'Ceased' END as status,
+                                                'CAMS'                as source
+                                         FROM cams_wbr49_sip
+                                         WHERE folio_no IN
+                                               (SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no)) = ?)
+                                         """, conn, params=(pan,))
 
             kfin_folio_list = kfin_f['folio'].tolist()
             if kfin_folio_list:
@@ -1991,13 +2225,13 @@ elif mode == "💰 Brokerage Report":
             else:
                 with get_conn() as conn:
                     conn.execute('''
-                            INSERT INTO monthly_brokerage (amc, month, year, amount, notes)
-                            VALUES (?, ?, ?, ?, ?)
-                            ON CONFLICT(amc, month, year) DO UPDATE SET
-                                amount = excluded.amount,
-                                notes = excluded.notes,
-                                timestamp = CURRENT_TIMESTAMP
-                        ''', (m_amc_final, m_month, int(m_year), float(m_amount), m_notes.strip() or None))
+                                 INSERT INTO monthly_brokerage (amc, month, year, amount, notes)
+                                 VALUES (?, ?, ?, ?, ?) ON CONFLICT(amc, month, year) DO
+                                 UPDATE SET
+                                     amount = excluded.amount,
+                                     notes = excluded.notes,
+                                     timestamp = CURRENT_TIMESTAMP
+                                 ''', (m_amc_final, m_month, int(m_year), float(m_amount), m_notes.strip() or None))
                 st.cache_data.clear()
                 st.success(f"Logged {format_brokerage_inr(m_amount)} for {m_amc_final} ({m_month}-{m_year}).")
                 st.rerun()
