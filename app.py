@@ -1857,27 +1857,19 @@ elif mode == "👥 Clients":
     # ═══════════════════════════════════════════════════════════
     # TAB 1 — Portfolio & AUM
     # ═══════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════
+    # TAB 1 — Portfolio & AUM
+    # ═══════════════════════════════════════════════════════════
     with tab_portfolio:
-        @st.cache_data(ttl=180)
-        def get_kfin_invested_per_scheme(folios):
-            if not folios:
-                return pd.DataFrame(columns=["folio_id", "product_code", "invested_amount"])
-            with get_conn() as conn:
-                ph = ','.join(['?'] * len(folios))
-                return pd.read_sql(f"""
-                    SELECT 
-                        td_acno AS folio_id, 
-                        fmcode AS product_code,
-                        COALESCE(SUM(td_amt), 0) AS invested_amount
-                    FROM kfin_mfsd201_transaction 
-                    WHERE td_acno IN ({ph})
-                    GROUP BY td_acno, fmcode
-                """, conn, params=folios)
-
-
         holdings = folio_nav_df[folio_nav_df['folio_id'].isin(all_folios)].copy()
 
         if not holdings.empty:
+            # ── Clean up any leftover merge columns from Dashboard init ──
+            drop_leftover = [c for c in holdings.columns
+                           if c.endswith('_kfin') or c.endswith('_cams')
+                           or c in ('product_code_norm', 'invested_amount', 'total_units')]
+            holdings = holdings.drop(columns=drop_leftover, errors='ignore')
+
             holdings['product_code_norm'] = holdings['product_code'].astype(str).str.strip().str.upper()
 
             # ── KFinTech: replace file_aum with transaction-summed invested amount ──
@@ -1886,11 +1878,12 @@ elif mode == "👥 Clients":
                 if not kfin_invested_df.empty:
                     kfin_invested_df['product_code_norm'] = kfin_invested_df['product_code'].astype(
                         str).str.strip().str.upper()
+                    # Use unique suffix '_kfin_client' to avoid collision with Dashboard columns
                     holdings = holdings.merge(
                         kfin_invested_df,
                         on=['folio_id', 'product_code_norm'],
                         how='left',
-                        suffixes=('', '_kfin')
+                        suffixes=('', '_kfin_client')
                     )
                     kfin_mask = holdings['rta'] == 'KFinTech'
                     has_txn = kfin_mask & holdings['invested_amount'].notna()
@@ -1898,7 +1891,8 @@ elif mode == "👥 Clients":
                     holdings.loc[has_txn, 'nav_based_aum'] = (
                             holdings.loc[has_txn, 'units'] * holdings.loc[has_txn, 'current_nav']
                     )
-                    holdings = holdings.drop(columns=['invested_amount', 'product_code_norm_kfin'], errors='ignore')
+                    holdings = holdings.drop(
+                        columns=['invested_amount', 'product_code_norm_kfin_client'], errors='ignore')
 
             # ── CAMS: replace file_aum AND units with transaction-summed values ──
             if 'CAMS' in holdings['rta'].values:
@@ -1906,11 +1900,12 @@ elif mode == "👥 Clients":
                 if not cams_invested_df.empty:
                     cams_invested_df['product_code_norm'] = cams_invested_df['product_code'].astype(
                         str).str.strip().str.upper()
+                    # Use unique suffix '_cams_client' to avoid collision with Dashboard columns
                     holdings = holdings.merge(
                         cams_invested_df,
                         on=['folio_id', 'product_code_norm'],
                         how='left',
-                        suffixes=('', '_cams')
+                        suffixes=('', '_cams_client')
                     )
                     cams_mask = holdings['rta'] == 'CAMS'
                     has_txn = cams_mask & holdings['invested_amount'].notna()
@@ -1919,8 +1914,9 @@ elif mode == "👥 Clients":
                     holdings.loc[has_txn, 'nav_based_aum'] = (
                             holdings.loc[has_txn, 'units'] * holdings.loc[has_txn, 'current_nav']
                     )
-                    holdings = holdings.drop(columns=['invested_amount', 'total_units', 'product_code_norm_cams'],
-                                             errors='ignore')
+                    holdings = holdings.drop(
+                        columns=['invested_amount', 'total_units', 'product_code_norm_cams_client'],
+                        errors='ignore')
 
             # Clean up temp column
             holdings = holdings.drop(columns=['product_code_norm'], errors='ignore')
