@@ -275,6 +275,51 @@ def format_brokerage_inr(val) -> str:
         return "Rs -"
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def load_dedup_sip_counts() -> dict:
+    def _clean_regn(val):
+        if pd.isna(val):
+            return ""
+        s = str(val).strip().upper()
+        s = s.replace(".0", "") if s.endswith(".0") else s
+        return re.sub(r'[^A-Z0-9]', '', s)
+
+    active_statuses = ["ACTIVE", "LIVE SIP", "REGISTERED"]
+
+    with get_conn() as conn:
+        bse = pd.read_sql("SELECT status, xsip_regn_no AS regn FROM bse_sip", conn)
+        cams = pd.read_sql("""
+            SELECT
+                CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END AS status,
+                request_ref_no AS regn
+            FROM cams_wbr49_sip
+        """, conn)
+        kfin = pd.read_sql("SELECT status, reg_slno AS regn FROM kfin_mfsd243_sip", conn)
+
+    bse = bse[bse["status"].astype(str).str.strip().str.upper().isin(active_statuses)].copy()
+    cams = cams[cams["status"].astype(str).str.strip().str.upper().isin(active_statuses)].copy()
+    kfin = kfin[kfin["status"].astype(str).str.strip().str.upper().isin(active_statuses)].copy()
+
+    bse["_key"] = bse["regn"].apply(_clean_regn)
+    cams["_key"] = cams["regn"].apply(_clean_regn)
+    kfin["_key"] = kfin["regn"].apply(_clean_regn)
+
+    bse_keys = set(bse["_key"])
+    rta_keys = set(cams["_key"]) | set(kfin["_key"])
+
+    bse_unmatched = bse[~bse["_key"].isin(rta_keys)]
+    cams_direct = cams[~cams["_key"].isin(bse_keys)]
+    kfin_direct = kfin[~kfin["_key"].isin(bse_keys)]
+
+    return {
+        "active_sips_deduped": len(bse) + len(cams_direct) + len(kfin_direct),
+        "bse_sips": len(bse),
+        "bse_unmatched_in_rta": len(bse_unmatched),
+        "cams_direct_sips": len(cams_direct),
+        "kfin_direct_sips": len(kfin_direct),
+    }
+
+
 # ==================== AMFI NAV SERVICE ====================
 
 
@@ -1570,7 +1615,8 @@ if mode == "📊 Dashboard":
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("👥 Clients", summary.get("total_clients", 0))
     m2.metric("📋 BSE SIPs", summary.get("total_xsip", 0))
-    m3.metric("✅ Active SIPs", summary.get("active_xsip", 0))
+    dedup_sips = load_dedup_sip_counts()
+    m3.metric("✅ Active SIPs", dedup_sips["active_sips_deduped"])
     m4.metric("🏢 CAMS AMCs", summary.get("cams_amcs", 0))
     m5.metric("🏢 KFinTech AMCs", summary.get("kfin_amcs", 0))
 
