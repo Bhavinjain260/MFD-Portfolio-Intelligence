@@ -1523,7 +1523,7 @@ if mode == "📊 Dashboard":
     # ── Refresh button ──
     c_refresh, _ = st.columns([1, 5])
     with c_refresh:
-        if st.button("🔄 Refresh Data", use_container_width=True):
+        if st.button("🔄 Refresh Data", width="stretch"):
             st.cache_data.clear()
             st.session_state.pop("folio_nav_df", None)
             st.session_state.pop("folio_nav_summary", None)
@@ -1637,7 +1637,7 @@ if mode == "📊 Dashboard":
 
         st.dataframe(
             view[display_cols],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "current_nav": st.column_config.NumberColumn("Current NAV", format="₹ %.4f"),
@@ -1658,64 +1658,108 @@ if mode == "📊 Dashboard":
                 "text/csv",
             )
 
-    # ── AMC Breakdown ──
-    st.divider()
-    st.subheader("🏢 AMC-wise Breakdown")
+        # ── AMC / Scheme Breakdown (drilldown) ──
+        st.divider()
+        st.subheader("🏢 Portfolio Breakdown")
 
-    if nav_ready and not folio_nav_df.empty:
-        amc_breakdown_df = folio_nav_df.copy()
-        amc_breakdown_df["amc_name"] = amc_breakdown_df["amc_name"].fillna("⚠️ Unresolved (no ISIN match)")
+        if nav_ready and not folio_nav_df.empty:
+            bd_df = folio_nav_df.copy()
+            bd_df["amc_name"] = bd_df["amc_name"].fillna("⚠️ Unresolved (no ISIN match)")
+            bd_df["scheme_name"] = bd_df["scheme_name"].fillna("⚠️ Unresolved")
 
-        amc_df = (
-            amc_breakdown_df.groupby(["amc_name", "rta"], dropna=False)
-            .agg(
-                folios=("folio_id", "nunique"),
-                records=("folio_id", "count"),
-                aum=("nav_based_aum", "sum"),
-            )
-            .reset_index()
-            .sort_values("aum", ascending=False)
-        )
-
-        if not amc_df.empty:
-            amc_df["aum_display"] = amc_df["aum"].apply(format_aum)
-            display_df = amc_df[["amc_name", "rta", "folios", "records", "aum_display"]].rename(
-                columns={"amc_name": "AMC Name", "rta": "RTA", "folios": "Folios",
-                         "records": "Records", "aum_display": "AUM"}
-            )
-            amc_select = st.dataframe(
-                display_df, use_container_width=True, hide_index=True,
-                on_select="rerun", selection_mode="single-row", key="amc_breakdown_select"
+            breakdown_mode = st.radio(
+                "Breakdown by", ["AMC-wise", "Scheme-wise"], horizontal=True, key="bd_mode"
             )
 
-            fig = px.pie(
-                amc_df, values="aum", names="amc_name", hole=0.4,
-                title="AUM Distribution by AMC",
-                color_discrete_sequence=px.colors.qualitative.Vivid
-            )
-            fig = theme_plotly(fig, dark)
-            fig.update_traces(textposition='inside', textinfo='percent+label', pull=[0.02] * len(amc_df))
-            fig.update_layout(showlegend=False, margin=dict(t=40, b=20, l=20, r=20))
-            st.plotly_chart(fig, use_container_width=True)
+            if "bd_selected_amc" not in st.session_state:
+                st.session_state["bd_selected_amc"] = None
+            if "bd_selected_scheme" not in st.session_state:
+                st.session_state["bd_selected_scheme"] = None
 
-            # ── Client-wise bifurcation for selected AMC ──
-            if amc_select and len(amc_select["selection"]["rows"]) > 0:
-                sel_idx = amc_select["selection"]["rows"][0]
-                sel_amc = display_df.iloc[sel_idx]["AMC Name"]
+            if breakdown_mode != st.session_state.get("bd_last_mode"):
+                st.session_state["bd_selected_amc"] = None
+                st.session_state["bd_selected_scheme"] = None
+                st.session_state["bd_last_mode"] = breakdown_mode
+
+            # ── LEVEL 1: AMC list (AMC-wise mode only) ──
+            if breakdown_mode == "AMC-wise" and st.session_state["bd_selected_amc"] is None:
+                amc_df = (
+                    bd_df.groupby(["amc_name", "rta"], dropna=False)
+                    .agg(folios=("folio_id", "nunique"), records=("folio_id", "count"), aum=("nav_based_aum", "sum"))
+                    .reset_index().sort_values("aum", ascending=False)
+                )
+                amc_df["aum_display"] = amc_df["aum"].apply(format_aum)
+                amc_disp = amc_df[["amc_name", "rta", "folios", "records", "aum_display"]].rename(
+                    columns={"amc_name": "AMC Name", "rta": "RTA", "folios": "Folios", "records": "Records",
+                             "aum_display": "AUM"}
+                )
+                sel = st.dataframe(amc_disp, width="stretch", hide_index=True,
+                                   on_select="rerun", selection_mode="single-row", key="bd_amc_table")
+
+                fig = px.pie(amc_df, values="aum", names="amc_name", hole=0.4, title="AUM Distribution by AMC",
+                             color_discrete_sequence=px.colors.qualitative.Vivid)
+                fig = theme_plotly(fig, dark)
+                fig.update_traces(textposition='inside', textinfo='percent+label', pull=[0.02] * len(amc_df))
+                fig.update_layout(showlegend=False, margin=dict(t=40, b=20, l=20, r=20))
+                st.plotly_chart(fig, width="stretch")
+
+                if sel and len(sel["selection"]["rows"]) > 0:
+                    idx = sel["selection"]["rows"][0]
+                    st.session_state["bd_selected_amc"] = amc_disp.iloc[idx]["AMC Name"]
+                    st.rerun()
+
+            # ── LEVEL 2: Scheme list ──
+                    # ── LEVEL 2: Scheme list ──
+            elif st.session_state["bd_selected_scheme"] is None and (
+                            (breakdown_mode == "AMC-wise" and st.session_state["bd_selected_amc"] is not None)
+                            or breakdown_mode == "Scheme-wise"
+                    ):
+
+                if breakdown_mode == "AMC-wise":
+                    sel_amc = st.session_state["bd_selected_amc"]
+                    if st.button("⬅️ Back to AMCs"):
+                        st.session_state["bd_selected_amc"] = None
+                        st.rerun()
+                    st.markdown(f"### {sel_amc} — Schemes")
+                    scheme_src = bd_df[bd_df["amc_name"] == sel_amc]
+                else:
+                    scheme_src = bd_df
+
+                scheme_df = (
+                    scheme_src.groupby(["scheme_name", "amc_name", "rta"], dropna=False)
+                    .agg(folios=("folio_id", "nunique"), records=("folio_id", "count"), aum=("nav_based_aum", "sum"))
+                    .reset_index().sort_values("aum", ascending=False)
+                )
+                scheme_df["aum_display"] = scheme_df["aum"].apply(format_aum)
+                cols = ["scheme_name", "rta", "folios", "records", "aum_display"] if breakdown_mode == "AMC-wise" \
+                    else ["scheme_name", "amc_name", "rta", "folios", "records", "aum_display"]
+                rename_map = {"scheme_name": "Scheme Name", "amc_name": "AMC Name", "rta": "RTA",
+                              "folios": "Folios", "records": "Records", "aum_display": "AUM"}
+                scheme_disp = scheme_df[cols].rename(columns=rename_map)
+
+                sel2 = st.dataframe(scheme_disp, width="stretch", hide_index=True,
+                                    on_select="rerun", selection_mode="single-row", key="bd_scheme_table")
+
+                if sel2 and len(sel2["selection"]["rows"]) > 0:
+                    idx = sel2["selection"]["rows"][0]
+                    st.session_state["bd_selected_scheme"] = scheme_disp.iloc[idx]["Scheme Name"]
+                    st.rerun()
+
+            # ── LEVEL 3: Client list for selected scheme ──
+            if st.session_state["bd_selected_scheme"] is not None:
+                sel_scheme = st.session_state["bd_selected_scheme"]
+                if st.button("⬅️ Back to Schemes"):
+                    st.session_state["bd_selected_scheme"] = None
+                    st.rerun()
 
                 st.divider()
-                st.subheader(f"👥 Client-wise Investment — {sel_amc}")
+                st.subheader(f"👥 Client-wise Investment — {sel_scheme}")
 
-                amc_clients = amc_breakdown_df[amc_breakdown_df["amc_name"] == sel_amc].copy()
-
+                scheme_clients = bd_df[bd_df["scheme_name"] == sel_scheme].copy()
                 client_summary = (
-                    amc_clients.groupby("investor_name", dropna=False)
-                    .agg(
-                        folios=("folio_id", "nunique"),
-                        units=("units", "sum"),
-                        invested=("file_aum", "sum"),
-                        current_value=("nav_based_aum", "sum"),
-                    )
+                    scheme_clients.groupby("investor_name", dropna=False)
+                    .agg(folios=("folio_id", "nunique"), units=("units", "sum"),
+                         invested=("file_aum", "sum"), current_value=("nav_based_aum", "sum"))
                     .reset_index()
                 )
                 client_summary["gain_loss"] = client_summary["current_value"] - client_summary["invested"]
@@ -1726,35 +1770,24 @@ if mode == "📊 Dashboard":
                 cc2.metric("💰 Total Invested", format_aum(client_summary["invested"].sum()))
                 cc3.metric("📈 Current Value", format_aum(client_summary["current_value"].sum()))
 
-                client_display = client_summary.rename(columns={
-                    "investor_name": "Client", "folios": "Folios",
-                    "current_value": "Current Value",
-                })
-                st.dataframe(
-                    client_display, use_container_width=True, hide_index=True,
-                    column_config={
+                client_disp = client_summary.rename(
+                    columns={"investor_name": "Client", "folios": "Folios", "current_value": "Current Value"})
+                st.dataframe(client_disp, width="stretch", hide_index=True,
+                             column_config={"Current Value": st.column_config.NumberColumn(format="₹ %.2f")})
 
-                        "Current Value": st.column_config.NumberColumn(format="₹ %.2f"),
-                    }
-                )
-
-                csv = client_display.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    f"⬇️ Download {sel_amc} Client Breakdown (CSV)",
-                    csv, f"amc_{sel_amc.replace(' ', '_')}_clients.csv", "text/csv",
-                    key="amc_client_download"
-                )
+                csv = client_disp.to_csv(index=False).encode("utf-8")
+                st.download_button(f"⬇️ Download {sel_scheme} Client Breakdown (CSV)",
+                                   csv, f"scheme_{sel_scheme.replace(' ', '_')[:50]}_clients.csv", "text/csv",
+                                   key="bd_client_download")
         else:
-            st.info("No AMC breakdown data available.")
-    else:
-        st.info("AMC breakdown requires NAV data. Refresh the page if NAV is still loading.")
+            st.info("Breakdown requires NAV data. Refresh if still loading.")
 
     # ── Recent Uploads ──
     st.divider()
     st.subheader("📤 Recent Uploads")
     uploads_df = load_recent_uploads()
     if not uploads_df.empty:
-        st.dataframe(uploads_df, use_container_width=True, hide_index=True)
+        st.dataframe(uploads_df, width="stretch", hide_index=True)
     else:
         st.info("No uploads yet. Go to Admin Panel to upload data.")
 
@@ -1950,7 +1983,7 @@ elif mode == "👥 Clients":
 
             selected = st.dataframe(
                 display_holdings_sorted,
-                use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
+                width="stretch", hide_index=True, on_select="rerun", selection_mode="single-row",
                 column_config={
                     "Units": st.column_config.NumberColumn(format="%.4f"),
                     "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
@@ -2027,7 +2060,7 @@ elif mode == "👥 Clients":
                     except ImportError:
                         st.dataframe(
                             txn_df,
-                            use_container_width=True,
+                            width="stretch",
                             hide_index=True,
                             column_config={
                                 "units": st.column_config.NumberColumn(format="%.4f"),
@@ -2180,7 +2213,7 @@ elif mode == "👥 Clients":
             except ImportError:
                 st.dataframe(
                     final_sips[display_cols].sort_values('source'),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config={
                         "installments_amt": st.column_config.NumberColumn("Amount", format="₹ %.2f"),
@@ -2275,7 +2308,7 @@ elif mode == "💰 Brokerage Report":
             st.info("No manual entries logged yet.")
         else:
             st.dataframe(
-                log_df, use_container_width=True, hide_index=True,
+                log_df, width="stretch", hide_index=True,
                 column_config={"amount": st.column_config.NumberColumn(format="₹ %.2f")}
             )
 
@@ -2336,7 +2369,7 @@ elif mode == "💰 Brokerage Report":
             "manual_amount": "Received (Manual)", "variance": "Variance", "status": "Status"
         })
         st.dataframe(
-            display_amc, use_container_width=True, hide_index=True,
+            display_amc, width="stretch", hide_index=True,
             column_config={
                 "File Brokerage": st.column_config.NumberColumn(format="₹ %.2f"),
                 "Received (Manual)": st.column_config.NumberColumn(format="₹ %.2f"),
@@ -2371,7 +2404,7 @@ elif mode == "💰 Brokerage Report":
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 xaxis_tickangle=-45
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("No data for the selected month(s).")
     else:
@@ -2489,7 +2522,7 @@ elif mode == "💰 Brokerage Report":
             st.dataframe(
                 display_detail.sort_values("Date",
                                            ascending=False) if "Date" in display_detail.columns else display_detail,
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
                 column_config={
                     "Txn Amount": st.column_config.NumberColumn(format="₹ %.2f"),
                     "Brokerage %": st.column_config.NumberColumn(format="%.4f"),
@@ -2639,7 +2672,7 @@ elif mode == "⚙️ Admin Panel":
                 except ImportError:
                     st.dataframe(
                         df_raw,
-                        use_container_width=True,
+                        width="stretch",
                         hide_index=True,
                         column_config={
                             col: st.column_config.Column(label=col, width="large")
