@@ -1825,26 +1825,17 @@ elif mode == "👥 Clients":
         st.warning("No clients found. Upload client master.")
         st.stop()
 
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        search_term = st.text_input("🔍 Search Client", key="client_search")
-    with col2:
-        max_show = st.slider("Show", 10, 100, 30)
-
-    if search_term:
-        mask = clients_df.apply(lambda x: x.astype(str).str.contains(search_term, case=False)).any(axis=1)
-        search_results = clients_df[mask].head(max_show)
-    else:
-        search_results = clients_df.head(max_show)
-
-    search_results['display'] = search_results.apply(
+    clients_df['display'] = clients_df.apply(
         lambda r: f"{r['name']} | PAN: {r['pan'] or 'Minor'} | {r['client_code']}", axis=1)
 
-    selected_display = st.selectbox("Select Client", search_results['display'].tolist(), key="client_select")
+    selected_display = st.selectbox(
+        "🔍 Search / Select Client", clients_df['display'].tolist(), key="client_select",
+        index=None, placeholder="Type to search..."
+    )
     if not selected_display:
         st.stop()
 
-    selected_client = search_results[search_results['display'] == selected_display].iloc[0]
+    selected_client = clients_df[clients_df['display'] == selected_display].iloc[0]
     client_code = selected_client['client_code']
     pan = selected_client['pan']
     name = selected_client['name']
