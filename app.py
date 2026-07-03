@@ -196,6 +196,8 @@ def load_brokerage_report(_get_conn) -> dict:
 
     detail = pd.concat([cams_df, kfin_df], ignore_index=True)
 
+
+
     # ---- AMC name: AMFI-canonical (via ISIN) first, then BSE fallback, then raw product code ----
     detail["amfi_amc_name"] = detail["isin"].apply(
         lambda i: _amfi.get_amc(i) if pd.notna(i) and str(i).strip() else None
@@ -585,7 +587,7 @@ def _get_bse_amc_column(get_conn) -> Optional[str]:
     ]
     with get_conn() as conn:
         cols = [row[1] for row in conn.execute("PRAGMA table_info(bse_scheme_master)").fetchall()]
-    log.info("[NAV-FLOW] bse_scheme_master columns: %s", cols)
+    # log.info("[NAV-FLOW] bse_scheme_master columns: %s", cols)
     for c in candidates:
         if c in cols:
             log.info("[NAV-FLOW] Using '%s' as BSE AMC-name fallback column", c)
@@ -1804,13 +1806,17 @@ elif mode == "👥 Clients":
         with get_conn() as conn:
             return pd.read_sql("""
                                SELECT client_code,
-                                      primary_holder_first_name || ' ' || primary_holder_last_name AS name,
-                                      primary_holder_pan                                           AS pan,
-                                      indian_mobile_no                                             AS mobile,
+                                      primary_holder_first_name || ' ' || primary_holder_last_name   AS name,
+                                      primary_holder_pan                                             AS pan,
+                                      guardian_pan                                                   AS guardian_pan,
+                                      guardian_first_name || ' ' || COALESCE(guardian_last_name, '') AS guardian_name,
+                                      guardian_relationship                                          AS guardian_relationship,
+                                      indian_mobile_no                                               AS mobile,
                                       email,
                                       city
                                FROM bse_client_master
                                WHERE primary_holder_pan IS NOT NULL
+                                  OR guardian_pan IS NOT NULL
                                """, conn)
 
 
@@ -1832,7 +1838,7 @@ elif mode == "👥 Clients":
         search_results = clients_df.head(max_show)
 
     search_results['display'] = search_results.apply(
-        lambda r: f"{r['name']} | PAN: {r['pan']} | {r['client_code']}", axis=1)
+        lambda r: f"{r['name']} | PAN: {r['pan'] or 'Minor'} | {r['client_code']}", axis=1)
 
     selected_display = st.selectbox("Select Client", search_results['display'].tolist(), key="client_select")
     if not selected_display:
@@ -1843,13 +1849,16 @@ elif mode == "👥 Clients":
     pan = selected_client['pan']
     name = selected_client['name']
 
+    is_minor = pd.isna(pan) or str(pan).strip() == ""
+    match_pan = selected_client['guardian_pan'] if is_minor else pan
+
     # ── Compact Header ──
     st.divider()
     hc1, hc2, hc3, hc4, hc5 = st.columns([3, 1, 1, 1, 1])
     with hc1:
         st.markdown(f"### {name}")
     with hc2:
-        st.markdown(f"**PAN:** `{pan}`")
+        st.markdown(f"**PAN:** `{pan if not is_minor else 'Minor'}`")
     with hc3:
         st.markdown(f"**Code:** `{client_code}`")
     with hc4:
@@ -1858,6 +1867,9 @@ elif mode == "👥 Clients":
         st.markdown(f"📍 {selected_client.get('city') or 'N/A'}")
     if selected_client.get('email'):
         st.markdown(f"✉️ {selected_client['email']}")
+    if is_minor:
+        st.warning(
+            f"🧒 Minor account — Guardian: {selected_client.get('guardian_name', 'N/A')} ({selected_client.get('guardian_relationship', '')}) | Guardian PAN: {selected_client.get('guardian_pan', 'N/A')}")
     st.divider()
 
     # ── NAV Data ──
@@ -1869,12 +1881,20 @@ elif mode == "👥 Clients":
     folio_nav_df = st.session_state["folio_nav_df"]
 
     with get_conn() as conn:
-        cams_f = pd.read_sql(
-            "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
-            conn, params=(pan, name))
-        kfin_f = pd.read_sql(
-            "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
-            conn, params=(pan, name))
+        if is_minor:
+            cams_f = pd.read_sql(
+                "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name))=?",
+                conn, params=(name,))
+            kfin_f = pd.read_sql(
+                "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name))=?",
+                conn, params=(name,))
+        else:
+            cams_f = pd.read_sql(
+                "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+                conn, params=(match_pan, name))
+            kfin_f = pd.read_sql(
+                "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
+                conn, params=(match_pan, name))
 
     all_folios = set(cams_f['foliochk'].tolist() + kfin_f['folio'].tolist())
 
@@ -2099,6 +2119,7 @@ elif mode == "👥 Clients":
         st.subheader("🔄 All SIPs (Deduplicated)")
 
         with get_conn() as conn:
+            # print([r[1] for r in conn.execute("PRAGMA table_info(bse_client_master)").fetchall()])
             # ── Probe BSE SIP columns ──
             bse_cols = [row[1] for row in conn.execute("PRAGMA table_info(bse_sip)").fetchall()]
 
@@ -2112,8 +2133,12 @@ elif mode == "👥 Clients":
                            "periodicity as frequency_type",
                            "CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END as status",
                            "folio_no", "'CAMS' as source", "request_ref_no as sip_regn_no"]
-            cams_sql = f"SELECT {', '.join(cams_select)} FROM cams_wbr49_sip WHERE folio_no IN (SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no)) = ?)"
-            cams_wbr49_sip = pd.read_sql(cams_sql, conn, params=(pan,))
+            if is_minor:
+                cams_sql = f"SELECT {', '.join(cams_select)} FROM cams_wbr49_sip WHERE folio_no IN (SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) = ?)"
+                cams_wbr49_sip = pd.read_sql(cams_sql, conn, params=(name,))
+            else:
+                cams_sql = f"SELECT {', '.join(cams_select)} FROM cams_wbr49_sip WHERE folio_no IN (SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no)) = ?)"
+                cams_wbr49_sip = pd.read_sql(cams_sql, conn, params=(match_pan,))
 
             # ── KFin SIP ──
             kfin_select = ["scheme_name", "amount as installments_amt", "frequency as frequency_type",
