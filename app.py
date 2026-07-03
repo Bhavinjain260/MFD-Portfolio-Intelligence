@@ -1877,8 +1877,25 @@ elif mode == "👥 Clients":
             conn, params=(pan, name))
 
     all_folios = set(cams_f['foliochk'].tolist() + kfin_f['folio'].tolist())
+
     if not all_folios:
-        st.info("No folios found.")
+        with get_conn() as conn:
+            pending_sip = pd.read_sql(
+                "SELECT scheme_name, installments_amt, frequency_type, status, start_date "
+                "FROM bse_sip WHERE client_code = ? AND UPPER(TRIM(status)) = 'ACTIVE'",
+                conn, params=(client_code,)
+            )
+        if not pending_sip.empty:
+            st.warning("⏳ No portfolio yet — SIP registered, first installment pending.")
+            st.dataframe(
+                pending_sip.rename(columns={
+                    "scheme_name": "Scheme", "installments_amt": "Amount",
+                    "frequency_type": "Frequency", "status": "Status", "start_date": "Start Date"
+                }),
+                use_container_width=True, hide_index=True
+            )
+        else:
+            st.info("No folios found.")
         st.stop()
 
     # ── Tabs: Portfolio | SIPs ──
