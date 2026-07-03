@@ -2040,6 +2040,8 @@ elif mode == "👥 Clients":
         else:
             st.info("No holdings found.")
 
+
+
     # ═══════════════════════════════════════════════════════════
     # TAB 2 — Active SIPs
     # ═══════════════════════════════════════════════════════════
@@ -2050,37 +2052,22 @@ elif mode == "👥 Clients":
             # ── Probe BSE SIP columns ──
             bse_cols = [row[1] for row in conn.execute("PRAGMA table_info(bse_sip)").fetchall()]
 
-            bse_select = ["amc_name", "scheme_name", "installments_amt", "status", "frequency_type", "'BSE' as source",
-                          "client_code"]
-            for opt_col in ["umrn", "sip_reg_no", "mandate_id", "reference_no", "transaction_id"]:
-                if opt_col in bse_cols:
-                    bse_select.append(f"COALESCE({opt_col}, '') as {opt_col}")
-
+            bse_select = ["amc_name", "scheme_name", "installments_amt", "status", "frequency_type",
+                          "'BSE' as source", "client_code", "xsip_regn_no as sip_regn_no"]
             bse_sql = f"SELECT {', '.join(bse_select)} FROM bse_sip WHERE client_code = ?"
             bse_sip = pd.read_sql(bse_sql, conn, params=(client_code,))
 
-            # ── Probe CAMS SIP columns ──
-            cams_cols = [row[1] for row in conn.execute("PRAGMA table_info(cams_wbr49_sip)").fetchall()]
-
+            # ── CAMS SIP ──
             cams_select = ["scheme as scheme_name", "auto_amount as installments_amt",
                            "periodicity as frequency_type",
                            "CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END as status",
-                           "folio_no", "'CAMS' as source"]
-            for opt_col in ["umrn", "sip_reg_no", "mandate_id", "reference_no", "transaction_id"]:
-                if opt_col in cams_cols:
-                    cams_select.append(f"COALESCE({opt_col}, '') as {opt_col}")
-
+                           "folio_no", "'CAMS' as source", "request_ref_no as sip_regn_no"]
             cams_sql = f"SELECT {', '.join(cams_select)} FROM cams_wbr49_sip WHERE folio_no IN (SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no)) = ?)"
             cams_wbr49_sip = pd.read_sql(cams_sql, conn, params=(pan,))
 
-            # ── Probe KFin SIP columns ──
-            kfin_cols = [row[1] for row in conn.execute("PRAGMA table_info(kfin_mfsd243_sip)").fetchall()]
-
+            # ── KFin SIP ──
             kfin_select = ["scheme_name", "amount as installments_amt", "frequency as frequency_type",
-                           "status", "folio", "'KFin' as source"]
-            for opt_col in ["umrn", "sip_reg_no", "mandate_id", "reference_no", "transaction_id"]:
-                if opt_col in kfin_cols:
-                    kfin_select.append(f"COALESCE({opt_col}, '') as {opt_col}")
+                           "status", "folio", "'KFin' as source", "reg_slno as sip_regn_no"]
 
             kfin_folio_list = kfin_f['folio'].tolist()
             if kfin_folio_list:
@@ -2090,53 +2077,35 @@ elif mode == "👥 Clients":
             else:
                 kfin_mfsd243_sip = pd.DataFrame()
 
+            active_statuses = ["ACTIVE", "LIVE SIP", "REGISTERED"]
 
-        # ── SMART DEDUPLICATION LOGIC ──
+            if not bse_sip.empty:
+                bse_sip = bse_sip[bse_sip["status"].astype(str).str.strip().str.upper().isin(active_statuses)]
 
-        def _normalize_scheme_name(name):
-            """Extract core scheme identity: AMC + fund type + plan"""
-            if pd.isna(name):
+            if not cams_wbr49_sip.empty:
+                cams_wbr49_sip = cams_wbr49_sip[
+                    cams_wbr49_sip["status"].astype(str).str.strip().str.upper().isin(active_statuses)]
+
+            if not kfin_mfsd243_sip.empty:
+                kfin_mfsd243_sip = kfin_mfsd243_sip[
+                    kfin_mfsd243_sip["status"].astype(str).str.strip().str.upper().isin(active_statuses)]
+
+            # ── DEDUP BY SIP REGISTRATION NUMBER (exact, cross-RTA) ──
+
+
+        def _clean_regn(val):
+            if pd.isna(val):
                 return ""
-            n = str(name).upper().strip()
-            # Remove common suffixes/prefixes that vary between sources
-            n = re.sub(r'\s+REGULAR\s+', ' ', n)
-            n = re.sub(r'\s+REGULAR$', '', n)
-            n = re.sub(r'\s+REG\.\.\.', '', n)  # BSE truncation
-            n = re.sub(r'\s+REG$', '', n)
-            n = re.sub(r'\s+PLAN\s*-\s*', ' ', n)
-            n = re.sub(r'\s+PLAN$', '', n)
-            n = re.sub(r'\s+GROWTH\s*', ' ', n)
-            n = re.sub(r'\s+GROWTH$', '', n)
-            n = re.sub(r'\s+DIRECT\s+', ' ', n)
-            n = re.sub(r'\s+DIRECT$', '', n)
-            n = re.sub(r'[^A-Z0-9]', '', n)  # Keep only alphanumeric
-            return n
-
-
-        def _normalize_frequency(freq):
-            """Map various frequency codes to standard"""
-            if pd.isna(freq):
-                return "MONTHLY"
-            f = str(freq).upper().strip()
-            if f in ('M', 'MONTHLY', 'MON', 'OM'):  # OM = Old Monthly? or just Monthly
-                return "MONTHLY"
-            if f in ('Q', 'QUARTERLY', 'QUART', 'OQ'):
-                return "QUARTERLY"
-            if f in ('W', 'WEEKLY', 'OW'):
-                return "WEEKLY"
-            if f in ('D', 'DAILY', 'OD'):
-                return "DAILY"
-            if f in ('F', 'FORTNIGHT', 'FORTNIGHTLY', 'OF'):
-                return "FORTNIGHTLY"
-            return f
+            s = str(val).strip().upper()
+            s = s.replace(".0", "") if s.endswith(".0") else s
+            s = re.sub(r'[^A-Z0-9]', '', s)
+            return s
 
 
         def _make_match_key(df):
-            """Create deduplication key from normalized scheme + amount + frequency"""
-            scheme_norm = df["scheme_name"].apply(_normalize_scheme_name)
-            freq_norm = df["frequency_type"].apply(_normalize_frequency)
-            amt_norm = df["installments_amt"].astype(str).str.replace('.0', '', regex=False)
-            return scheme_norm + "|" + amt_norm + "|" + freq_norm
+            return df["sip_regn_no"].apply(_clean_regn)
+
+
 
 
         # BSE SIPs are the primary source
@@ -2163,6 +2132,14 @@ elif mode == "👥 Clients":
             if not kfin_direct.empty:
                 kfin_direct["source"] = "KFin (Direct)"
                 all_sips.append(kfin_direct)
+
+
+
+        if st.toggle("🐞 Show raw regn numbers", key="sip_regn_debug"):
+            st.write("BSE:", bse_sip[["scheme_name", "sip_regn_no"]] if not bse_sip.empty else "empty")
+            st.write("CAMS:", cams_wbr49_sip[["scheme_name", "sip_regn_no"]] if not cams_wbr49_sip.empty else "empty")
+            st.write("KFin:",
+                     kfin_mfsd243_sip[["scheme_name", "sip_regn_no"]] if not kfin_mfsd243_sip.empty else "empty")
 
         if all_sips:
             final_sips = pd.concat(all_sips, ignore_index=True)
