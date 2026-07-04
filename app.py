@@ -196,8 +196,6 @@ def load_brokerage_report(_get_conn) -> dict:
 
     detail = pd.concat([cams_df, kfin_df], ignore_index=True)
 
-
-
     # ---- AMC name: AMFI-canonical (via ISIN) first, then BSE fallback, then raw product code ----
     detail["amfi_amc_name"] = detail["isin"].apply(
         lambda i: _amfi.get_amc(i) if pd.notna(i) and str(i).strip() else None
@@ -1757,11 +1755,11 @@ if mode == "📊 Dashboard":
                     st.rerun()
 
             # ── LEVEL 2: Scheme list ──
-                    # ── LEVEL 2: Scheme list ──
+            # ── LEVEL 2: Scheme list ──
             elif st.session_state["bd_selected_scheme"] is None and (
-                            (breakdown_mode == "AMC-wise" and st.session_state["bd_selected_amc"] is not None)
-                            or breakdown_mode == "Scheme-wise"
-                    ):
+                    (breakdown_mode == "AMC-wise" and st.session_state["bd_selected_amc"] is not None)
+                    or breakdown_mode == "Scheme-wise"
+            ):
 
                 if breakdown_mode == "AMC-wise":
                     sel_amc = st.session_state["bd_selected_amc"]
@@ -1846,6 +1844,7 @@ if mode == "📊 Dashboard":
 elif mode == "👥 Clients":
     st.header("👤 Client Portfolio & Analytics")
 
+
     # ── Client Search ──
     @st.cache_data(ttl=300)
     def load_clients_search():
@@ -1864,6 +1863,7 @@ elif mode == "👥 Clients":
                 WHERE primary_holder_pan IS NOT NULL
                    OR guardian_pan IS NOT NULL
             """, conn)
+
 
     clients_df = load_clients_search()
     if clients_df.empty:
@@ -1968,8 +1968,8 @@ elif mode == "👥 Clients":
         if not holdings.empty:
             # ── Clean up any leftover merge columns from Dashboard init ──
             drop_leftover = [c for c in holdings.columns
-                           if c.endswith('_kfin') or c.endswith('_cams')
-                           or c in ('product_code_norm', 'invested_amount', 'total_units')]
+                             if c.endswith('_kfin') or c.endswith('_cams')
+                             or c in ('product_code_norm', 'invested_amount', 'total_units')]
             holdings = holdings.drop(columns=drop_leftover, errors='ignore')
 
             holdings['product_code_norm'] = holdings['product_code'].astype(str).str.strip().str.upper()
@@ -2194,6 +2194,7 @@ elif mode == "👥 Clients":
                 kfin_mfsd243_sip = kfin_mfsd243_sip[
                     kfin_mfsd243_sip["status"].astype(str).str.strip().str.upper().isin(active_statuses)]
 
+
         # ── DEDUP BY SIP REGISTRATION NUMBER (exact, cross-RTA) ──
         def _clean_regn(val):
             if pd.isna(val):
@@ -2203,8 +2204,10 @@ elif mode == "👥 Clients":
             s = re.sub(r'[^A-Z0-9]', '', s)
             return s
 
+
         def _make_match_key(df):
             return df["sip_regn_no"].apply(_clean_regn)
+
 
         # BSE SIPs are the primary source
         all_sips = []
