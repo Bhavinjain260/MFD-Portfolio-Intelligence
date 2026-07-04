@@ -1842,29 +1842,28 @@ if mode == "📊 Dashboard":
 
 
 # ==================== 👥 CLIENTS ====================
+# ==================== 👥 CLIENTS ====================
 elif mode == "👥 Clients":
     st.header("👤 Client Portfolio & Analytics")
-
 
     # ── Client Search ──
     @st.cache_data(ttl=300)
     def load_clients_search():
         with get_conn() as conn:
             return pd.read_sql("""
-                               SELECT client_code,
-                                      primary_holder_first_name || ' ' || primary_holder_last_name   AS name,
-                                      primary_holder_pan                                             AS pan,
-                                      guardian_pan                                                   AS guardian_pan,
-                                      guardian_first_name || ' ' || COALESCE(guardian_last_name, '') AS guardian_name,
-                                      guardian_relationship                                          AS guardian_relationship,
-                                      indian_mobile_no                                               AS mobile,
-                                      email,
-                                      city
-                               FROM bse_client_master
-                               WHERE primary_holder_pan IS NOT NULL
-                                  OR guardian_pan IS NOT NULL
-                               """, conn)
-
+                SELECT client_code,
+                       primary_holder_first_name || ' ' || primary_holder_last_name   AS name,
+                       primary_holder_pan                                             AS pan,
+                       guardian_pan                                                   AS guardian_pan,
+                       guardian_first_name || ' ' || COALESCE(guardian_last_name, '') AS guardian_name,
+                       guardian_relationship                                          AS guardian_relationship,
+                       indian_mobile_no                                               AS mobile,
+                       email,
+                       city
+                FROM bse_client_master
+                WHERE primary_holder_pan IS NOT NULL
+                   OR guardian_pan IS NOT NULL
+            """, conn)
 
     clients_df = load_clients_search()
     if clients_df.empty:
@@ -1958,16 +1957,12 @@ elif mode == "👥 Clients":
     # ── Tabs: Portfolio | SIPs ──
     tab_portfolio, tab_sips = st.tabs(["📈 Portfolio & AUM", "🔄 Active SIPs"])
 
+    # ═══════════════════════════════════════════════════════════
+    # TAB 1 — Portfolio & AUM
+    # ═══════════════════════════════════════════════════════════
     with tab_portfolio:
         show_debug = st.toggle("🐞 Show debug logs", value=False, key="cams_debug_toggle")
 
-    # ═══════════════════════════════════════════════════════════
-    # TAB 1 — Portfolio & AUM
-    # ═══════════════════════════════════════════════════════════
-    # ═══════════════════════════════════════════════════════════
-    # TAB 1 — Portfolio & AUM
-    # ═══════════════════════════════════════════════════════════
-    with tab_portfolio:
         holdings = folio_nav_df[folio_nav_df['folio_id'].isin(all_folios)].copy()
 
         if not holdings.empty:
@@ -2079,38 +2074,38 @@ elif mode == "👥 Clients":
                 with get_conn() as conn:
                     if rta == 'CAMS':
                         txn_df = pd.read_sql("""
-                                             SELECT trxnno,
-                                                    traddate,
-                                                    trxntype,
-                                                    trxnmode,
-                                                    trxnstat,
-                                                    purprice,
-                                                    units,
-                                                    amount,
-                                                    brokcode,
-                                                    subbrok,
-                                                    remarks
-                                             FROM cams_wbr2_transaction
-                                             WHERE folio_no = ?
-                                             ORDER BY traddate DESC
-                                             """, conn, params=(folio_id,))
+                            SELECT trxnno,
+                                   traddate,
+                                   trxntype,
+                                   trxnmode,
+                                   trxnstat,
+                                   purprice,
+                                   units,
+                                   amount,
+                                   brokcode,
+                                   subbrok,
+                                   remarks
+                            FROM cams_wbr2_transaction
+                            WHERE folio_no = ?
+                            ORDER BY traddate DESC
+                        """, conn, params=(folio_id,))
                     else:
                         txn_df = pd.read_sql("""
-                                             SELECT td_trno   as trxnno,
-                                                    td_trdt   as traddate,
-                                                    td_purred as trxntype,
-                                                    trnmode   as trxnmode,
-                                                    trnstat   as trxnstat,
-                                                    td_pop    as purprice,
-                                                    td_units  as units,
-                                                    td_amt    as amount,
-                                                    td_broker as brokcode,
-                                                    ''        as subbrok,
-                                                    trdesc    as remarks
-                                             FROM kfin_mfsd201_transaction
-                                             WHERE td_acno = ?
-                                             ORDER BY td_trdt DESC
-                                             """, conn, params=(folio_id,))
+                            SELECT td_trno   as trxnno,
+                                   td_trdt   as traddate,
+                                   td_purred as trxntype,
+                                   trnmode   as trxnmode,
+                                   trnstat   as trxnstat,
+                                   td_pop    as purprice,
+                                   td_units  as units,
+                                   td_amt    as amount,
+                                   td_broker as brokcode,
+                                   ''        as subbrok,
+                                   trdesc    as remarks
+                            FROM kfin_mfsd201_transaction
+                            WHERE td_acno = ?
+                            ORDER BY td_trdt DESC
+                        """, conn, params=(folio_id,))
 
                 if not txn_df.empty:
                     try:
@@ -2147,8 +2142,6 @@ elif mode == "👥 Clients":
         else:
             st.info("No holdings found.")
 
-
-
     # ═══════════════════════════════════════════════════════════
     # TAB 2 — Active SIPs
     # ═══════════════════════════════════════════════════════════
@@ -2156,7 +2149,6 @@ elif mode == "👥 Clients":
         st.subheader("🔄 All SIPs (Deduplicated)")
 
         with get_conn() as conn:
-            # print([r[1] for r in conn.execute("PRAGMA table_info(bse_client_master)").fetchall()])
             # ── Probe BSE SIP columns ──
             bse_cols = [row[1] for row in conn.execute("PRAGMA table_info(bse_sip)").fetchall()]
 
@@ -2202,9 +2194,7 @@ elif mode == "👥 Clients":
                 kfin_mfsd243_sip = kfin_mfsd243_sip[
                     kfin_mfsd243_sip["status"].astype(str).str.strip().str.upper().isin(active_statuses)]
 
-            # ── DEDUP BY SIP REGISTRATION NUMBER (exact, cross-RTA) ──
-
-
+        # ── DEDUP BY SIP REGISTRATION NUMBER (exact, cross-RTA) ──
         def _clean_regn(val):
             if pd.isna(val):
                 return ""
@@ -2213,12 +2203,8 @@ elif mode == "👥 Clients":
             s = re.sub(r'[^A-Z0-9]', '', s)
             return s
 
-
         def _make_match_key(df):
             return df["sip_regn_no"].apply(_clean_regn)
-
-
-
 
         # BSE SIPs are the primary source
         all_sips = []
@@ -2245,8 +2231,6 @@ elif mode == "👥 Clients":
                 kfin_direct["source"] = "KFin (Direct)"
                 all_sips.append(kfin_direct)
 
-
-
         if st.toggle("🐞 Show raw regn numbers", key="sip_regn_debug"):
             st.write("BSE:", bse_sip[["scheme_name", "sip_regn_no"]] if not bse_sip.empty else "empty")
             st.write("CAMS:", cams_wbr49_sip[["scheme_name", "sip_regn_no"]] if not cams_wbr49_sip.empty else "empty")
@@ -2269,11 +2253,12 @@ elif mode == "👥 Clients":
             source_breakdown = final_sips['source'].value_counts().to_dict()
             st.caption("Sources: " + " | ".join([f"{k}: {v}" for k, v in source_breakdown.items()]))
 
+            # ── FIX: Define display_cols OUTSIDE try block so it's available in both branches ──
+            display_cols = ['source', 'scheme_name', 'installments_amt', 'frequency_type', 'status']
+            display_cols = [c for c in display_cols if c in final_sips.columns]
+
             try:
                 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
-
-                display_cols = ['source', 'scheme_name', 'installments_amt', 'frequency_type', 'status']
-                display_cols = [c for c in display_cols if c in final_sips.columns]
 
                 gb = GridOptionsBuilder.from_dataframe(final_sips[display_cols])
                 gb.configure_default_column(filter=True, sortable=True, resizable=True, flex=1)
@@ -2301,6 +2286,9 @@ elif mode == "👥 Clients":
                 )
         else:
             st.info("No SIP records found.")
+
+
+
 # ==================== 💰 BROKERAGE REPORT ====================
 elif mode == "💰 Brokerage Report":
     st.header("💰 Brokerage Report")
