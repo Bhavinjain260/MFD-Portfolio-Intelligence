@@ -370,6 +370,102 @@ def get_snapshot_status() -> dict:
     return status
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_previous_nav_map() -> dict:
+    path = _previous_snapshot_path()
+    if not path:
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            text = f.read()
+    except Exception:
+        return {}
+    nav_map, _, _ = _parse_nav_text(text)
+    return {isin: nav for isin, (nav, _) in nav_map.items()}
+
+
+def _get_file_nav_date(path: str) -> Optional[str]:
+    """Peek at a saved snapshot's actual NAV date (from its data, not filename)."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if ";" not in line:
+                    continue
+                parts = line.split(";")
+                if len(parts) < 6 or parts[0] == "Scheme Code":
+                    continue
+                date_str = parts[5].strip()
+                try:
+                    return datetime.strptime(date_str, "%d-%b-%Y").strftime("%Y-%m-%d")
+                except ValueError:
+                    continue
+    except Exception:
+        pass
+    return None
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_previous_nav_map() -> dict:
+    path, _ = _previous_snapshot_path()
+    if not path:
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            text = f.read()
+    except Exception:
+        return {}
+    nav_map, _, _ = _parse_nav_text(text)
+    return {isin: nav for isin, (nav, _) in nav_map.items()}
+
+
+def _previous_snapshot_path(current_nav_date: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
+    """
+    Most recent saved snapshot whose ACTUAL NAV date is earlier than current_nav_date.
+    If current_nav_date not given, uses the latest snapshot's own NAV date as reference.
+    """
+    _ensure_text_dir()
+    available = sorted(
+        f for f in os.listdir(NAV_TEXT_DIR) if f.startswith("nav_") and f.endswith(".txt")
+    )
+    if not available:
+        return None, None
+
+    if current_nav_date is None:
+        latest_path = os.path.join(NAV_TEXT_DIR, available[-1])
+        current_nav_date = _get_file_nav_date(latest_path)
+    if current_nav_date is None:
+        return None, None
+
+    # walk files newest -> oldest, skip files, find first with an EARLIER nav_date
+    for fname in reversed(available):
+        path = os.path.join(NAV_TEXT_DIR, fname)
+        file_nav_date = _get_file_nav_date(path)
+        if file_nav_date and file_nav_date < current_nav_date:
+            return path, file_nav_date
+
+    return None, None
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_previous_nav_map() -> dict:
+    path, _ = _previous_snapshot_path()
+    if not path:
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            text = f.read()
+    except Exception:
+        return {}
+    nav_map, _, _ = _parse_nav_text(text)
+    return {isin: nav for isin, (nav, _) in nav_map.items()}
+
+
+def get_previous_nav_date() -> Optional[str]:
+    _, date_str = _previous_snapshot_path()
+    return date_str
+
+
 # ==================== THE ONLY FUNCTION THAT CALLS AMFI ====================
 
 def download_and_save_nav(timeout: int = 30) -> dict:
@@ -1839,7 +1935,7 @@ if mode == "📊 Dashboard":
 
 
 
-# ==================== 👥 CLIENTS ====================
+
 # ==================== 👥 CLIENTS ====================
 elif mode == "👥 Clients":
     st.header("👤 Client Portfolio & Analytics")
@@ -2023,16 +2119,26 @@ elif mode == "👥 Clients":
             # Clean up temp column
             holdings = holdings.drop(columns=['product_code_norm'], errors='ignore')
 
+            prev_nav_map = load_previous_nav_map()
+            holdings["prev_nav"] = holdings["isin"].apply(
+                lambda i: prev_nav_map.get(str(i).strip().upper()) if pd.notna(i) else None
+            )
+            holdings["one_day_diff"] = (
+                    (holdings["current_nav"] - holdings["prev_nav"]) * holdings["units"]
+            ).fillna(0.0)
+
             total_invested = holdings['file_aum'].sum()
             total_current = holdings['nav_based_aum'].sum() or 0
             total_gain_loss = total_current - total_invested
+            total_one_day_diff = holdings["one_day_diff"].sum()
 
-            h1, h2, h3, h4 = st.columns(4)
+            h1, h2, h3, h4, h5 = st.columns(5)
             h1.metric("Total Invested", format_aum(total_invested))
             h2.metric("Current Value", format_aum(total_current))
             h3.metric("Gain / Loss", format_aum(total_gain_loss),
                       delta=f"{(total_gain_loss / total_invested * 100):.2f}%" if total_invested > 0 else "0%")
             h4.metric("Total Folios", len(all_folios))
+            h5.metric("1-Day Diff", format_aum(total_one_day_diff), delta=format_aum(total_one_day_diff))
 
             holdings["gain_loss"] = holdings["nav_based_aum"] - holdings["file_aum"]
             holdings["portfolio_pct"] = (holdings["nav_based_aum"] / total_current * 100).fillna(
@@ -2040,11 +2146,11 @@ elif mode == "👥 Clients":
 
             display_holdings = holdings[[
                 'rta', 'folio_id', 'amc_name', 'scheme_name', 'units', 'file_aum',
-                'current_nav', 'nav_based_aum', 'gain_loss', 'portfolio_pct'
+                'current_nav', 'nav_based_aum', 'gain_loss', 'one_day_diff', 'portfolio_pct'
             ]].rename(columns={
                 'rta': 'RTA', 'folio_id': 'Folio', 'amc_name': 'AMC', 'scheme_name': 'Scheme',
                 'file_aum': 'Invested', 'nav_based_aum': 'Current Value',
-                'gain_loss': 'Gain/Loss', 'portfolio_pct': '% Portfolio'
+                'gain_loss': 'Gain/Loss', 'one_day_diff': '1D Diff', 'portfolio_pct': '% Portfolio'
             })
 
             display_holdings_sorted = display_holdings.sort_values("Current Value", ascending=False).reset_index(
@@ -2058,6 +2164,7 @@ elif mode == "👥 Clients":
                     "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
                     "Current Value": st.column_config.NumberColumn(format="₹ %.2f"),
                     "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "1D Diff": st.column_config.NumberColumn(format="₹ %.2f"),
                     "% Portfolio": st.column_config.NumberColumn(format="%.2f%%"),
                 }
             )
