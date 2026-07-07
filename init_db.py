@@ -1083,5 +1083,8 @@ def init_db() -> None:
     CREATE INDEX IF NOT EXISTS idx_kfin_txn_pan         ON kfin_mfsd201_transaction(pan1);
     CREATE INDEX IF NOT EXISTS idx_kfin_sip_folio       ON kfin_mfsd243_sip(folio);
     CREATE INDEX IF NOT EXISTS idx_kfin_brk_proc        ON kfin_mfsd205_brokerage(process_date);
+    
+    
+    
 
     """)

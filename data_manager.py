@@ -522,57 +522,64 @@ def parse_bse_client_master(file, replace: bool) -> tuple[bool, str]:
 
     if not client_rows: return False, "No valid rows found"
 
-    insert_sql = """INSERT OR IGNORE INTO bse_client_master (member_code, client_code, primary_holder_first_name, 
-    primary_holder_middle_name, primary_holder_last_name, tax_status, gender, primary_holder_dob_incorporation, 
-    occupation_code, holding_nature, second_holder_first_name, second_holder_middle_name, second_holder_last_name, 
-    third_holder_first_name, third_holder_middle_name, third_holder_last_name, second_holder_dob, third_holder_dob, 
-    guardian_first_name, guardian_middle_name, guardian_last_name, guardian_dob, primary_holder_pan_exempt, 
-    second_holder_pan_exempt, third_holder_pan_exempt, guardian_pan_exempt, primary_holder_pan, second_holder_pan, 
-    third_holder_pan, guardian_pan, primary_holder_exempt_category, second_holder_exempt_category, 
-    third_holder_exempt_category, guardian_exempt_category, client_type, pms, default_dp, cdsl_dpid, cdsl_cltid, 
-    cmbp_id, nsdl_dpid, nsdl_cltid, account_type_1, account_no_1, micr_no_1, ifsc_code_1, bank_name_1, bank_branch_1, 
-    default_bank_flag_1, bank1_created_at, bank1_last_modified_at, bank1_status, account_type_2, account_no_2, 
-    micr_no_2, ifsc_code_2, bank_name_2, bank_branch_2, default_bank_flag_2, bank2_created_at, 
-    bank2_last_modified_at, bank2_status, account_type_3, account_no_3, micr_no_3, ifsc_code_3, bank_name_3, 
-    bank_branch_3, default_bank_flag_3, bank3_created_at, bank3_last_modified_at, bank3_status, account_type_4, 
-    account_no_4, micr_no_4, ifsc_code_4, bank_name_4, bank_branch_4, default_bank_flag_4, bank4_created_at, 
-    bank4_last_modified_at, bank4_status, account_type_5, account_no_5, micr_no_5, ifsc_code_5, bank_name_5, 
-    bank_branch_5, default_bank_flag_5, bank5_created_at, bank5_last_modified_at, bank5_status, cheque_name, 
-    div_pay_mode, address1, address2, address3, city, state, pincode, country, resi_phone, resi_fax, office_phone, 
-    office_fax, email, communication_mode, foreign_address1, foreign_address2, foreign_address3, foreign_city, 
-    foreign_pincode, foreign_state, foreign_country, foreign_resi_phone, foreign_resi_fax, foreign_off_phone, 
-    foreign_off_fax, indian_mobile_no, primary_holder_kyc_type, primary_holder_ckyc_no, second_holder_kyc_type, 
-    second_holder_ckyc_no, third_holder_kyc_type, third_holder_ckyc_no, guardian_kyc_type, guardian_ckyc_no, 
-    primary_holder_kra_exempt, second_holder_kra_exempt, third_holder_kra_exempt, guardian_kra_exempt, 
-    aadhaar_updated, mapin_id, paperless_flag, lei_no, lei_validity, email_declaration_flag, mobile_declaration_flag, 
-    branch, dealer, nomination_opt, nomination_auth_mode, nominee1_name, nominee1_relationship, 
-    nominee1_applicable_pct, nominee1_minor_flag, nominee1_dob, nominee1_guardian, nominee1_guardian_pan, 
-    nom1_id_typ, nom1_idno, nom1_email, nom1_mob, nom1_add1, nom1_add2, nom1_add3, nom1_city, nom1_pin, nom1_con, 
-    nominee2_name, nominee2_relationship, nominee2_applicable_pct, nominee2_dob, nominee2_minor_flag, 
-    nominee2_guardian, nominee2_guardian_pan, nom2_id_typ, nom2_idno, nom2_email, nom2_mob, nom2_add1, nom2_add2, 
-    nom2_add3, nom2_city, nom2_pin, nom2_con, nominee3_name, nominee3_relationship, nominee3_applicable_pct, 
-    nominee3_dob, nominee3_minor_flag, nominee3_guardian, nominee3_guardian_pan, nom3_id_typ, nom3_idno, nom3_email, 
-    nom3_mob, nom3_add1, nom3_add2, nom3_add3, nom3_city, nom3_pin, nom3_con, nom_soa, second_holder_email, 
-    second_holder_email_declaration, second_holder_mobile, second_holder_mobile_declaration, third_holder_email, 
-    third_holder_email_declaration, third_holder_mobile, third_holder_mobile_declaration, nomination_flag, 
-    nomination_auth_date, guardian_relationship, created_by, created_at, last_modified_by, last_modified_at, 
-    upload_batch) VALUES (""" + ",".join(
-        ["?"] * 210) + ")"
+    bse_client_columns = [c.strip() for c in """member_code, client_code, primary_holder_first_name,
+    primary_holder_middle_name, primary_holder_last_name, tax_status, gender, primary_holder_dob_incorporation,
+    occupation_code, holding_nature, second_holder_first_name, second_holder_middle_name, second_holder_last_name,
+    third_holder_first_name, third_holder_middle_name, third_holder_last_name, second_holder_dob, third_holder_dob,
+    guardian_first_name, guardian_middle_name, guardian_last_name, guardian_dob, primary_holder_pan_exempt,
+    second_holder_pan_exempt, third_holder_pan_exempt, guardian_pan_exempt, primary_holder_pan, second_holder_pan,
+    third_holder_pan, guardian_pan, primary_holder_exempt_category, second_holder_exempt_category,
+    third_holder_exempt_category, guardian_exempt_category, client_type, pms, default_dp, cdsl_dpid, cdsl_cltid,
+    cmbp_id, nsdl_dpid, nsdl_cltid, account_type_1, account_no_1, micr_no_1, ifsc_code_1, bank_name_1, bank_branch_1,
+    default_bank_flag_1, bank1_created_at, bank1_last_modified_at, bank1_status, account_type_2, account_no_2,
+    micr_no_2, ifsc_code_2, bank_name_2, bank_branch_2, default_bank_flag_2, bank2_created_at,
+    bank2_last_modified_at, bank2_status, account_type_3, account_no_3, micr_no_3, ifsc_code_3, bank_name_3,
+    bank_branch_3, default_bank_flag_3, bank3_created_at, bank3_last_modified_at, bank3_status, account_type_4,
+    account_no_4, micr_no_4, ifsc_code_4, bank_name_4, bank_branch_4, default_bank_flag_4, bank4_created_at,
+    bank4_last_modified_at, bank4_status, account_type_5, account_no_5, micr_no_5, ifsc_code_5, bank_name_5,
+    bank_branch_5, default_bank_flag_5, bank5_created_at, bank5_last_modified_at, bank5_status, cheque_name,
+    div_pay_mode, address1, address2, address3, city, state, pincode, country, resi_phone, resi_fax, office_phone,
+    office_fax, email, communication_mode, foreign_address1, foreign_address2, foreign_address3, foreign_city,
+    foreign_pincode, foreign_state, foreign_country, foreign_resi_phone, foreign_resi_fax, foreign_off_phone,
+    foreign_off_fax, indian_mobile_no, primary_holder_kyc_type, primary_holder_ckyc_no, second_holder_kyc_type,
+    second_holder_ckyc_no, third_holder_kyc_type, third_holder_ckyc_no, guardian_kyc_type, guardian_ckyc_no,
+    primary_holder_kra_exempt, second_holder_kra_exempt, third_holder_kra_exempt, guardian_kra_exempt,
+    aadhaar_updated, mapin_id, paperless_flag, lei_no, lei_validity, email_declaration_flag, mobile_declaration_flag,
+    branch, dealer, nomination_opt, nomination_auth_mode, nominee1_name, nominee1_relationship,
+    nominee1_applicable_pct, nominee1_minor_flag, nominee1_dob, nominee1_guardian, nominee1_guardian_pan,
+    nom1_id_typ, nom1_idno, nom1_email, nom1_mob, nom1_add1, nom1_add2, nom1_add3, nom1_city, nom1_pin, nom1_con,
+    nominee2_name, nominee2_relationship, nominee2_applicable_pct, nominee2_dob, nominee2_minor_flag,
+    nominee2_guardian, nominee2_guardian_pan, nom2_id_typ, nom2_idno, nom2_email, nom2_mob, nom2_add1, nom2_add2,
+    nom2_add3, nom2_city, nom2_pin, nom2_con, nominee3_name, nominee3_relationship, nominee3_applicable_pct,
+    nominee3_dob, nominee3_minor_flag, nominee3_guardian, nominee3_guardian_pan, nom3_id_typ, nom3_idno, nom3_email,
+    nom3_mob, nom3_add1, nom3_add2, nom3_add3, nom3_city, nom3_pin, nom3_con, nom_soa, second_holder_email,
+    second_holder_email_declaration, second_holder_mobile, second_holder_mobile_declaration, third_holder_email,
+    third_holder_email_declaration, third_holder_mobile, third_holder_mobile_declaration, nomination_flag,
+    nomination_auth_date, guardian_relationship, created_by, created_at, last_modified_by,
+    last_modified_at""".split(",")] + ["upload_batch"]
 
-    inserted = skipped = 0
+    update_cols = [c for c in bse_client_columns if c != "client_code"]
+    insert_sql = (
+            f"INSERT INTO bse_client_master ({', '.join(bse_client_columns)}) "
+            f"VALUES ({', '.join(['?'] * len(bse_client_columns))}) "
+            f"ON CONFLICT(client_code) DO UPDATE SET " + ", ".join(f"{c}=excluded.{c}" for c in update_cols)
+    )
+
+    inserted = updated = 0
     with get_conn() as conn:
         if replace:
-            conn.execute("DELETE FROM bse_client_master");
-            conn.executemany(insert_sql, client_rows);
+            conn.execute("DELETE FROM bse_client_master")
+            conn.executemany(insert_sql, client_rows)
             inserted = len(client_rows)
         else:
-            existing = {r[0] for r in conn.execute("SELECT client_code FROM bse_client_master").fetchall()}
-            new_rows = [r for r in client_rows if r[1] not in existing];
-            skipped = len(client_rows) - len(new_rows)
-            if new_rows: conn.executemany(insert_sql, new_rows)
-            inserted = len(new_rows)
-    msg = f"Imported {inserted} clients"
-    if skipped: msg += f" | Skipped {skipped} existing"
+            before = _count_before_after(conn, "bse_client_master")
+            conn.executemany(insert_sql, client_rows)
+            after = _count_before_after(conn, "bse_client_master")
+            inserted = after - before
+            updated = len(client_rows) - inserted
+    msg = f"Imported {inserted} new clients"
+    if updated:
+        msg += f" | Updated {updated} existing"
     return True, msg
 
 
@@ -689,27 +696,39 @@ def parse_bse_sip(file, replace: bool) -> tuple[bool, str, dict]:
                      raw_val(row.get(s3email_col, "")) if s3email_col else "",
                      raw_val(row.get(s3mob_col, "")) if s3mob_col else "", batch))
     if not rows: return False, "0 SIP rows found", {}
-    insert_sql = """INSERT OR IGNORE INTO bse_sip (status, member_code, client_code, client_name, pg_bank_reference_no, xsip_regn_no, regn_date, amc_name, rta_scheme_code, scheme_name, frequency_type, start_date, end_date, installments_amt, brokerage, entry_by, mandate_id, dpc_flag, dp_trans, sub_broker, euin, euin_decl, first_order, folio_no, remarks, sub_broker_arncode, no_of_installments, exchange_remark, health_declaration_flag, nominee_dob, disclaimer_flag, internal_ref_no, primary_holder_email, primary_holder_mobile, second_holder_email, second_holder_mobile, third_holder_email, third_holder_mobile, upload_batch) VALUES (""" + ",".join(
-        ["?"] * 39) + ")"
-    inserted = dupes = 0
+    bse_sip_columns = ["status", "member_code", "client_code", "client_name", "pg_bank_reference_no",
+                       "xsip_regn_no", "regn_date", "amc_name", "rta_scheme_code", "scheme_name",
+                       "frequency_type", "start_date", "end_date", "installments_amt", "brokerage",
+                       "entry_by", "mandate_id", "dpc_flag", "dp_trans", "sub_broker", "euin", "euin_decl",
+                       "first_order", "folio_no", "remarks", "sub_broker_arncode", "no_of_installments",
+                       "exchange_remark", "health_declaration_flag", "nominee_dob", "disclaimer_flag",
+                       "internal_ref_no", "primary_holder_email", "primary_holder_mobile",
+                       "second_holder_email", "second_holder_mobile", "third_holder_email",
+                       "third_holder_mobile", "upload_batch"]
+    update_cols = [c for c in bse_sip_columns if c != "xsip_regn_no"]
+    insert_sql = (
+            f"INSERT INTO bse_sip ({', '.join(bse_sip_columns)}) VALUES ({', '.join(['?'] * len(bse_sip_columns))}) "
+            f"ON CONFLICT(xsip_regn_no) DO UPDATE SET " + ", ".join(f"{c}=excluded.{c}" for c in update_cols)
+    )
+    inserted = updated = 0
     with get_conn() as conn:
         if replace:
-            conn.execute("DELETE FROM bse_sip");
-            conn.executemany(insert_sql, rows);
+            conn.execute("DELETE FROM bse_sip")
+            conn.executemany(insert_sql, rows)
             inserted = len(rows)
         else:
-            before = _count_before_after(conn, "bse_sip");
-            conn.executemany(insert_sql,
-                             rows);
-            inserted, dupes = _inserted_dupes(
-                before, conn, "bse_sip", len(rows))
+            before = _count_before_after(conn, "bse_sip")
+            conn.executemany(insert_sql, rows)
+            after = _count_before_after(conn, "bse_sip")
+            inserted = after - before
+            updated = len(rows) - inserted
     active = sum(1 for r in rows if "active" in str(r[0]).lower())
-    msg = f"Imported {inserted} SIP records | Active: {active}"
+    msg = f"Imported {inserted} new SIP records | Active: {active}"
     if skipped:
         msg += f" | Skipped {skipped}"
-    if dupes:
-        msg += f" | {dupes} duplicates"
-    return True, msg, {"rows": inserted, "skipped": skipped, "duplicates": dupes, "active": active}
+    if updated:
+        msg += f" | Updated {updated}"
+    return True, msg, {"rows": inserted, "skipped": skipped, "updated": updated, "active": active}
 
 
 def parse_bse_scheme_master(file, replace: bool) -> tuple[bool, str, dict]:
@@ -767,23 +786,39 @@ def parse_bse_scheme_master(file, replace: bool) -> tuple[bool, str, dict]:
             log.warning("Skipped scheme row: %s", exc);
             skipped += 1
     if not rows: return False, "0 rows parsed", {}
-    sql = """INSERT OR IGNORE INTO bse_scheme_master (unique_no, scheme_code, rta_scheme_code, amc_scheme_code, isin, amc_code, scheme_type, scheme_plan, scheme_name, purchase_allowed, purchase_transaction_mode, min_purchase_amount, additional_purchase_amount, max_purchase_amount, purchase_amount_multiplier, purchase_cutoff_time, redemption_allowed, redemption_transaction_mode, min_redemption_qty, redemption_qty_multiplier, max_redemption_qty, redemption_amount_min, redemption_amount_max, redemption_amount_multiple, redemption_cutoff_time, rta_agent_code, amc_active_flag, dividend_reinvestment_flag, sip_flag, stp_flag, swp_flag, switch_flag, settlement_type, amc_ind, face_value, start_date, end_date, exit_load_flag, exit_load, lock_in_period_flag, lock_in_period, channel_partner_code, reopening_date, upload_batch) VALUES (""" + ",".join(
-        ["?"] * 44) + ")"
-    inserted = dupes = 0
+    scheme_columns = ["unique_no", "scheme_code", "rta_scheme_code", "amc_scheme_code", "isin", "amc_code",
+                      "scheme_type", "scheme_plan", "scheme_name", "purchase_allowed", "purchase_transaction_mode",
+                      "min_purchase_amount", "additional_purchase_amount", "max_purchase_amount",
+                      "purchase_amount_multiplier", "purchase_cutoff_time", "redemption_allowed",
+                      "redemption_transaction_mode", "min_redemption_qty", "redemption_qty_multiplier",
+                      "max_redemption_qty", "redemption_amount_min", "redemption_amount_max",
+                      "redemption_amount_multiple", "redemption_cutoff_time", "rta_agent_code", "amc_active_flag",
+                      "dividend_reinvestment_flag", "sip_flag", "stp_flag", "swp_flag", "switch_flag",
+                      "settlement_type", "amc_ind", "face_value", "start_date", "end_date", "exit_load_flag",
+                      "exit_load", "lock_in_period_flag", "lock_in_period", "channel_partner_code",
+                      "reopening_date", "upload_batch"]
+    conflict_cols = ["scheme_code", "rta_scheme_code"]
+    update_cols = [c for c in scheme_columns if c not in conflict_cols]
+    sql = (
+            f"INSERT INTO bse_scheme_master ({', '.join(scheme_columns)}) "
+            f"VALUES ({', '.join(['?'] * len(scheme_columns))}) "
+            f"ON CONFLICT({', '.join(conflict_cols)}) DO UPDATE SET " + ", ".join(
+        f"{c}=excluded.{c}" for c in update_cols)
+    )
+    inserted = updated = 0
     with get_conn() as conn:
         if replace:
-            conn.execute("DELETE FROM bse_scheme_master");
-            conn.executemany(sql, rows);
+            conn.execute("DELETE FROM bse_scheme_master")
+            conn.executemany(sql, rows)
             inserted = len(rows)
         else:
-            before = _count_before_after(conn, "bse_scheme_master");
-            conn.executemany(sql,
-                             rows);
-            inserted, dupes = _inserted_dupes(
-                before, conn, "bse_scheme_master", len(rows))
-    return True, f"Imported {inserted} schemes | Skipped: {skipped} | Dupes: {dupes}", {"rows": inserted,
-                                                                                        "skipped": skipped,
-                                                                                        "duplicates": dupes}
+            before = _count_before_after(conn, "bse_scheme_master")
+            conn.executemany(sql, rows)
+            after = _count_before_after(conn, "bse_scheme_master")
+            inserted = after - before
+            updated = len(rows) - inserted
+    return True, f"Imported {inserted} new schemes | Updated {updated} | Skipped: {skipped}", \
+        {"rows": inserted, "skipped": skipped, "updated": updated}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1080,28 +1115,37 @@ def parse_cams_wbr77_brokerage(file, replace: bool) -> tuple[bool, str, dict]:
     return _execute_cams_import("cams_wbr77_brokerage", rows, batch, replace, skipped)
 
 
+
+
+
 def _execute_cams_import(table: str, rows: list, batch: str, replace: bool, skipped: int) -> tuple[bool, str, dict]:
     if not rows: return False, "0 rows found", {}
-    cols = ", ".join(table_column_map[table])
-    placeholders = ", ".join(["?"] * len(table_column_map[table]))
-    sql = f"INSERT OR IGNORE INTO {table} ({cols}, upload_batch) VALUES ({placeholders}, ?)"
-    inserted = dupes = 0
+    columns = table_column_map[table]
+    conflict_cols = CAMS_CONFLICT_COLS[table]
+    cols = ", ".join(columns)
+    placeholders = ", ".join(["?"] * len(columns))
+    update_cols = [c for c in columns if c not in conflict_cols]
+    set_clause = ", ".join(f"{c}=excluded.{c}" for c in update_cols) + ", upload_batch=excluded.upload_batch"
+    sql = (f"INSERT INTO {table} ({cols}, upload_batch) VALUES ({placeholders}, ?) "
+           f"ON CONFLICT({', '.join(conflict_cols)}) DO UPDATE SET {set_clause}")
+    inserted = updated = 0
     with get_conn() as conn:
         if replace:
-            conn.execute(f"DELETE FROM {table}");
-            conn.executemany(sql, rows);
+            conn.execute(f"DELETE FROM {table}")
+            conn.executemany(sql, rows)
             inserted = len(rows)
         else:
-            before = _count_before_after(conn, table);
-            conn.executemany(sql, rows);
-            inserted, dupes = _inserted_dupes(
-                before, conn, table, len(rows))
-    msg = f"Imported {inserted} into {table}"
+            before = _count_before_after(conn, table)
+            conn.executemany(sql, rows)
+            after = _count_before_after(conn, table)
+            inserted = after - before
+            updated = len(rows) - inserted
+    msg = f"Imported {inserted} new into {table}"
+    if updated:
+        msg += f" | Updated {updated} existing"
     if skipped:
         msg += f" | Skipped {skipped}"
-    if dupes:
-        msg += f" | {dupes} duplicates"
-    return True, msg, {"rows": inserted, "skipped": skipped, "duplicates": dupes}
+    return True, msg, {"rows": inserted, "updated": updated, "skipped": skipped}
 
 
 table_column_map = {
@@ -1167,6 +1211,14 @@ table_column_map = {
                              "P_TRXN_NO", "P_FOLIO_NO", "P_PLOT_AMOUNT", "P_PLOT_UNITS", "FOLIO_OLD",
                              "SCHEME_FOLIO_NUMBER", "AMC_REF_NO", "REQUEST_REF_NO", "WRITE_OFF_REASON", "HOLD_REASON",
                              "BROKERAGE_ACCRUAL_MONTH", "PREV_TRXN_NO", "PREV_TRXN_DATE"]
+}
+
+CAMS_CONFLICT_COLS = {
+    "cams_wbr4_aum": ["FOLIOCHK", "PRODUCT", "REP_DATE", "AMC_CODE"],
+    "cams_wbr9_folio": ["FOLIOCHK", "PRODUCT", "AMC_CODE"],
+    "cams_wbr2_transaction": ["TRXNNO", "FOLIO_NO"],
+    "cams_wbr49_sip": ["AUTO_TRNO", "FOLIO_NO"],
+    "cams_wbr77_brokerage": ["TRXN_NO", "FOLIO_NO", "BROKERAGE_ACCRUAL_MONTH"],
 }
 
 
@@ -1492,58 +1544,69 @@ def parse_kfin_mfsd205_brokerage(file, replace: bool) -> tuple[bool, str, dict]:
     if not rows:
         return False, "0 valid rows found", {}
 
-    insert_sql = """INSERT OR IGNORE INTO kfin_mfsd205_brokerage (
-        product_code, fund_description, fund, scheme, plan, option,
-        account_number, application_number, investor_name, address1, address2, address3,
-        city, pincode, transaction_description, from_date, to_date, amount, units,
-        transaction_date, process_date, percentage, brokerage, sub_broker, account_type,
-        brokerage_head, brokerage_type, transaction_number, branch_code, cheque_number,
-        starting_date, ending_date, warrant_number, warrant_date, daily_product,
-        cumulative_nav, average_assets, transaction_id, scheme_code, transaction_head,
-        fee_type, adjustment_flag, switch_flag, gross_brokerage, stt_amount, 
-        educess_amount, tran_type_code, upload_batch
-    ) VALUES (""" + ",".join(["?"] * 48) + ")"
+    brok_columns = ["product_code", "fund_description", "fund", "scheme", "plan", "option", "account_number",
+                    "application_number", "investor_name", "address1", "address2", "address3", "city", "pincode",
+                    "transaction_description", "from_date", "to_date", "amount", "units", "transaction_date",
+                    "process_date", "percentage", "brokerage", "sub_broker", "account_type", "brokerage_head",
+                    "brokerage_type", "transaction_number", "branch_code", "cheque_number", "starting_date",
+                    "ending_date", "warrant_number", "warrant_date", "daily_product", "cumulative_nav",
+                    "average_assets", "transaction_id", "scheme_code", "transaction_head", "fee_type",
+                    "adjustment_flag", "switch_flag", "gross_brokerage", "stt_amount", "educess_amount",
+                    "tran_type_code", "upload_batch"]
+    conflict_cols = ["transaction_number", "account_number"]
+    update_cols = [c for c in brok_columns if c not in conflict_cols]
+    insert_sql = (
+            f"INSERT INTO kfin_mfsd205_brokerage ({', '.join(brok_columns)}) "
+            f"VALUES ({', '.join(['?'] * len(brok_columns))}) "
+            f"ON CONFLICT({', '.join(conflict_cols)}) DO UPDATE SET " + ", ".join(
+        f"{c}=excluded.{c}" for c in update_cols)
+    )
 
-    inserted = dupes = 0
+    inserted = updated = 0
     with get_conn() as conn:
         if replace:
             conn.execute("DELETE FROM kfin_mfsd205_brokerage")
             conn.executemany(insert_sql, rows)
-            # BUG FIX: Actually count what was inserted instead of trusting list length
-            inserted = _count_before_after(conn, "kfin_mfsd205_brokerage")
-            dupes = len(rows) - inserted
+            inserted = len(rows)
         else:
             before = _count_before_after(conn, "kfin_mfsd205_brokerage")
             conn.executemany(insert_sql, rows)
-            inserted, dupes = _inserted_dupes(before, conn, "kfin_mfsd205_brokerage", len(rows))
+            after = _count_before_after(conn, "kfin_mfsd205_brokerage")
+            inserted = after - before
+            updated = len(rows) - inserted
 
-    msg = f"Imported {inserted} records | Skipped: {skipped} | Duplicates Ignored: {dupes}"
-    return True, msg, {"rows": inserted, "skipped": skipped, "duplicates": dupes}
+    msg = f"Imported {inserted} new | Updated {updated} existing | Skipped: {skipped}"
+    return True, msg, {"rows": inserted, "skipped": skipped, "updated": updated}
 
 
 def _execute_kfin_import(table: str, rows: list, batch: str, replace: bool, skipped: int) -> tuple[bool, str, dict]:
     if not rows: return False, "0 rows found", {}
-    col_list = kfin_table_column_map[table][0]
-    cols = ", ".join(col_list)
-    placeholders = ", ".join(["?"] * len(col_list))
-    sql = f"INSERT OR IGNORE INTO {table} ({cols}, upload_batch) VALUES ({placeholders}, ?)"
-    inserted = dupes = 0
+    columns = list(kfin_table_column_map[table][0])
+    conflict_cols = KFIN_CONFLICT_COLS[table]
+    cols = ", ".join(columns)
+    placeholders = ", ".join(["?"] * len(columns))
+    update_cols = [c for c in columns if c not in conflict_cols]
+    set_clause = ", ".join(f"{c}=excluded.{c}" for c in update_cols) + ", upload_batch=excluded.upload_batch"
+    sql = (f"INSERT INTO {table} ({cols}, upload_batch) VALUES ({placeholders}, ?) "
+           f"ON CONFLICT({', '.join(conflict_cols)}) DO UPDATE SET {set_clause}")
+    inserted = updated = 0
     with get_conn() as conn:
         if replace:
-            conn.execute(f"DELETE FROM {table}");
-            conn.executemany(sql, rows);
+            conn.execute(f"DELETE FROM {table}")
+            conn.executemany(sql, rows)
             inserted = len(rows)
         else:
-            before = _count_before_after(conn, table);
-            conn.executemany(sql, rows);
-            inserted, dupes = _inserted_dupes(
-                before, conn, table, len(rows))
-    msg = f"Imported {inserted} into {table}"
+            before = _count_before_after(conn, table)
+            conn.executemany(sql, rows)
+            after = _count_before_after(conn, table)
+            inserted = after - before
+            updated = len(rows) - inserted
+    msg = f"Imported {inserted} new into {table}"
+    if updated:
+        msg += f" | Updated {updated} existing"
     if skipped:
         msg += f" | Skipped {skipped}"
-    if dupes:
-        msg += f" | {dupes} duplicates"
-    return True, msg, {"rows": inserted, "skipped": skipped, "duplicates": dupes}
+    return True, msg, {"rows": inserted, "updated": updated, "skipped": skipped}
 
 
 kfin_table_column_map = {
@@ -1587,6 +1650,14 @@ kfin_table_column_map = {
         "DAILY_PRODUCT", "CUMULATIVE_NAV", "AVERAGE_ASSETS", "TRANSACTION_ID", "SCHEME_CODE",
         "TRANSACTION_HEAD", "FEE_TYPE", "ADJUSTMENT_FLAG", "SWITCH_FLAG", "GROSS_BROKERAGE",
         "STT_AMOUNT", "EDUCESS_AMOUNT", "TRAN_TYPE_CODE")]
+}
+
+
+KFIN_CONFLICT_COLS = {
+    "kfin_mfsd203_aum": ["FOLIO_NUMBER", "PRODUCT_CODE", "SCHEME_CODE", "REPORT_DATE"],
+    "kfin_mfsd211_folio": ["FOLIO", "FUND", "PRODUCT_CODE"],
+    "kfin_mfsd201_transaction": ["TD_ACNO", "TD_TRNO", "TD_FUND"],
+    "kfin_mfsd243_sip": ["REG_SLNO", "FOLIO", "SCHEME"],
 }
 
 
