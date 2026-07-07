@@ -1014,6 +1014,15 @@ def load_amc_breakdown_by_isin(get_conn) -> pd.DataFrame:
     return grouped
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def load_active_amcs() -> list:
+    """AMCs you currently have business with (from folio holdings, not brokerage files)."""
+    df = get_all_folios_with_isin_and_nav(get_conn)
+    if df.empty:
+        return []
+    return sorted(df["amc_name"].dropna().unique().tolist())
+
+
 def normalize_folio(folio: str) -> str:
     if not folio:
         return ""
@@ -2529,12 +2538,19 @@ elif mode == "💰 Brokerage Report":
 
         merged_view = merged[merged["month"].isin(bif_month_filter)]
 
-        amc_summary = (
+        amc_grouped = (
             merged_view.groupby("amc")[["file_amount", "manual_amount", "variance"]]
             .sum()
             .reset_index()
-            .sort_values("file_amount", ascending=False)
         )
+
+        active_amcs = load_active_amcs()
+        amc_summary = pd.DataFrame({"amc": active_amcs}).merge(amc_grouped, on="amc", how="left")
+        amc_summary[["file_amount", "manual_amount", "variance"]] = amc_summary[
+            ["file_amount", "manual_amount", "variance"]
+        ].fillna(0.0)
+        amc_summary = amc_summary.sort_values("file_amount", ascending=False)
+
         amc_summary["status"] = amc_summary.apply(
             lambda r: "⚠️ Pending" if r["manual_amount"] == 0 and r["file_amount"] > 0
             else ("✅ Matched" if abs(r["variance"]) < 1 else "🔶 Mismatch"),
