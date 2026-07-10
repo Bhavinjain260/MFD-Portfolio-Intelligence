@@ -2856,11 +2856,18 @@ elif mode == "🧮 Capital Gains":
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Total Gain", format_currency(tax["total_gain"]))
             c2.metric("STCG", format_currency(tax["stcg_gain"]))
+            c2.caption(f"Tax: {format_currency(tax['stcg_tax'])}")
             c3.metric("LTCG", format_currency(tax["ltcg_gain"]))
+            c3.caption(f"Tax: {format_currency(tax['ltcg_tax'])}")
             c4.metric("Estimated Tax", format_currency(tax["total_tax"]))
-            if tax_cat == "equity" and tax["ltcg_gain"] > 0:
-                st.caption("₹1,25,000/yr LTCG exemption assumed to apply fully here — "
-                          "reduce it if you have other equity LTCG this FY.")
+
+
+            if tax_cat == "equity":
+                used, limit = tax["exemption_used"], tax["exemption_limit"]
+                st.progress(min(used / limit, 1.0) if limit else 0.0,
+                            text=f"LTCG exemption used: {format_currency(used)} / {format_currency(limit)}")
+                st.caption(f"Taxable LTCG: {format_currency(tax['ltcg_taxable'])} "
+                           f"— exemption assumed available in full; reduce if you have other equity LTCG this FY.")
             st.dataframe(cg.matches_to_df(matches), width="stretch", hide_index=True)
 
     # ── TAB 2: hypothetical future redemption ──
@@ -2871,20 +2878,51 @@ elif mode == "🧮 Capital Gains":
         if remaining_units <= 0:
             st.info("No remaining units to redeem.")
         else:
-            isin = get_isin_for_cams_product(prodcode)
-            nav_hit = fetch_nav_by_isin(isin) if isin else None
-            auto_nav = float(nav_hit[0]) if nav_hit else 0.0
+            # ── Reliable NAV: reuse same canonical AMFI source as Dashboard/Client ──
+            cg_nav_df = st.session_state.get("folio_nav_df")
+            if cg_nav_df is None:
+                download_and_save_nav_if_needed()
+                cg_nav_df = get_all_folios_with_isin_and_nav(get_conn)
+                st.session_state["folio_nav_df"] = cg_nav_df
+
+            nav_match = cg_nav_df[
+                (cg_nav_df["folio_id"] == folio_no) &
+                (cg_nav_df["product_code"].astype(str).str.strip().str.upper() == prodcode.strip().upper())
+                ]
+            auto_nav = float(nav_match["current_nav"].iloc[0]) if not nav_match.empty and pd.notna(
+                nav_match["current_nav"].iloc[0]) else 0.0
+            auto_nav_date = nav_match["nav_date"].iloc[0] if not nav_match.empty and pd.notna(
+                nav_match["nav_date"].iloc[0]) else None
+
+            invested_value = sum(l.remaining_units * l.rate for l in lots)
+            current_value_est = remaining_units * auto_nav
+            unrealized_gain = current_value_est - invested_value
+
+            s1, s2, s3 = st.columns(3)
+            s1.metric("Invested", format_currency(invested_value))
+            s2.metric("Current Value", format_currency(current_value_est))
+            s3.metric("Unrealized Gain", format_currency(unrealized_gain))
 
             n1, n2 = st.columns(2)
             with n1:
+                nav_key = f"cg_hyp_nav_{folio_no}_{prodcode}"
+                if nav_key not in st.session_state:
+                    st.session_state[nav_key] = auto_nav
                 nav_input = st.number_input(
-                    "Redemption NAV (₹)", min_value=0.0, value=auto_nav, key="cg_hyp_nav",
-                    help="Auto-filled from latest AMFI NAV if resolved. Edit to project a different price."
+                    "Redemption NAV (₹)", min_value=0.0, key=nav_key,
+                    help="Auto-filled from latest AMFI NAV (folio + scheme matched). Edit to project a different price."
                 )
+                if auto_nav_date:
+                    st.caption(f"📅 NAV as of {auto_nav_date}")
+                else:
+                    st.caption("⚠️ No NAV date found — enter manually")
             with n2:
+                units_key = f"cg_hyp_units_{folio_no}_{prodcode}"
+                if units_key not in st.session_state:
+                    st.session_state[units_key] = float(remaining_units)
                 redeem_units = st.number_input(
                     "Units to redeem", min_value=0.0, max_value=float(remaining_units),
-                    value=float(remaining_units), key="cg_hyp_units"
+                    key=units_key
                 )
 
             if nav_input <= 0:
@@ -2896,11 +2934,18 @@ elif mode == "🧮 Capital Gains":
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Projected Gain", format_currency(hyp_tax["total_gain"]))
                 c2.metric("STCG", format_currency(hyp_tax["stcg_gain"]))
+                c2.caption(f"Tax: {format_currency(hyp_tax['stcg_tax'])}")
                 c3.metric("LTCG", format_currency(hyp_tax["ltcg_gain"]))
+                c3.caption(f"Tax: {format_currency(hyp_tax['ltcg_tax'])}")
                 c4.metric("Estimated Tax", format_currency(hyp_tax["total_tax"]))
-                if tax_cat == "equity" and hyp_tax["ltcg_gain"] > 0:
-                    st.caption("₹1,25,000/yr LTCG exemption assumed to apply fully here — "
-                              "reduce it if you have other equity LTCG this FY.")
+
+                if tax_cat == "equity":
+                    used, limit = hyp_tax["exemption_used"], hyp_tax["exemption_limit"]
+                    st.progress(min(used / limit, 1.0) if limit else 0.0,
+                               text=f"LTCG exemption used: {format_currency(used)} / {format_currency(limit)}")
+                    st.caption(f"Taxable LTCG: {format_currency(hyp_tax['ltcg_taxable'])} "
+                              f"— exemption assumed available in full; reduce if you have other equity LTCG this FY.")
+
                 st.dataframe(cg.matches_to_df(hyp_matches), width="stretch", hide_index=True)
 
 # ==================== ⚙️ ADMIN PANEL ====================

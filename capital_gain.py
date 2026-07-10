@@ -17,15 +17,15 @@ EQUITY_HOLDING_DAYS = 365  # approx for "12 months"; real rule is calendar month
 
 
 def classify_tax_category(category: str = "", scheme_name: str = "") -> str:
-    """
-    Best-guess only — always let the user confirm/override in the UI.
-    'equity' -> STCG/LTCG equity rules. 'debt' -> slab-rate rules (covers debt,
-    FoF, gold/silver ETF FoF, international funds — "specified mutual funds").
-    """
     text = f"{category or ''} {scheme_name or ''}".lower()
-    if "equity" in text and "hybrid" not in text:
-        return "equity"
-    if "aggressive hybrid" in text or "equity oriented" in text:
+    if "hybrid" in text and "aggressive" not in text and "equity oriented" not in text:
+        return "debt"
+    equity_keywords = [
+        "equity", "large cap", "large & mid", "mid cap", "midcap", "small cap", "smallcap",
+        "flexi cap", "flexicap", "multi cap", "multicap", "focused", "elss", "value fund",
+        "contra fund", "dividend yield", "sectoral", "thematic",
+    ]
+    if any(k in text for k in equity_keywords):
         return "equity"
     return "debt"
 
@@ -149,17 +149,23 @@ def tax_for_matches(matches: list[Match], tax_category: str, slab_rate: float = 
     total_gain = stcg_gain + ltcg_gain
 
     if tax_category == "equity":
+        exemption_used = min(max(ltcg_gain, 0), LTCG_EQUITY_EXEMPTION)
+        ltcg_taxable = max(ltcg_gain - LTCG_EQUITY_EXEMPTION, 0)
         stcg_tax = max(stcg_gain, 0) * STCG_EQUITY_RATE
-        ltcg_tax = max(ltcg_gain - LTCG_EQUITY_EXEMPTION, 0) * LTCG_EQUITY_RATE
+        ltcg_tax = ltcg_taxable * LTCG_EQUITY_RATE
         total_tax = stcg_tax + ltcg_tax
     else:  # debt / specified mutual fund — slab rate, no LTCG benefit, no holding-period distinction
+        exemption_used = 0.0
+        ltcg_taxable = max(ltcg_gain, 0)
         total_tax = max(total_gain, 0) * slab_rate
         stcg_tax = max(stcg_gain, 0) * slab_rate
-        ltcg_tax = max(ltcg_gain, 0) * slab_rate
+        ltcg_tax = ltcg_taxable * slab_rate
 
     return {
         "stcg_gain": stcg_gain, "ltcg_gain": ltcg_gain, "total_gain": total_gain,
         "stcg_tax": stcg_tax, "ltcg_tax": ltcg_tax, "total_tax": total_tax,
+        "exemption_used": exemption_used, "ltcg_taxable": ltcg_taxable,
+        "exemption_limit": LTCG_EQUITY_EXEMPTION,
         "tax_category": tax_category,
     }
 
