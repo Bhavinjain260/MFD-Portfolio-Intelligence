@@ -19,6 +19,7 @@ import data_manager
 from init_db import init_db, get_conn
 from theme_patch import THEME_WATCHER_JS, render_theme
 import capital_gain as cg
+import data_manager as dm
 
 log = logging.getLogger(__name__)
 
@@ -1495,13 +1496,29 @@ def _auto_bse_scheme_master():
 
     if should_auto_download():
         log.info("[BSE-AUTO-STARTUP] Scheduling background download...")
-        start_background_download()
+
+        start_background_download(parse_func=dm.parse_bse_scheme_master)
         # Don't block — let the UI render. The status will show on next rerun.
     else:
         log.info("[BSE-AUTO-STARTUP] Today's file already exists.")
 
 
 _auto_bse_scheme_master()
+
+# ==================== GLOBAL BSE DOWNLOAD/PARSE NOTIFICATION ====================
+# Runs on every page, not just Admin Panel, so the toast fires wherever the user is.
+def _notify_bse_scheme_status():
+    from bse_auto import get_download_status
+    status = get_download_status()
+    if status["done"] and not st.session_state.get("bse_notified", False):
+        st.session_state["bse_notified"] = True
+        if status["ok"]:
+            st.toast(f"✅ BSE Scheme Master ready: {status['msg']}")
+        else:
+            st.toast(f"❌ BSE download failed: {status['msg']}")
+
+
+_notify_bse_scheme_status()
 
 # -------------------- THEME (native Streamlit System/Light/Dark) --------------------
 current_theme = st.context.theme.type

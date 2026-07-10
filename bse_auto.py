@@ -222,27 +222,48 @@ def _do_download() -> dict:
             driver.quit()
 
 
-def _download_worker():
+def _download_worker(parse_func=None):
     _set_status(running=True, done=False, started_at=datetime.now().isoformat())
     result = _do_download()
+
+    final_msg = result["msg"]
+    final_path = result.get("path")
+
+    # ── Auto-parse into DB immediately after a successful download ──
+    if result["ok"] and parse_func is not None:
+        path = Path(result["path"]) if result.get("path") else None
+        if path and path.exists() and not path.name.endswith("_done.txt"):
+            try:
+                with open(path, "rb") as f:
+                    db_ok, db_msg, _preview = parse_func(f, replace=False)
+                if db_ok:
+                    done_path = path.with_name(_today_done_filename())
+                    path.rename(done_path)
+                    final_path = str(done_path)
+                    final_msg = f"{result['msg']} | DB: {db_msg}"
+                else:
+                    final_msg = f"{result['msg']} | DB import failed: {db_msg}"
+            except Exception as e:
+                log.exception("[BSE-AUTO] Auto-parse into DB failed")
+                final_msg = f"{result['msg']} | DB import error: {e}"
+
     _set_status(
         running=False,
         done=True,
         ok=result["ok"],
-        path=result.get("path"),
-        msg=result["msg"],
+        path=final_path,
+        msg=final_msg,
         finished_at=datetime.now().isoformat(),
     )
 
 
-def start_background_download() -> None:
+def start_background_download(parse_func=None) -> None:
     if _download_status["running"]:
         return
 
     _reset_status()
-    t = threading.Thread(target=_download_worker, daemon=True)
+    t = threading.Thread(target=_download_worker, args=(parse_func,), daemon=True)
     t.start()
-
 
 def should_auto_download() -> bool:
     return not has_todays_file()

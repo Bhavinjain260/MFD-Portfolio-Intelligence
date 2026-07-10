@@ -1730,14 +1730,12 @@ def render_data_manager():
         auto_col1, auto_col2, auto_col3 = st.columns([2, 2, 3])
         with auto_col1:
             auto_enabled = st.toggle("🤖 Auto-download daily", value=True, key="bse_auto_toggle")
-        with auto_col2:
-            if status["running"]:
-                st.button("⏳ Downloading...", disabled=True, key="btn_bse_auto_busy")
-            else:
-                if st.button("⬇️ Download Now", type="primary", key="btn_bse_auto_now"):
-                    st.session_state["bse_notified"] = False
-                    start_background_download()
-                    st.rerun()
+
+        if st.button("⬇️ Download Now", type="primary", key="btn_bse_auto_now"):
+            st.session_state["bse_notified"] = False
+            start_background_download(parse_func=parse_bse_scheme_master)
+            st.rerun()
+
         with auto_col3:
             latest = get_latest_file_path()
             if latest:
@@ -1751,7 +1749,7 @@ def render_data_manager():
 
         # ── Trigger auto-download if enabled and needed ──
         if auto_enabled and should_auto_download() and not status["running"] and not status["done"]:
-            start_background_download()
+            start_background_download(parse_func=parse_bse_scheme_master)
             st.rerun()
 
         # ── Live spinner while background thread runs ──
