@@ -2184,14 +2184,30 @@ elif mode == "👥 Clients":
             h5.metric("1-Day Diff", format_aum(total_one_day_diff), delta=format_aum(total_one_day_diff))
 
             holdings["gain_loss"] = holdings["nav_based_aum"] - holdings["file_aum"]
-            holdings["portfolio_pct"] = (holdings["nav_based_aum"] / total_current * 100).fillna(
-                0) if total_current > 0 else 0
 
-            display_holdings = holdings[[
-                'rta', 'folio_id', 'amc_name', 'scheme_name', 'units', 'file_aum',
-                'current_nav', 'nav_based_aum', 'gain_loss', 'one_day_diff', 'portfolio_pct'
+            # ── Club rows by scheme (across folios) for display ──
+            grouped_holdings = (
+                holdings.groupby(["amc_name", "scheme_name"], dropna=False)
+                .agg(
+                    units=("units", "sum"),
+                    file_aum=("file_aum", "sum"),
+                    nav_based_aum=("nav_based_aum", "sum"),
+                    one_day_diff=("one_day_diff", "sum"),
+                    folios=("folio_id", "nunique"),
+                    rta=("rta", lambda s: ", ".join(sorted(set(s.dropna())))),
+                )
+                .reset_index()
+            )
+            grouped_holdings["gain_loss"] = grouped_holdings["nav_based_aum"] - grouped_holdings["file_aum"]
+            grouped_holdings["portfolio_pct"] = (
+                    grouped_holdings["nav_based_aum"] / total_current * 100
+            ).fillna(0) if total_current > 0 else 0
+
+            display_holdings = grouped_holdings[[
+                'rta', 'amc_name', 'scheme_name', 'folios', 'units', 'file_aum',
+                'nav_based_aum', 'gain_loss', 'one_day_diff', 'portfolio_pct'
             ]].rename(columns={
-                'rta': 'RTA', 'folio_id': 'Folio', 'amc_name': 'AMC', 'scheme_name': 'Scheme',
+                'rta': 'RTA', 'amc_name': 'AMC', 'scheme_name': 'Scheme', 'folios': 'Folios',
                 'file_aum': 'Invested', 'nav_based_aum': 'Current Value',
                 'gain_loss': 'Gain/Loss', 'one_day_diff': '1D Diff', 'portfolio_pct': '% Portfolio'
             })
@@ -2216,46 +2232,77 @@ elif mode == "👥 Clients":
             if selected and len(selected["selection"]["rows"]) > 0:
                 idx = selected["selection"]["rows"][0]
                 row = display_holdings_sorted.iloc[idx]
-                folio_id = row['Folio']
-                rta = row['RTA']
-                st.divider()
-                st.subheader(f"📜 Transactions — {row['Scheme']} ({folio_id})")
+                scheme_sel = row['Scheme']
+                amc_sel = row['AMC']
 
+                # Underlying folios for this scheme
+                scheme_folios = holdings[
+                    (holdings['scheme_name'] == scheme_sel) & (holdings['amc_name'] == amc_sel)
+                    ][['folio_id', 'rta']].drop_duplicates().reset_index(drop=True)
+
+                st.divider()
+                st.subheader(f"📜 Transactions — {scheme_sel}")
+
+                if len(scheme_folios) > 1:
+                    folio_options = ["All Folios"] + [
+                        f"{r['folio_id']} ({r['rta']})" for _, r in scheme_folios.iterrows()
+                    ]
+                    folio_choice = st.radio(
+                        "Filter by Folio", folio_options, horizontal=True, key="txn_folio_filter"
+                    )
+                else:
+                    folio_choice = "All Folios"
+
+                if folio_choice == "All Folios":
+                    folios_to_fetch = scheme_folios
+                else:
+                    sel_folio_id = folio_choice.split(" (")[0]
+                    folios_to_fetch = scheme_folios[scheme_folios['folio_id'] == sel_folio_id]
+
+                txn_frames = []
                 with get_conn() as conn:
-                    if rta == 'CAMS':
-                        txn_df = pd.read_sql("""
-                            SELECT trxnno,
-                                   traddate,
-                                   trxntype,
-                                   trxnmode,
-                                   trxnstat,
-                                   purprice,
-                                   units,
-                                   amount,
-                                   brokcode,
-                                   subbrok,
-                                   remarks
-                            FROM cams_wbr2_transaction
-                            WHERE folio_no = ?
-                            ORDER BY traddate DESC
-                        """, conn, params=(folio_id,))
-                    else:
-                        txn_df = pd.read_sql("""
-                            SELECT td_trno   as trxnno,
-                                   td_trdt   as traddate,
-                                   td_purred as trxntype,
-                                   trnmode   as trxnmode,
-                                   trnstat   as trxnstat,
-                                   td_pop    as purprice,
-                                   td_units  as units,
-                                   td_amt    as amount,
-                                   td_broker as brokcode,
-                                   ''        as subbrok,
-                                   trdesc    as remarks
-                            FROM kfin_mfsd201_transaction
-                            WHERE td_acno = ?
-                            ORDER BY td_trdt DESC
-                        """, conn, params=(folio_id,))
+                    for _, fr in folios_to_fetch.iterrows():
+                        fid, frta = fr['folio_id'], fr['rta']
+                        if frta == 'CAMS':
+                            df_t = pd.read_sql("""
+                                               SELECT trxnno,
+                                                      traddate,
+                                                      trxntype,
+                                                      trxnmode,
+                                                      trxnstat,
+                                                      purprice,
+                                                      units,
+                                                      amount,
+                                                      brokcode,
+                                                      subbrok,
+                                                      remarks
+                                               FROM cams_wbr2_transaction
+                                               WHERE folio_no = ?
+                                               ORDER BY traddate DESC
+                                               """, conn, params=(fid,))
+                        else:
+                            df_t = pd.read_sql("""
+                                               SELECT td_trno   as trxnno,
+                                                      td_trdt   as traddate,
+                                                      td_purred as trxntype,
+                                                      trnmode   as trxnmode,
+                                                      trnstat   as trxnstat,
+                                                      td_pop    as purprice,
+                                                      td_units  as units,
+                                                      td_amt    as amount,
+                                                      td_broker as brokcode,
+                                                      ''        as subbrok,
+                                                      trdesc    as remarks
+                                               FROM kfin_mfsd201_transaction
+                                               WHERE td_acno = ?
+                                               ORDER BY td_trdt DESC
+                                               """, conn, params=(fid,))
+                        if not df_t.empty:
+                            df_t.insert(0, 'folio_id', fid)
+                            df_t.insert(1, 'rta', frta)
+                        txn_frames.append(df_t)
+
+                txn_df = pd.concat(txn_frames, ignore_index=True) if txn_frames else pd.DataFrame()
 
                 if not txn_df.empty:
                     try:
@@ -2274,7 +2321,7 @@ elif mode == "👥 Clients":
                             fit_columns_on_grid_load=True,
                             allow_unsafe_jscode=True,
                             theme="alpine-dark" if dark else "alpine",
-                            key=f"txn_grid_{folio_id}"
+                            key=f"txn_grid_{scheme_sel}_{folio_choice}"
                         )
                     except ImportError:
                         st.dataframe(
