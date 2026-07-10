@@ -18,6 +18,7 @@ import streamlit as st
 import data_manager
 from init_db import init_db, get_conn
 from theme_patch import THEME_WATCHER_JS, render_theme
+import capital_gain as cg
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +79,38 @@ def format_brokerage(val) -> str:
         return f"Rs {formatted}"
     except (TypeError, ValueError):
         return "Rs -"
+
+
+def get_client_cams_schemes(folio_ids: list[str]) -> pd.DataFrame:
+    if not folio_ids:
+        return pd.DataFrame(columns=["folio_no", "prodcode", "scheme"])
+    placeholders = ",".join(["?"] * len(folio_ids))
+    with get_conn() as conn:
+        return pd.read_sql(f"""
+            SELECT DISTINCT folio_no, prodcode, scheme
+            FROM cams_wbr2_transaction
+            WHERE folio_no IN ({placeholders})
+        """, conn, params=folio_ids)
+
+
+def get_cams_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
+    with get_conn() as conn:
+        return pd.read_sql("""
+            SELECT traddate, trxntype, trxn_nature, units, purprice, amount
+            FROM cams_wbr2_transaction
+            WHERE folio_no = ? AND UPPER(TRIM(prodcode)) = ?
+            ORDER BY traddate
+        """, conn, params=(folio_no, product_code.strip().upper()))
+
+
+def get_isin_for_cams_product(prodcode: str) -> Optional[str]:
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT ISIN FROM bse_scheme_master
+            WHERE UPPER(TRIM(Channel_Partner_Code)) = ?
+            LIMIT 1
+        """, (prodcode.strip().upper(),)).fetchone()
+        return row[0] if row else None
 
 
 # ==================== Cams, Karvy and Manual entir Brokerage Data HELPERS ====================
@@ -1118,26 +1151,26 @@ def get_cams_invested_per_scheme(folio_list: list) -> pd.DataFrame:
     with get_conn() as conn:
         if scheme_col:
             query = f"""
-                SELECT
-                    folio_no      AS folio_id,
-                    UPPER(TRIM({scheme_col})) AS product_code,
-                    COALESCE(SUM(amount), 0)   AS invested_amount,
-                    COALESCE(SUM(units), 0)     AS total_units
-                FROM cams_wbr2_transaction
-                WHERE folio_no IN ({placeholders})
-                GROUP BY folio_no, UPPER(TRIM({scheme_col}))
-            """
+                    SELECT
+                        folio_no      AS folio_id,
+                        UPPER(TRIM({scheme_col})) AS product_code,
+                        COALESCE(SUM(CASE WHEN trxntype = 'R1' THEN -amount ELSE amount END), 0) AS invested_amount,
+                        COALESCE(SUM(CASE WHEN trxntype = 'R1' THEN -units ELSE units END), 0) AS total_units
+                    FROM cams_wbr2_transaction
+                    WHERE folio_no IN ({placeholders})
+                    GROUP BY folio_no, UPPER(TRIM({scheme_col}))
+                """
         else:
             query = f"""
-                SELECT
-                    folio_no      AS folio_id,
-                    NULL          AS product_code,
-                    COALESCE(SUM(amount), 0)   AS invested_amount,
-                    COALESCE(SUM(units), 0)     AS total_units
-                FROM cams_wbr2_transaction
-                WHERE folio_no IN ({placeholders})
-                GROUP BY folio_no
-            """
+                    SELECT
+                        folio_no      AS folio_id,
+                        NULL          AS product_code,
+                        COALESCE(SUM(CASE WHEN trxntype = 'R1' THEN -amount ELSE amount END), 0) AS invested_amount,
+                        COALESCE(SUM(CASE WHEN trxntype = 'R1' THEN -units ELSE units END), 0) AS total_units
+                    FROM cams_wbr2_transaction
+                    WHERE folio_no IN ({placeholders})
+                    GROUP BY folio_no
+                """
         df = pd.read_sql(query, conn, params=folio_list)
 
     return df
@@ -1253,7 +1286,7 @@ def load_dashboard_summary() -> dict:
         summary["cams_sips"] = conn.execute("SELECT COUNT(*) FROM cams_wbr49_sip").fetchone()[0]
         # Invested amount = sum of transaction amounts (same logic as KFin)
         summary["cams_aum"] = conn.execute(
-            "SELECT COALESCE(SUM(amount), 0) FROM cams_wbr2_transaction"
+            "SELECT COALESCE(SUM(CASE WHEN trxntype = 'R1' THEN -amount ELSE amount END), 0) FROM cams_wbr2_transaction"
         ).fetchone()[0]
         summary["cams_brokerage"] = conn.execute(
             "SELECT COALESCE(SUM(brkage_amt), 0) FROM cams_wbr77_brokerage"
@@ -1313,12 +1346,13 @@ def load_amc_breakdown() -> pd.DataFrame:
 
         # AUM from transactions (invested amount) instead of rupee_bal
         cams_txn_aum_df = pd.read_sql("""
-            SELECT amc_code as amc,
-                   COALESCE(SUM(amount), 0) as aum
-            FROM cams_wbr2_transaction
-            WHERE COALESCE(amc_code, '') != ''
-            GROUP BY amc_code
-        """, conn)
+                                      SELECT amc_code                                                                 as amc,
+                                             COALESCE(SUM(CASE WHEN trxntype = 'R1' THEN -amount ELSE amount END),
+                                                      0)                                                              as aum
+                                      FROM cams_wbr2_transaction
+                                      WHERE COALESCE(amc_code, '') != ''
+                                      GROUP BY amc_code
+                                      """, conn)
 
         if cams_wbr9_folio_df.empty and cams_txn_aum_df.empty:
             cams_combined = pd.DataFrame()
@@ -1531,7 +1565,7 @@ with st.sidebar:
     st.markdown("## 📊 MFD Portfolio")
     st.divider()
 
-    nav_options = ["📊 Dashboard", "👥 Clients", "💰 Brokerage Report", "⚙️ Admin Panel"]
+    nav_options = ["📊 Dashboard", "👥 Clients", "💰 Brokerage Report", "🧮 Capital Gains", "⚙️ Admin Panel"]
 
     if "nav_mode" not in st.session_state:
         st.session_state["nav_mode"] = "📊 Dashboard"
@@ -2733,6 +2767,141 @@ elif mode == "💰 Brokerage Report":
             )
 
     st.divider()
+
+
+
+# ==================== 🧮 CAPITAL GAINS ====================
+elif mode == "🧮 Capital Gains":
+    st.header("🧮 Capital Gains (CAMS, FIFO)")
+    st.caption(
+        "FIFO cost basis. Redemption detected via trxntype='R1' or trxn_nature containing "
+        "'Redemption'. Tax category is a heuristic guess from the scheme name — confirm it "
+        "before relying on the tax figure."
+    )
+
+    @st.cache_data(ttl=300)
+    def _cg_clients():
+        with get_conn() as conn:
+            return pd.read_sql("""
+                SELECT client_code,
+                       primary_holder_first_name || ' ' || primary_holder_last_name AS name,
+                       primary_holder_pan AS pan
+                FROM bse_client_master
+                WHERE primary_holder_pan IS NOT NULL
+            """, conn)
+
+    cg_clients = _cg_clients()
+    if cg_clients.empty:
+        st.warning("No clients found.")
+        st.stop()
+
+    cg_clients["display"] = cg_clients["name"] + " | " + cg_clients["pan"].fillna("Minor")
+    cg_sel = st.selectbox("Client", cg_clients["display"].tolist(), index=None, placeholder="Search...")
+    if not cg_sel:
+        st.stop()
+
+    cg_row = cg_clients[cg_clients["display"] == cg_sel].iloc[0]
+    cg_pan, cg_name = cg_row["pan"], cg_row["name"]
+
+    with get_conn() as conn:
+        cg_folios = pd.read_sql(
+            "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+            conn, params=(str(cg_pan).upper(), cg_name.upper())
+        )
+    folio_ids = cg_folios["foliochk"].tolist()
+    if not folio_ids:
+        st.info("No CAMS folios for this client.")
+        st.stop()
+
+    schemes_df = get_client_cams_schemes(folio_ids)
+    if schemes_df.empty:
+        st.info("No CAMS transactions for this client.")
+        st.stop()
+
+    schemes_df["label"] = schemes_df["folio_no"] + " — " + schemes_df["scheme"]
+    sel_scheme = st.selectbox("Folio / Scheme", schemes_df["label"].tolist())
+    srow = schemes_df[schemes_df["label"] == sel_scheme].iloc[0]
+    folio_no, prodcode, scheme_name = srow["folio_no"], srow["prodcode"], srow["scheme"]
+
+    txns = get_cams_txns_raw(folio_no, prodcode)
+    if txns.empty:
+        st.info("No transactions found.")
+        st.stop()
+
+    lots, matches = cg.replay_folio_scheme(txns)
+    default_cat = cg.classify_tax_category(scheme_name=scheme_name)
+
+    tc1, tc2 = st.columns(2)
+    with tc1:
+        tax_cat = st.radio(
+            "Tax category", ["equity", "debt"],
+            index=0 if default_cat == "equity" else 1, horizontal=True, key="cg_cat",
+            help="Equity = ≥65% equity allocation. Debt = everything else (debt funds, FoFs, "
+                 "gold/silver ETFs, international funds — 'specified mutual funds')."
+        )
+    with tc2:
+        slab = st.number_input(
+            "Income slab rate (%) — used only for debt category",
+            0.0, 42.0, 30.0, key="cg_slab"
+        ) / 100
+
+    tab1, tab2 = st.tabs(["✅ Realized Gains", "🔮 What-if Redemption"])
+
+    # ── TAB 1: already-placed redemptions ──
+    with tab1:
+        if not matches:
+            st.info("No redemptions found for this folio/scheme yet.")
+        else:
+            tax = cg.tax_for_matches(matches, tax_cat, slab)
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Total Gain", format_currency(tax["total_gain"]))
+            c2.metric("STCG", format_currency(tax["stcg_gain"]))
+            c3.metric("LTCG", format_currency(tax["ltcg_gain"]))
+            c4.metric("Estimated Tax", format_currency(tax["total_tax"]))
+            if tax_cat == "equity" and tax["ltcg_gain"] > 0:
+                st.caption("₹1,25,000/yr LTCG exemption assumed to apply fully here — "
+                          "reduce it if you have other equity LTCG this FY.")
+            st.dataframe(cg.matches_to_df(matches), width="stretch", hide_index=True)
+
+    # ── TAB 2: hypothetical future redemption ──
+    with tab2:
+        remaining_units = sum(l.remaining_units for l in lots)
+        st.metric("Units Currently Held (per transaction history)", f"{remaining_units:.4f}")
+
+        if remaining_units <= 0:
+            st.info("No remaining units to redeem.")
+        else:
+            isin = get_isin_for_cams_product(prodcode)
+            nav_hit = fetch_nav_by_isin(isin) if isin else None
+            auto_nav = float(nav_hit[0]) if nav_hit else 0.0
+
+            n1, n2 = st.columns(2)
+            with n1:
+                nav_input = st.number_input(
+                    "Redemption NAV (₹)", min_value=0.0, value=auto_nav, key="cg_hyp_nav",
+                    help="Auto-filled from latest AMFI NAV if resolved. Edit to project a different price."
+                )
+            with n2:
+                redeem_units = st.number_input(
+                    "Units to redeem", min_value=0.0, max_value=float(remaining_units),
+                    value=float(remaining_units), key="cg_hyp_units"
+                )
+
+            if nav_input <= 0:
+                st.warning("Enter a redemption NAV to calculate.")
+            else:
+                hyp_matches = cg.hypothetical_redemption(txns, redeem_units, nav_input)
+                hyp_tax = cg.tax_for_matches(hyp_matches, tax_cat, slab)
+
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Projected Gain", format_currency(hyp_tax["total_gain"]))
+                c2.metric("STCG", format_currency(hyp_tax["stcg_gain"]))
+                c3.metric("LTCG", format_currency(hyp_tax["ltcg_gain"]))
+                c4.metric("Estimated Tax", format_currency(hyp_tax["total_tax"]))
+                if tax_cat == "equity" and hyp_tax["ltcg_gain"] > 0:
+                    st.caption("₹1,25,000/yr LTCG exemption assumed to apply fully here — "
+                              "reduce it if you have other equity LTCG this FY.")
+                st.dataframe(cg.matches_to_df(hyp_matches), width="stretch", hide_index=True)
 
 # ==================== ⚙️ ADMIN PANEL ====================
 elif mode == "⚙️ Admin Panel":
