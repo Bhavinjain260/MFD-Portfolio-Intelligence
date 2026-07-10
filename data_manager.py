@@ -1717,13 +1717,11 @@ def render_data_manager():
         status = get_download_status()
 
         # If a background download just finished, show result
-        if status["done"] and not st.session_state.get("bse_notified", False):
-            st.session_state["bse_notified"] = True
+        # Persistent status banner (toast already fired globally in app.py)
+        if status["done"]:
             if status["ok"]:
-                st.toast(f"✅ BSE Scheme Master ready: {status['msg']}")
                 st.success(f"✅ {status['msg']}")
             else:
-                st.toast(f"❌ BSE download failed")
                 st.error(f"❌ {status['msg']}")
 
         # ── Auto Download Controls ──
