@@ -7,7 +7,6 @@ import logging
 import os
 import re
 import warnings
-from datetime import datetime
 from typing import Optional
 
 import pandas as pd
@@ -20,6 +19,9 @@ from init_db import init_db, get_conn
 from theme_patch import THEME_WATCHER_JS, render_theme
 import capital_gain as cg
 import data_manager as dm
+from datetime import datetime, timedelta, date as date_cls
+
+
 
 log = logging.getLogger(__name__)
 
@@ -143,6 +145,7 @@ def get_kfin_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
             WHERE td_acno = ? AND UPPER(TRIM(fmcode)) = ?
             ORDER BY td_trdt
         """, conn, params=(folio_no, product_code.strip().upper()))
+
 
 
 # ==================== Cams, Karvy and Manual entir Brokerage Data HELPERS ====================
@@ -385,10 +388,9 @@ def load_dedup_sip_counts() -> dict:
 
 # ==================== AMFI NAV SERVICE ====================
 
-
 AMFI_TEXT_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
+NAV_HISTORY_URL = "https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx"
 
-# ── File-based fallback paths (used when live AMFI fetch fails, e.g. no internet) ──
 NAV_TEXT_DIR = os.environ.get("NAV_TEXT_DIR", "nav_data")
 
 
@@ -401,26 +403,16 @@ def _snapshot_path(date_str: str) -> str:
 
 
 def _latest_snapshot_path() -> Optional[str]:
-    """Most recent saved snapshot file, regardless of date, or None if none exist."""
     _ensure_text_dir()
-    available = sorted(
-        f for f in os.listdir(NAV_TEXT_DIR) if f.startswith("nav_") and f.endswith(".txt")
-    )
-    if not available:
-        return None
-    return os.path.join(NAV_TEXT_DIR, available[-1])
+    available = sorted(f for f in os.listdir(NAV_TEXT_DIR) if f.startswith("nav_") and f.endswith(".txt"))
+    return os.path.join(NAV_TEXT_DIR, available[-1]) if available else None
 
 
 def get_snapshot_status() -> dict:
-    """
-    Info for an admin panel: does today's file exist, what's the latest
-    available file, how old is it. No network call.
-    """
     _ensure_text_dir()
     today = datetime.now().strftime("%Y-%m-%d")
     today_path = _snapshot_path(today)
     latest_path = _latest_snapshot_path()
-
     status = {
         "has_today": os.path.exists(today_path),
         "today_path": today_path if os.path.exists(today_path) else None,
@@ -435,114 +427,9 @@ def get_snapshot_status() -> dict:
     return status
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def load_previous_nav_map() -> dict:
-    path = _previous_snapshot_path()
-    if not path:
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            text = f.read()
-    except Exception:
-        return {}
-    nav_map, _, _ = _parse_nav_text(text)
-    return {isin: nav for isin, (nav, _) in nav_map.items()}
-
-
-def _get_file_nav_date(path: str) -> Optional[str]:
-    """Peek at a saved snapshot's actual NAV date (from its data, not filename)."""
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if ";" not in line:
-                    continue
-                parts = line.split(";")
-                if len(parts) < 6 or parts[0] == "Scheme Code":
-                    continue
-                date_str = parts[5].strip()
-                try:
-                    return datetime.strptime(date_str, "%d-%b-%Y").strftime("%Y-%m-%d")
-                except ValueError:
-                    continue
-    except Exception:
-        pass
-    return None
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def load_previous_nav_map() -> dict:
-    path, _ = _previous_snapshot_path()
-    if not path:
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            text = f.read()
-    except Exception:
-        return {}
-    nav_map, _, _ = _parse_nav_text(text)
-    return {isin: nav for isin, (nav, _) in nav_map.items()}
-
-
-def _previous_snapshot_path(current_nav_date: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
-    """
-    Most recent saved snapshot whose ACTUAL NAV date is earlier than current_nav_date.
-    If current_nav_date not given, uses the latest snapshot's own NAV date as reference.
-    """
-    _ensure_text_dir()
-    available = sorted(
-        f for f in os.listdir(NAV_TEXT_DIR) if f.startswith("nav_") and f.endswith(".txt")
-    )
-    if not available:
-        return None, None
-
-    if current_nav_date is None:
-        latest_path = os.path.join(NAV_TEXT_DIR, available[-1])
-        current_nav_date = _get_file_nav_date(latest_path)
-    if current_nav_date is None:
-        return None, None
-
-    # walk files newest -> oldest, skip files, find first with an EARLIER nav_date
-    for fname in reversed(available):
-        path = os.path.join(NAV_TEXT_DIR, fname)
-        file_nav_date = _get_file_nav_date(path)
-        if file_nav_date and file_nav_date < current_nav_date:
-            return path, file_nav_date
-
-    return None, None
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def load_previous_nav_map() -> dict:
-    path, _ = _previous_snapshot_path()
-    if not path:
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            text = f.read()
-    except Exception:
-        return {}
-    nav_map, _, _ = _parse_nav_text(text)
-    return {isin: nav for isin, (nav, _) in nav_map.items()}
-
-
-def get_previous_nav_date() -> Optional[str]:
-    _, date_str = _previous_snapshot_path()
-    return date_str
-
-
-# ==================== THE ONLY FUNCTION THAT CALLS AMFI ====================
+# ==================== THE LIVE-FILE DOWNLOAD ====================
 
 def download_and_save_nav(timeout: int = 30) -> dict:
-    """
-    Hits AMFI's server, saves the raw response verbatim to nav_data/nav_<today>.txt.
-    This is the ONLY function in this module that makes a network call.
-    Call this from: (a) app startup, via download_and_save_nav_if_needed(), and
-    (b) an explicit admin "Redownload NAV" button.
-
-    Raises on failure — caller decides how to handle/log it.
-    Returns {"path": str, "bytes": int, "date": str}.
-    """
     log.info("[AMFI] Downloading NAV file from %s", AMFI_TEXT_URL)
     res = requests.get(AMFI_TEXT_URL, timeout=timeout)
     res.raise_for_status()
@@ -555,26 +442,50 @@ def download_and_save_nav(timeout: int = 30) -> dict:
         f.write(text)
 
     size = os.path.getsize(path)
-    log.info("[AMFI] Saved NAV file: %s (%s bytes, %s lines)",
-             path, size, text.count("\n") + 1)
+    log.info("[AMFI] Saved NAV file: %s (%s bytes, %s lines)", path, size, text.count("\n") + 1)
     return {"path": path, "bytes": size, "date": today}
+
+from datetime import time as time_cls
+
+# NAV re-publish cutoffs during the day. Domestic NAVs settle ~3 PM,
+# foreign/international scheme NAVs land later, ~11 PM.
+NAV_REDOWNLOAD_TIMES = [time_cls(15, 0), time_cls(23, 0)]
+
+
+def _last_passed_cutoff_today(now: datetime) -> Optional[time_cls]:
+    """Latest cutoff time that has already passed today, or None if before all of them."""
+    passed = [t for t in NAV_REDOWNLOAD_TIMES if now.time() >= t]
+    return max(passed) if passed else None
 
 
 def download_and_save_nav_if_needed(force: bool = False) -> dict:
     """
-    Calls download_and_save_nav() only if today's file doesn't already exist.
-    Safe to call on every app start/restart — only actually hits AMFI once
-    per calendar day unless force=True (admin button).
-
-    Returns {"ran": bool, "ok": bool, "reason": str, "bytes": int|None}.
+    Re-fetches if:
+      - no file exists for today, OR
+      - today's file was saved BEFORE the most recent cutoff time that has
+        already passed (e.g. file saved at 9 AM, now it's 4 PM → 3 PM cutoff
+        already passed and file predates it → stale, refetch).
+    Otherwise skip — avoids hammering AMFI on every page load.
     """
-    today = datetime.now().strftime("%Y-%m-%d")
+    now = datetime.now()
+    today = now.strftime("%Y-%m-%d")
     today_path = _snapshot_path(today)
 
     if not force and os.path.exists(today_path):
-        size = os.path.getsize(today_path)
-        log.info("[AMFI] Today's NAV file already exists (%s, %s bytes) — not hitting AMFI", today, size)
-        return {"ran": False, "ok": True, "reason": f"already have today's file ({today})", "bytes": size}
+        cutoff = _last_passed_cutoff_today(now)
+        if cutoff is None:
+            size = os.path.getsize(today_path)
+            log.info("[AMFI] Before first cutoff — keeping existing file for %s", today)
+            return {"ran": False, "ok": True, "reason": "before first cutoff, file is current", "bytes": size}
+
+        file_mtime = datetime.fromtimestamp(os.path.getmtime(today_path))
+        cutoff_dt = datetime.combine(now.date(), cutoff)
+        if file_mtime >= cutoff_dt:
+            size = os.path.getsize(today_path)
+            log.info("[AMFI] File already fresh for cutoff %s (saved %s)", cutoff, file_mtime.time())
+            return {"ran": False, "ok": True, "reason": f"already fresh past {cutoff} cutoff", "bytes": size}
+
+        log.info("[AMFI] File saved at %s predates %s cutoff — redownloading", file_mtime.time(), cutoff)
 
     try:
         result = download_and_save_nav()
@@ -584,7 +495,7 @@ def download_and_save_nav_if_needed(force: bool = False) -> dict:
         return {"ran": True, "ok": False, "reason": f"download failed: {e}", "bytes": None}
 
 
-# ==================== PARSER (shared by file load) ====================
+# ==================== PARSER (shared by live + history files) ====================
 
 def _parse_nav_text(text: str) -> tuple[dict, dict, list[dict]]:
     """
@@ -605,7 +516,6 @@ def _parse_nav_text(text: str) -> tuple[dict, dict, list[dict]]:
         if not line:
             continue
 
-        # Non-data lines: AMC header or category header (no semicolons)
         if ";" not in line:
             if line.lower().endswith("mutual fund"):
                 current_amc = line
@@ -661,6 +571,165 @@ def _parse_nav_text(text: str) -> tuple[dict, dict, list[dict]]:
                     amc_map[isin_u] = current_amc
 
     return nav_map, amc_map, records
+
+
+# ==================== BUSINESS DAY LOGIC (needs _parse_nav_text above) ====================
+
+def get_last_business_day(from_date: date_cls | None = None) -> date_cls:
+    """Most recent business day BEFORE from_date. Weekend-only rollback (no holiday calendar)."""
+    from_date = from_date or datetime.now().date()
+    candidate = from_date - timedelta(days=1)
+    while candidate.weekday() >= 5:
+        candidate -= timedelta(days=1)
+    return candidate
+
+
+def _fmt_amfi_date(d) -> str:
+    return d.strftime("%d-%b-%Y")
+
+
+def _get_file_nav_date(path: str) -> Optional[str]:
+    """Actual NAV date embedded in a saved file's data (not filename)."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if ";" not in line:
+                    continue
+                parts = line.split(";")
+                if len(parts) < 6 or parts[0] == "Scheme Code":
+                    continue
+                try:
+                    return datetime.strptime(parts[5].strip(), "%d-%b-%Y").strftime("%Y-%m-%d")
+                except ValueError:
+                    continue
+    except Exception:
+        pass
+    return None
+
+
+def download_business_day_nav(target_date, timeout: int = 30) -> dict:
+    """Fetches AMFI history for one exact calendar date. Raises ValueError if empty (holiday)."""
+    date_str = _fmt_amfi_date(target_date)
+    log.info("[AMFI-HIST] Downloading NAV history for %s", date_str)
+    res = requests.get(
+        NAV_HISTORY_URL,
+        params={"tp": 1, "frmdt": date_str, "todt": date_str},
+        timeout=timeout,
+    )
+    res.raise_for_status()
+    text = res.text
+
+    nav_map, _, _ = _parse_nav_text(text)
+    if not nav_map:
+        raise ValueError(f"No NAV records for {date_str} — likely weekend/holiday")
+
+    _ensure_text_dir()
+    iso_date = target_date.strftime("%Y-%m-%d")
+    path = _snapshot_path(iso_date)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    size = os.path.getsize(path)
+    log.info("[AMFI-HIST] Saved %s: %s bytes, %s ISINs", path, size, len(nav_map))
+    return {"path": path, "bytes": size, "date": iso_date, "record_count": len(nav_map)}
+
+
+def _have_snapshot_for_date(iso_date: str) -> bool:
+    _ensure_text_dir()
+    for fname in os.listdir(NAV_TEXT_DIR):
+        if not (fname.startswith("nav_") and fname.endswith(".txt")):
+            continue
+        if _get_file_nav_date(os.path.join(NAV_TEXT_DIR, fname)) == iso_date:
+            return True
+    return False
+
+
+def sync_previous_business_day_nav(force: bool = False, timeout: int = 30, max_lookback: int = 10) -> dict:
+    """
+    Call AFTER today's live NAV file is downloaded. Reads the actual NAV date
+    of the latest snapshot (handles Sat/Sun where 'today's file' still carries
+    Friday's date), steps back one more business day from THAT date, fetches
+    it via history endpoint — skips network call if already held.
+    """
+    latest_path = _latest_snapshot_path()
+    if latest_path is None:
+        return {"ran": False, "ok": False, "reason": "no live snapshot yet"}
+
+    latest_nav_date_str = _get_file_nav_date(latest_path)
+    if not latest_nav_date_str:
+        return {"ran": False, "ok": False, "reason": "could not read NAV date from latest snapshot"}
+
+    latest_nav_date = datetime.strptime(latest_nav_date_str, "%Y-%m-%d").date()
+    target = get_last_business_day(latest_nav_date)
+
+    for _ in range(max_lookback):
+        iso_date = target.strftime("%Y-%m-%d")
+
+        if not force and _have_snapshot_for_date(iso_date):
+            log.info("[AMFI-HIST] Already have %s — skipping fetch", iso_date)
+            return {"ran": False, "ok": True, "reason": f"already have {iso_date}", "date": iso_date}
+
+        try:
+            result = download_business_day_nav(target, timeout=timeout)
+            return {"ran": True, "ok": True, "reason": "downloaded", **result}
+        except ValueError:
+            log.info("[AMFI-HIST] %s empty (holiday) — trying prior business day", iso_date)
+            target = get_last_business_day(target)
+        except requests.RequestException:
+            log.exception("[AMFI-HIST] Network error for %s", iso_date)
+            return {"ran": True, "ok": False, "reason": "network error", "date": iso_date}
+
+    return {"ran": True, "ok": False, "reason": f"no business day found within {max_lookback} days"}
+
+
+def sync_previous_business_day_nav_if_needed(force: bool = False) -> dict:
+    key = "prev_nav_last_attempt"
+    today = datetime.now().strftime("%Y-%m-%d")
+    if not force and st.session_state.get(key) == today:
+        return {"ran": False, "ok": True, "reason": "already attempted this session"}
+    st.session_state[key] = today
+    return sync_previous_business_day_nav(force=force)
+
+
+# ==================== PREVIOUS NAV MAP (single definition) ====================
+
+def _previous_snapshot_path(current_nav_date: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
+    _ensure_text_dir()
+    available = sorted(f for f in os.listdir(NAV_TEXT_DIR) if f.startswith("nav_") and f.endswith(".txt"))
+    if not available:
+        return None, None
+
+    if current_nav_date is None:
+        latest_path = os.path.join(NAV_TEXT_DIR, available[-1])
+        current_nav_date = _get_file_nav_date(latest_path)
+    if current_nav_date is None:
+        return None, None
+
+    for fname in reversed(available):
+        path = os.path.join(NAV_TEXT_DIR, fname)
+        file_nav_date = _get_file_nav_date(path)
+        if file_nav_date and file_nav_date < current_nav_date:
+            return path, file_nav_date
+    return None, None
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_previous_nav_map() -> dict:
+    path, _ = _previous_snapshot_path()
+    if not path:
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            text = f.read()
+    except Exception:
+        return {}
+    nav_map, _, _ = _parse_nav_text(text)
+    return {isin: nav for isin, (nav, _) in nav_map.items()}
+
+
+def get_previous_nav_date() -> Optional[str]:
+    _, date_str = _previous_snapshot_path()
+    return date_str
 
 
 # ==================== IN-MEMORY INDEX (loaded from file, not network) ====================
@@ -1647,6 +1716,7 @@ if mode == "📊 Dashboard":
         with st.spinner("⏳ Fetching ISIN mappings & latest NAVs from AMFI... (5–10s)"):
             try:
                 download_and_save_nav_if_needed()
+                sync_previous_business_day_nav_if_needed()
 
                 folio_nav_df = get_all_folios_with_isin_and_nav(get_conn)
 
@@ -3071,6 +3141,31 @@ elif mode == "🧮 Capital Gains":
 # ==================== ⚙️ ADMIN PANEL ====================
 elif mode == "⚙️ Admin Panel":
     st.header("⚙️ Admin Panel")
+
+    # ── Manual NAV redownload ──
+    nav_status = get_snapshot_status()
+    nc1, nc2 = st.columns([3, 1])
+    with nc1:
+        if nav_status["latest_date"]:
+            st.caption(f"📡 Latest saved NAV snapshot: **{nav_status['latest_date']}** "
+                       f"({nav_status['latest_bytes']:,} bytes)")
+        else:
+            st.caption("📡 No NAV snapshot saved yet.")
+    with nc2:
+        if st.button("🔄 Redownload NAV", width="stretch", help="Force-fetch latest NAV from AMFI, ignoring cycle cache"):
+            with st.spinner("Fetching latest NAV from AMFI..."):
+                result = download_and_save_nav_if_needed(force=True)
+            if result["ok"]:
+                st.cache_data.clear()
+                st.session_state.pop("folio_nav_df", None)
+                st.session_state.pop("folio_nav_summary", None)
+                _amfi.load(force=True)
+                st.success(f"✅ {result['reason']}")
+                st.rerun()
+            else:
+                st.error(f"❌ {result['reason']}")
+
+    st.divider()
 
     tab_upload, tab_raw = st.tabs(["📤 Upload Data", "📄 View Raw Data"])
 
