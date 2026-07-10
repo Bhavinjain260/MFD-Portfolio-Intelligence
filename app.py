@@ -114,6 +114,37 @@ def get_isin_for_cams_product(prodcode: str) -> Optional[str]:
         return row[0] if row else None
 
 
+def get_client_kfin_schemes(folio_ids: list[str]) -> pd.DataFrame:
+    if not folio_ids:
+        return pd.DataFrame(columns=["folio_no", "prodcode", "scheme"])
+    placeholders = ",".join(["?"] * len(folio_ids))
+    with get_conn() as conn:
+        return pd.read_sql(f"""
+            SELECT DISTINCT td_acno AS folio_no, UPPER(TRIM(fmcode)) AS prodcode,
+                   UPPER(TRIM(fmcode)) AS scheme
+            FROM kfin_mfsd201_transaction
+            WHERE td_acno IN ({placeholders})
+        """, conn, params=folio_ids)
+        # NOTE: no clean scheme-name field on hand, so scheme label is the raw
+        # product code for now. Swap in a Scheme_Name join once available.
+
+
+def get_kfin_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
+    """
+    No trxntype/trxn_nature included on purpose — until KFin redemption rows
+    exist and the real td_purred redemption code is confirmed, every row here
+    is treated as a purchase (safe, since you have zero redemptions today).
+    """
+    with get_conn() as conn:
+        return pd.read_sql("""
+            SELECT td_trdt AS traddate, td_units AS units,
+                   td_pop AS purprice, td_amt AS amount
+            FROM kfin_mfsd201_transaction
+            WHERE td_acno = ? AND UPPER(TRIM(fmcode)) = ?
+            ORDER BY td_trdt
+        """, conn, params=(folio_no, product_code.strip().upper()))
+
+
 # ==================== Cams, Karvy and Manual entir Brokerage Data HELPERS ====================
 def _resolve_amc_via_isin(get_conn, scheme_code_col_sql: str, table: str, scheme_code_value_alias: str):
     """
@@ -2868,26 +2899,44 @@ elif mode == "🧮 Capital Gains":
     cg_pan, cg_name = cg_row["pan"], cg_row["name"]
 
     with get_conn() as conn:
-        cg_folios = pd.read_sql(
+        cg_cams_folios = pd.read_sql(
             "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
             conn, params=(str(cg_pan).upper(), cg_name.upper())
         )
-    folio_ids = cg_folios["foliochk"].tolist()
-    if not folio_ids:
-        st.info("No CAMS folios for this client.")
+        cg_kfin_folios = pd.read_sql(
+            "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
+            conn, params=(str(cg_pan).upper(), cg_name.upper())
+        )
+
+    cams_folio_ids = cg_cams_folios["foliochk"].tolist()
+    kfin_folio_ids = cg_kfin_folios["folio"].tolist()
+
+    if not cams_folio_ids and not kfin_folio_ids:
+        st.info("No folios for this client.")
         st.stop()
 
-    schemes_df = get_client_cams_schemes(folio_ids)
+    cams_schemes = get_client_cams_schemes(cams_folio_ids)
+    cams_schemes["rta"] = "CAMS"
+
+    kfin_schemes = get_client_kfin_schemes(kfin_folio_ids)
+    kfin_schemes["rta"] = "KFinTech"
+
+    schemes_df = pd.concat([cams_schemes, kfin_schemes], ignore_index=True)
     if schemes_df.empty:
-        st.info("No CAMS transactions for this client.")
+        st.info("No transactions for this client.")
         st.stop()
 
-    schemes_df["label"] = schemes_df["folio_no"] + " — " + schemes_df["scheme"]
+    schemes_df["label"] = schemes_df["folio_no"] + " — " + schemes_df["scheme"] + " (" + schemes_df["rta"] + ")"
     sel_scheme = st.selectbox("Folio / Scheme", schemes_df["label"].tolist())
     srow = schemes_df[schemes_df["label"] == sel_scheme].iloc[0]
-    folio_no, prodcode, scheme_name = srow["folio_no"], srow["prodcode"], srow["scheme"]
+    folio_no, prodcode, scheme_name, rta_sel = srow["folio_no"], srow["prodcode"], srow["scheme"], srow["rta"]
+    is_kfin = rta_sel == "KFinTech"
 
-    txns = get_cams_txns_raw(folio_no, prodcode)
+    if is_kfin:
+        st.info("⚠️ KFinTech: no redemption history yet, so only What-if Redemption is shown. "
+                "Realized Gains unlocks once redemption transactions exist and the redemption code is confirmed.")
+
+    txns = get_kfin_txns_raw(folio_no, prodcode) if is_kfin else get_cams_txns_raw(folio_no, prodcode)
     if txns.empty:
         st.info("No transactions found.")
         st.stop()
@@ -2909,21 +2958,28 @@ elif mode == "🧮 Capital Gains":
             0.0, 42.0, 30.0, key="cg_slab"
         ) / 100
 
-    tab1, tab2 = st.tabs(["✅ Realized Gains", "🔮 What-if Redemption"])
+    if is_kfin:
+        tab2 = st.tabs(["🔮 What-if Redemption"])[0]
+        tab1 = None
+    else:
+        tab1, tab2 = st.tabs(["✅ Realized Gains", "🔮 What-if Redemption"])
 
-    # ── TAB 1: already-placed redemptions ──
-    with tab1:
-        if not matches:
-            st.info("No redemptions found for this folio/scheme yet.")
-        else:
-            tax = cg.tax_for_matches(matches, tax_cat, slab)
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Total Gain", format_currency(tax["total_gain"]))
-            c2.metric("STCG", format_currency(tax["stcg_gain"]))
-            c2.caption(f"Tax: {format_currency(tax['stcg_tax'])}")
-            c3.metric("LTCG", format_currency(tax["ltcg_gain"]))
-            c3.caption(f"Tax: {format_currency(tax['ltcg_tax'])}")
-            c4.metric("Estimated Tax", format_currency(tax["total_tax"]))
+        # ── TAB 1: already-placed redemptions (CAMS only) ──
+    if tab1 is not None:
+        with (tab1):
+            if not matches:
+
+                st.info("No redemptions found for this folio/scheme yet.")
+
+            else:
+                 tax = cg.tax_for_matches(matches, tax_cat, slab)
+                 c1, c2, c3, c4 = st.columns(4)
+                 c1.metric("Total Gain", format_currency(tax["total_gain"]))
+                 c2.metric("STCG", format_currency(tax["stcg_gain"]))
+                 c2.caption(f"Tax: {format_currency(tax['stcg_tax'])}")
+                 c3.metric("LTCG", format_currency(tax["ltcg_gain"]))
+                 c3.caption(f"Tax: {format_currency(tax['ltcg_tax'])}")
+                 c4.metric("Estimated Tax", format_currency(tax["total_tax"]))
 
 
             if tax_cat == "equity":
