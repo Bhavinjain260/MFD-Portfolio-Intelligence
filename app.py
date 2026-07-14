@@ -15,6 +15,7 @@ import requests
 import streamlit as st
 
 import data_manager
+import xirr
 from init_db import init_db, get_conn
 from theme_patch import THEME_WATCHER_JS, render_theme
 import capital_gain as cg
@@ -2411,6 +2412,11 @@ elif mode == "👥 Clients":
             ["👨‍👩‍👧‍👦 Family Portfolio", "📈 Portfolio & AUM", "🔄 Active SIPs"]
         )
 
+        from xirr_debug import compute_xirr_debug
+
+        compute_xirr_debug("FOLIO123", "BANDCG", "CAMS", current_value=19217.81, get_conn=get_conn)
+        compute_xirr_debug("ACCNO456", "FMCODE", "KFIN", current_value=5000.0, get_conn=get_conn)
+
     # ═══════════════════════════════════════════════════════════
     # TAB FAMILY — Family Portfolio (only when family exists)
     # ═══════════════════════════════════════════════════════════
@@ -3041,6 +3047,9 @@ elif mode == "👥 Clients":
                 )
         else:
             st.info("No SIP records found.")
+
+
+
 
 
 
