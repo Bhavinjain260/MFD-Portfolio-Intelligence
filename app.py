@@ -2613,7 +2613,6 @@ elif mode == "👥 Clients":
                     if not kfin_invested_df.empty:
                         kfin_invested_df['product_code_norm'] = kfin_invested_df['product_code'].astype(
                             str).str.strip().str.upper()
-                        # Use unique suffix '_kfin_client' to avoid collision with Dashboard columns
                         holdings = holdings.merge(
                             kfin_invested_df,
                             on=['folio_id', 'product_code_norm'],
@@ -2635,7 +2634,6 @@ elif mode == "👥 Clients":
                     if not cams_invested_df.empty:
                         cams_invested_df['product_code_norm'] = cams_invested_df['product_code'].astype(
                             str).str.strip().str.upper()
-                        # Use unique suffix '_cams_client' to avoid collision with Dashboard columns
                         holdings = holdings.merge(
                             cams_invested_df,
                             on=['folio_id', 'product_code_norm'],
@@ -2679,6 +2677,59 @@ elif mode == "👥 Clients":
 
                 holdings["gain_loss"] = holdings["nav_based_aum"] - holdings["file_aum"]
 
+                # ═══════════════════════════════════════════════════════════
+                # COMPUTE XIRR PER FOLIO (like invested value calculation)
+                # ═══════════════════════════════════════════════════════════
+                st.caption("⏳ Computing XIRR per folio...")
+
+                folio_xirr_map = {}
+                xirr_errors = []
+
+                for fid in holdings["folio_id"].unique():
+                    folio_rows = holdings[holdings["folio_id"] == fid]
+                    if folio_rows.empty:
+                        continue
+
+                    folio_row = folio_rows.iloc[0]
+                    frta = folio_row["rta"]
+                    fprod = folio_row.get("product_code")
+                    fvalue = folio_row["nav_based_aum"]
+
+                    if pd.isna(fvalue) or fvalue <= 0:
+                        xirr_errors.append(f"{fid}: No NAV/current value")
+                        continue
+
+                    try:
+                        # Call XIRR function with verbose=True for terminal logging
+                        xres = xirr.compute_xirr_for_folio(
+                            folio_no=fid,
+                            get_conn=get_conn,
+                            rta=frta,
+                            product_code=fprod,
+                            current_value=float(fvalue),
+                            verbose=True,  # <-- Prints to terminal for Excel verification
+                        )
+
+                        if xres["xirr"] is not None:
+                            folio_xirr_map[fid] = xres["xirr"]
+                            if show_debug:
+                                st.write(f"✅ {fid}: XIRR = {xres['xirr_pct']}")
+                        else:
+                            err_msg = xres.get("error") or "Unknown error"
+                            xirr_errors.append(f"{fid}: {err_msg}")
+                            if show_debug:
+                                st.write(f"❌ {fid}: {err_msg}")
+
+                    except Exception as e:
+                        xirr_errors.append(f"{fid}: Exception - {e}")
+                        if show_debug:
+                            st.write(f"❌ {fid}: Exception - {e}")
+
+                if show_debug and xirr_errors:
+                    with st.expander("XIRR Errors"):
+                        for err in xirr_errors:
+                            st.caption(err)
+
                 # ── Club rows by scheme (across folios) for display ──
                 grouped_holdings = (
                     holdings.groupby(["amc_name", "scheme_name"], dropna=False)
@@ -2689,6 +2740,7 @@ elif mode == "👥 Clients":
                         one_day_diff=("one_day_diff", "sum"),
                         folios=("folio_id", "nunique"),
                         rta=("rta", lambda s: ", ".join(sorted(set(s.dropna())))),
+                        folio_ids=("folio_id", lambda s: list(s.unique())),
                     )
                     .reset_index()
                 )
@@ -2697,13 +2749,21 @@ elif mode == "👥 Clients":
                         grouped_holdings["nav_based_aum"] / total_current * 100
                 ).fillna(0) if total_current > 0 else 0
 
+                # ── Average XIRR across folios for each scheme ──
+                def _avg_xirr_for_scheme(folio_ids):
+                    vals = [folio_xirr_map.get(fid) for fid in folio_ids if fid in folio_xirr_map]
+                    return sum(vals) / len(vals) if vals else None
+
+                grouped_holdings["xirr"] = grouped_holdings["folio_ids"].apply(_avg_xirr_for_scheme)
+
                 display_holdings = grouped_holdings[[
                     'rta', 'amc_name', 'scheme_name', 'folios', 'units', 'file_aum',
-                    'nav_based_aum', 'gain_loss', 'one_day_diff', 'portfolio_pct'
+                    'nav_based_aum', 'gain_loss', 'one_day_diff', 'xirr', 'portfolio_pct'
                 ]].rename(columns={
                     'rta': 'RTA', 'amc_name': 'AMC', 'scheme_name': 'Scheme', 'folios': 'Folios',
                     'file_aum': 'Invested', 'nav_based_aum': 'Current Value',
-                    'gain_loss': 'Gain/Loss', 'one_day_diff': '1D Diff', 'portfolio_pct': '% Portfolio'
+                    'gain_loss': 'Gain/Loss', 'one_day_diff': '1D Diff',
+                    'xirr': 'XIRR', 'portfolio_pct': '% Portfolio'
                 })
 
                 display_holdings_sorted = display_holdings.sort_values("Current Value", ascending=False).reset_index(
@@ -2718,6 +2778,7 @@ elif mode == "👥 Clients":
                         "Current Value": st.column_config.NumberColumn(format="₹ %.2f"),
                         "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
                         "1D Diff": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "XIRR": st.column_config.NumberColumn(format="%.2f%%"),
                         "% Portfolio": st.column_config.NumberColumn(format="%.2f%%"),
                     }
                 )
