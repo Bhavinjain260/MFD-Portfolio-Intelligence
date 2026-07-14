@@ -121,14 +121,21 @@ def get_client_kfin_schemes(folio_ids: list[str]) -> pd.DataFrame:
         return pd.DataFrame(columns=["folio_no", "prodcode", "scheme"])
     placeholders = ",".join(["?"] * len(folio_ids))
     with get_conn() as conn:
-        return pd.read_sql(f"""
-            SELECT DISTINCT td_acno AS folio_no, UPPER(TRIM(fmcode)) AS prodcode,
-                   UPPER(TRIM(fmcode)) AS scheme
+        df = pd.read_sql(f"""
+            SELECT DISTINCT td_acno AS folio_no, UPPER(TRIM(fmcode)) AS prodcode
             FROM kfin_mfsd201_transaction
             WHERE td_acno IN ({placeholders})
         """, conn, params=folio_ids)
-        # NOTE: no clean scheme-name field on hand, so scheme label is the raw
-        # product code for now. Swap in a Scheme_Name join once available.
+        bse = pd.read_sql("""
+            SELECT UPPER(TRIM(Channel_Partner_Code)) AS cp_code,
+                   MAX(Scheme_Name) AS scheme_name
+            FROM bse_scheme_master
+            WHERE Channel_Partner_Code IS NOT NULL AND TRIM(Channel_Partner_Code) != ''
+            GROUP BY UPPER(TRIM(Channel_Partner_Code))
+        """, conn)
+    df = df.merge(bse, left_on="prodcode", right_on="cp_code", how="left")
+    df["scheme"] = df["scheme_name"].fillna(df["prodcode"])
+    return df[["folio_no", "prodcode", "scheme"]]
 
 
 def get_kfin_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
@@ -3023,10 +3030,14 @@ elif mode == "🧮 Capital Gains":
                  "gold/silver ETFs, international funds — 'specified mutual funds')."
         )
     with tc2:
-        slab = st.number_input(
-            "Income slab rate (%) — used only for debt category",
-            0.0, 42.0, 30.0, key="cg_slab"
-        ) / 100
+        if tax_cat == "debt":
+            slab = st.number_input(
+                "Income slab rate (%) — applied to debt gains",
+                0.0, 42.0, 30.0, key="cg_slab"
+            ) / 100
+            st.caption(f"Slab rate applied: {slab * 100:.1f}%")
+        else:
+            slab = 0.30  # unused for equity
 
     if is_kfin:
         tab2 = st.tabs(["🔮 What-if Redemption"])[0]
@@ -3036,29 +3047,29 @@ elif mode == "🧮 Capital Gains":
 
         # ── TAB 1: already-placed redemptions (CAMS only) ──
     if tab1 is not None:
-        with (tab1):
+        with tab1:
             if not matches:
-
                 st.info("No redemptions found for this folio/scheme yet.")
-
             else:
-                 tax = cg.tax_for_matches(matches, tax_cat, slab)
-                 c1, c2, c3, c4 = st.columns(4)
-                 c1.metric("Total Gain", format_currency(tax["total_gain"]))
-                 c2.metric("STCG", format_currency(tax["stcg_gain"]))
-                 c2.caption(f"Tax: {format_currency(tax['stcg_tax'])}")
-                 c3.metric("LTCG", format_currency(tax["ltcg_gain"]))
-                 c3.caption(f"Tax: {format_currency(tax['ltcg_tax'])}")
-                 c4.metric("Estimated Tax", format_currency(tax["total_tax"]))
+                tax = cg.tax_for_matches(matches, tax_cat, slab)
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Total Gain", format_currency(tax["total_gain"]))
+                c2.metric("STCG", format_currency(tax["stcg_gain"]))
+                c2.caption(f"Tax: {format_currency(tax['stcg_tax'])}")
+                c3.metric("LTCG", format_currency(tax["ltcg_gain"]))
+                c3.caption(f"Tax: {format_currency(tax['ltcg_tax'])}")
+                c4.metric("Estimated Tax", format_currency(tax["total_tax"]))
 
+                if tax_cat == "equity":
+                    used, limit = tax["exemption_used"], tax["exemption_limit"]
+                    st.progress(min(used / limit, 1.0) if limit else 0.0,
+                                text=f"LTCG exemption used: {format_currency(used)} / {format_currency(limit)}")
+                    st.caption(f"Taxable LTCG: {format_currency(tax['ltcg_taxable'])} "
+                               f"— exemption assumed available in full; reduce if you have other equity LTCG this FY.")
+                else:
+                    st.caption(f"Slab rate applied: {slab * 100:.1f}%")
 
-            if tax_cat == "equity":
-                used, limit = tax["exemption_used"], tax["exemption_limit"]
-                st.progress(min(used / limit, 1.0) if limit else 0.0,
-                            text=f"LTCG exemption used: {format_currency(used)} / {format_currency(limit)}")
-                st.caption(f"Taxable LTCG: {format_currency(tax['ltcg_taxable'])} "
-                           f"— exemption assumed available in full; reduce if you have other equity LTCG this FY.")
-            st.dataframe(cg.matches_to_df(matches), width="stretch", hide_index=True)
+                st.dataframe(cg.matches_to_df(matches), width="stretch", hide_index=True)
 
     # ── TAB 2: hypothetical future redemption ──
     with tab2:
