@@ -2084,7 +2084,7 @@ if mode == "📊 Dashboard":
     folio_nav_df = pd.DataFrame()
     nav_stats = {}
 
-    if "folio_nav_df" not in st.session_state:
+    if "folio_nav_df" not in st.session_state or "folio_nav_summary" not in st.session_state:
         with st.spinner("⏳ Fetching ISIN mappings & latest NAVs from AMFI... (5–10s)"):
             try:
                 download_and_save_nav_if_needed()
