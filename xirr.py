@@ -132,11 +132,153 @@ def compute_xirr_debug(
     return {"xirr_pct": xirr_pct, "cash_flows": cash_flows}
 
 
-if __name__ == "__main__":
-    # Quick manual test against your Excel example, no DB needed.
-    dates = ["9/15/25", "11/17/25", "3/16/26", "8/18/25", "5/15/26", "4/15/26",
-              "10/15/25", "12/15/25", "2/16/26", "1/16/26", "6/15/26", "7/15/26"]
-    amounts = [-1499.93, -1499.93, -1499.93, -2499.88, -1499.93, -1499.93,
-               -1499.93, -1499.93, -1499.93, -1499.93, -1499.93, 19217.81554]
-    result = calculate_xirr(dates, amounts)
-    print(f"Test XIRR (should be ~19.4985%): {result * 100:.4f}%")
+import logging
+from datetime import datetime
+import pandas as pd
+from scipy.optimize import newton, brentq
+
+log = logging.getLogger(__name__)
+
+
+def calculate_xirr(dates, amounts, guess: float = 0.01):
+    """Core solver — matches Excel's =XIRR(values, dates, 0.01)."""
+    dates = pd.to_datetime(dates)
+    amounts = [float(a) for a in amounts]
+    pairs = sorted(zip(dates, amounts), key=lambda x: x[0])
+    dates = [p[0] for p in pairs]
+    amounts = [p[1] for p in pairs]
+    ref = dates[0]
+
+    def npv(rate):
+        if rate <= -1.0:
+            return float("inf")
+        return sum(
+            cf / ((1.0 + rate) ** ((d - ref).days / 365.0))
+            for d, cf in zip(dates, amounts)
+        )
+
+    try:
+        return newton(npv, guess, tol=1e-12, maxiter=200)
+    except Exception:
+        pass
+    try:
+        return brentq(npv, -0.9999, 10.0, xtol=1e-12, maxiter=200)
+    except Exception:
+        return None
+
+
+def compute_xirr_for_folio(
+        folio_no: str,
+        product_code: str,
+        rta: str,
+        current_value: float,
+        get_conn,
+        as_of_date=None,
+        verbose: bool = False,
+) -> dict:
+    """
+    Folio+scheme level XIRR.
+
+    Sign convention:
+      CAMS : trxntype == 'R1'  -> redemption  -> +amount (inflow)
+             everything else   -> purchase    -> -amount (outflow)
+      KFin : all treated as purchase (negative) until redemption code confirmed.
+
+    Final row: as_of_date (default today) + current_value (positive).
+
+    Returns {"xirr": float|None, "xirr_pct": float|None, "cash_flows": [...]}
+    """
+    rta_clean = rta.strip().upper()
+    as_of_date = pd.to_datetime(as_of_date or datetime.now())
+
+    # ── Fetch raw rows ──
+    with get_conn() as conn:
+        if rta_clean == "CAMS":
+            df = pd.read_sql(
+                """
+                SELECT traddate, trxntype, amount
+                FROM cams_wbr2_transaction
+                WHERE folio_no = ? AND UPPER(TRIM(prodcode)) = ?
+                """,
+                conn,
+                params=(folio_no, product_code.strip().upper()),
+            )
+        elif rta_clean in ("KFINTECH", "KFIN", "KARVY"):
+            df = pd.read_sql(
+                """
+                SELECT td_trdt AS traddate, td_amt AS amount
+                FROM kfin_mfsd201_transaction
+                WHERE td_acno = ? AND UPPER(TRIM(fmcode)) = ?
+                """,
+                conn,
+                params=(folio_no, product_code.strip().upper()),
+            )
+        else:
+            if verbose:
+                log.info("[XIRR] Unknown RTA: %s", rta)
+            return {"xirr": None, "xirr_pct": None, "cash_flows": []}
+
+    if df.empty:
+        if verbose:
+            log.info("[XIRR] %s/%s/%s: no transactions found", rta_clean, folio_no, product_code)
+        return {"xirr": None, "xirr_pct": None, "cash_flows": []}
+
+    # ── Chronological sort (datetime, NOT string) ──
+    df["traddate"] = pd.to_datetime(df["traddate"], errors="coerce")
+    df = df.dropna(subset=["traddate"]).sort_values("traddate").reset_index(drop=True)
+
+    if df.empty:
+        if verbose:
+            log.info("[XIRR] %s/%s/%s: no parseable dates", rta_clean, folio_no, product_code)
+        return {"xirr": None, "xirr_pct": None, "cash_flows": []}
+
+    dates = df["traddate"].tolist()
+
+    # ── Build signed amounts ──
+    if rta_clean == "CAMS":
+        amounts = []
+        for _, row in df.iterrows():
+            raw = abs(float(row["amount"])) if pd.notna(row["amount"]) else 0.0
+            is_redemption = str(row.get("trxntype", "")).strip().upper() == "R1"
+            amounts.append(raw if is_redemption else -raw)
+    else:
+        # KFin: everything treated as purchase (negative) for now
+        amounts = [-abs(float(a)) for a in df["amount"]]
+
+    # ── Terminal valuation ──
+    dates.append(as_of_date)
+    amounts.append(abs(float(current_value)))
+
+    if len(dates) < 2:
+        if verbose:
+            log.info("[XIRR] %s/%s/%s: insufficient cash flows", rta_clean, folio_no, product_code)
+        return {"xirr": None, "xirr_pct": None, "cash_flows": []}
+
+    # ── Terminal debug print (same shape as your Excel sheet) ──
+    if verbose:
+        log.info("=" * 60)
+        log.info("XIRR — %s | Folio: %s | Scheme: %s", rta_clean, folio_no, product_code)
+        log.info("=" * 60)
+        log.info(f"{'Date':<12} {'Amount':>15} {'Type':<12}")
+        log.info("-" * 60)
+        for d, a in zip(dates[:-1], amounts[:-1]):
+            typ = "Redemption" if a > 0 else "Purchase"
+            log.info(f"{d.strftime('%Y-%m-%d'):<12} {a:>15.2f} {typ:<12}")
+        log.info("-" * 60)
+        log.info(f"{dates[-1].strftime('%Y-%m-%d'):<12} {amounts[-1]:>15.2f} {'Current Val':<12}")
+        log.info("-" * 60)
+
+    xirr = calculate_xirr(dates, amounts)
+    xirr_pct = round(xirr * 100, 4) if xirr is not None else None
+
+    if verbose:
+        log.info("XIRR: %s%%", xirr_pct if xirr_pct is not None else "FAILED TO CONVERGE")
+        log.info("=" * 60)
+
+    cash_flows = [
+        {"date": d.strftime("%Y-%m-%d"), "amount": a}
+        for d, a in zip(dates, amounts)
+    ]
+    return {"xirr": xirr, "xirr_pct": xirr_pct, "cash_flows": cash_flows}
+
+

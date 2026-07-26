@@ -2540,7 +2540,6 @@ if mode == "📊 Dashboard":
 elif mode == "👥 Clients":
     st.header("👤 Client Portfolio & Analytics")
 
-
     # ── Client Search ──
     @st.cache_data(ttl=300)
     def load_clients_search():
@@ -2559,7 +2558,6 @@ elif mode == "👥 Clients":
                 WHERE primary_holder_pan IS NOT NULL
                    OR guardian_pan IS NOT NULL
             """, conn)
-
 
     clients_df = load_clients_search()
     if clients_df.empty:
@@ -2674,11 +2672,6 @@ elif mode == "👥 Clients":
         tab_family, tab_portfolio, tab_sips = st.tabs(
             ["👨‍👩‍👧‍👦 Family Portfolio", "📈 Portfolio & AUM", "🔄 Active SIPs"]
         )
-
-
-
-        compute_xirr_debug("FOLIO123", "BANDCG", "CAMS", current_value=19217.81, get_conn=get_conn)
-        compute_xirr_debug("ACCNO456", "FMCODE", "KFIN", current_value=5000.0, get_conn=get_conn)
 
     # ═══════════════════════════════════════════════════════════
     # TAB FAMILY — Family Portfolio (only when family exists)
@@ -2843,389 +2836,386 @@ elif mode == "👥 Clients":
     # ═══════════════════════════════════════════════════════════
     # TAB 1 — Portfolio & AUM
     # ═══════════════════════════════════════════════════════════
-        with tab_portfolio:
-            if not all_folios:
-                with get_conn() as conn:
-                    pending_sip = pd.read_sql(
-                        "SELECT scheme_name, installments_amt, frequency_type, status, start_date "
-                        "FROM bse_sip WHERE client_code = ? AND UPPER(TRIM(status)) = 'ACTIVE'",
-                        conn, params=(client_code,)
-                    )
-                if not pending_sip.empty:
-                    st.warning("⏳ No portfolio yet — SIP registered, first installment pending.")
-                    st.dataframe(
-                        pending_sip.rename(columns={
-                            "scheme_name": "Scheme", "installments_amt": "Amount",
-                            "frequency_type": "Frequency", "status": "Status", "start_date": "Start Date"
-                        }),
-                        use_container_width=True, hide_index=True
-                    )
-                else:
-                    st.info("No holdings found.")
+    with tab_portfolio:
+        if not all_folios:
+            with get_conn() as conn:
+                pending_sip = pd.read_sql(
+                    "SELECT scheme_name, installments_amt, frequency_type, status, start_date "
+                    "FROM bse_sip WHERE client_code = ? AND UPPER(TRIM(status)) = 'ACTIVE'",
+                    conn, params=(client_code,)
+                )
+            if not pending_sip.empty:
+                st.warning("⏳ No portfolio yet — SIP registered, first installment pending.")
+                st.dataframe(
+                    pending_sip.rename(columns={
+                        "scheme_name": "Scheme", "installments_amt": "Amount",
+                        "frequency_type": "Frequency", "status": "Status", "start_date": "Start Date"
+                    }),
+                    use_container_width=True, hide_index=True
+                )
             else:
-                show_debug = st.toggle("🐞 Show debug logs", value=False, key="cams_debug_toggle")
+                st.info("No holdings found.")
+        else:
+            show_debug = st.toggle("🐞 Show debug logs", value=False, key="cams_debug_toggle")
 
-                holdings = folio_nav_df[folio_nav_df['folio_id'].isin(all_folios)].copy()
+            holdings = folio_nav_df[folio_nav_df['folio_id'].isin(all_folios)].copy()
 
-                if not holdings.empty:
-                    # ── Clean up any leftover merge columns from Dashboard init ──
-                    drop_leftover = [c for c in holdings.columns
-                                     if c.endswith('_kfin') or c.endswith('_cams')
-                                     or c in ('product_code_norm', 'invested_amount', 'total_units')]
-                    holdings = holdings.drop(columns=drop_leftover, errors='ignore')
+            if not holdings.empty:
+                # ── Clean up any leftover merge columns from Dashboard init ──
+                drop_leftover = [c for c in holdings.columns
+                                 if c.endswith('_kfin') or c.endswith('_cams')
+                                 or c in ('product_code_norm', 'invested_amount', 'total_units')]
+                holdings = holdings.drop(columns=drop_leftover, errors='ignore')
 
-                    holdings['product_code_norm'] = holdings['product_code'].astype(str).str.strip().str.upper()
+                holdings['product_code_norm'] = holdings['product_code'].astype(str).str.strip().str.upper()
 
-                    # ── KFinTech: replace file_aum with transaction-summed invested amount ──
-                    if 'KFinTech' in holdings['rta'].values:
-                        kfin_invested_df = get_kfin_invested_per_scheme(kfin_f['folio'].tolist())
-                        if not kfin_invested_df.empty:
-                            kfin_invested_df['product_code_norm'] = kfin_invested_df['product_code'].astype(
-                                str).str.strip().str.upper()
-                            holdings = holdings.merge(
-                                kfin_invested_df,
-                                on=['folio_id', 'product_code_norm'],
-                                how='left',
-                                suffixes=('', '_kfin_client')
-                            )
-                            kfin_mask = holdings['rta'] == 'KFinTech'
-                            has_txn = kfin_mask & holdings['invested_amount'].notna()
-                            holdings.loc[has_txn, 'file_aum'] = holdings.loc[has_txn, 'invested_amount']
-                            holdings.loc[has_txn, 'nav_based_aum'] = (
-                                    holdings.loc[has_txn, 'units'] * holdings.loc[has_txn, 'current_nav']
-                            )
-                            holdings = holdings.drop(
-                                columns=['invested_amount', 'product_code_norm_kfin_client'], errors='ignore')
-
-                    # ── CAMS: replace file_aum AND units with transaction-summed values ──
-                    if 'CAMS' in holdings['rta'].values:
-                        cams_invested_df = get_cams_invested_per_scheme(cams_f['foliochk'].tolist())
-                        if not cams_invested_df.empty:
-                            cams_invested_df['product_code_norm'] = cams_invested_df['product_code'].astype(
-                                str).str.strip().str.upper()
-                            holdings = holdings.merge(
-                                cams_invested_df,
-                                on=['folio_id', 'product_code_norm'],
-                                how='left',
-                                suffixes=('', '_cams_client')
-                            )
-                            cams_mask = holdings['rta'] == 'CAMS'
-                            has_txn = cams_mask & holdings['invested_amount'].notna()
-                            holdings.loc[has_txn, 'file_aum'] = holdings.loc[has_txn, 'invested_amount']
-                            holdings.loc[has_txn, 'units'] = holdings.loc[has_txn, 'total_units']
-                            holdings.loc[has_txn, 'nav_based_aum'] = (
-                                    holdings.loc[has_txn, 'units'] * holdings.loc[has_txn, 'current_nav']
-                            )
-                            holdings = holdings.drop(
-                                columns=['invested_amount', 'total_units', 'product_code_norm_cams_client'],
-                                errors='ignore')
-
-                    # Clean up temp column
-                    holdings = holdings.drop(columns=['product_code_norm'], errors='ignore')
-
-                    prev_nav_map = load_previous_nav_map()
-                    holdings["prev_nav"] = holdings["isin"].apply(
-                        lambda i: prev_nav_map.get(str(i).strip().upper()) if pd.notna(i) else None
-                    )
-                    holdings["one_day_diff"] = (
-                            (holdings["current_nav"] - holdings["prev_nav"]) * holdings["units"]
-                    ).fillna(0.0)
-
-                    total_invested = holdings['file_aum'].sum()
-                    total_current = holdings['nav_based_aum'].sum() or 0
-                    total_gain_loss = total_current - total_invested
-                    total_one_day_diff = holdings["one_day_diff"].sum()
-
-                    h1, h2, h3, h4, h5 = st.columns(5)
-                    h1.metric("Total Invested", format_aum(total_invested))
-                    h2.metric("Current Value", format_aum(total_current))
-                    h3.metric("Gain / Loss", format_aum(total_gain_loss),
-                              delta=f"{(total_gain_loss / total_invested * 100):.2f}%" if total_invested > 0 else "0%")
-                    h4.metric("Total Folios", len(all_folios))
-                    h5.metric("1-Day Diff", format_aum(total_one_day_diff), delta=format_aum(total_one_day_diff))
-
-                    holdings["gain_loss"] = holdings["nav_based_aum"] - holdings["file_aum"]
-
-                    # ═══════════════════════════════════════════════════════════
-                    # COMPUTE XIRR PER FOLIO (like invested value calculation)
-                    # ═══════════════════════════════════════════════════════════
-                    st.caption("⏳ Computing XIRR per folio...")
-
-                    folio_xirr_map = {}
-                    xirr_errors = []
-
-                    for fid in holdings["folio_id"].unique():
-                        folio_rows = holdings[holdings["folio_id"] == fid]
-                        if folio_rows.empty:
-                            continue
-
-                        folio_row = folio_rows.iloc[0]
-                        frta = folio_row["rta"]
-                        fprod = folio_row.get("product_code")
-                        fvalue = folio_row["nav_based_aum"]
-
-                        if pd.isna(fvalue) or fvalue <= 0:
-                            xirr_errors.append(f"{fid}: No NAV/current value")
-                            continue
-
-                        try:
-                            # Call XIRR function with verbose=True for terminal logging
-                            xres = xirr.compute_xirr_for_folio(
-                                folio_no=fid,
-                                get_conn=get_conn,
-                                rta=frta,
-                                product_code=fprod,
-                                current_value=float(fvalue),
-                                verbose=True,  # <-- Prints to terminal for Excel verification
-                            )
-
-                            if xres["xirr"] is not None:
-                                folio_xirr_map[fid] = xres["xirr"]
-                                if show_debug:
-                                    st.write(f"✅ {fid}: XIRR = {xres['xirr_pct']}")
-                            else:
-                                err_msg = xres.get("error") or "Unknown error"
-                                xirr_errors.append(f"{fid}: {err_msg}")
-                                if show_debug:
-                                    st.write(f"❌ {fid}: {err_msg}")
-
-                        except Exception as e:
-                            xirr_errors.append(f"{fid}: Exception - {e}")
-                            if show_debug:
-                                st.write(f"❌ {fid}: Exception - {e}")
-
-                    if show_debug and xirr_errors:
-                        with st.expander("XIRR Errors"):
-                            for err in xirr_errors:
-                                st.caption(err)
-
-                    # ── Club rows by scheme (across folios) for display ──
-                    grouped_holdings = (
-                        holdings.groupby(["amc_name", "scheme_name"], dropna=False)
-                        .agg(
-                            units=("units", "sum"),
-                            file_aum=("file_aum", "sum"),
-                            nav_based_aum=("nav_based_aum", "sum"),
-                            one_day_diff=("one_day_diff", "sum"),
-                            folios=("folio_id", "nunique"),
-                            rta=("rta", lambda s: ", ".join(sorted(set(s.dropna())))),
-                            folio_ids=("folio_id", lambda s: list(s.unique())),
+                # ── KFinTech: replace file_aum with transaction-summed invested amount ──
+                if 'KFinTech' in holdings['rta'].values:
+                    kfin_invested_df = get_kfin_invested_per_scheme(kfin_f['folio'].tolist())
+                    if not kfin_invested_df.empty:
+                        kfin_invested_df['product_code_norm'] = kfin_invested_df['product_code'].astype(
+                            str).str.strip().str.upper()
+                        holdings = holdings.merge(
+                            kfin_invested_df,
+                            on=['folio_id', 'product_code_norm'],
+                            how='left',
+                            suffixes=('', '_kfin_client')
                         )
-                        .reset_index()
+                        kfin_mask = holdings['rta'] == 'KFinTech'
+                        has_txn = kfin_mask & holdings['invested_amount'].notna()
+                        holdings.loc[has_txn, 'file_aum'] = holdings.loc[has_txn, 'invested_amount']
+                        holdings.loc[has_txn, 'nav_based_aum'] = (
+                                holdings.loc[has_txn, 'units'] * holdings.loc[has_txn, 'current_nav']
+                        )
+                        holdings = holdings.drop(
+                            columns=['invested_amount', 'product_code_norm_kfin_client'], errors='ignore')
+
+                # ── CAMS: replace file_aum AND units with transaction-summed values ──
+                if 'CAMS' in holdings['rta'].values:
+                    cams_invested_df = get_cams_invested_per_scheme(cams_f['foliochk'].tolist())
+                    if not cams_invested_df.empty:
+                        cams_invested_df['product_code_norm'] = cams_invested_df['product_code'].astype(
+                            str).str.strip().str.upper()
+                        holdings = holdings.merge(
+                            cams_invested_df,
+                            on=['folio_id', 'product_code_norm'],
+                            how='left',
+                            suffixes=('', '_cams_client')
+                        )
+                        cams_mask = holdings['rta'] == 'CAMS'
+                        has_txn = cams_mask & holdings['invested_amount'].notna()
+                        holdings.loc[has_txn, 'file_aum'] = holdings.loc[has_txn, 'invested_amount']
+                        holdings.loc[has_txn, 'units'] = holdings.loc[has_txn, 'total_units']
+                        holdings.loc[has_txn, 'nav_based_aum'] = (
+                                holdings.loc[has_txn, 'units'] * holdings.loc[has_txn, 'current_nav']
+                        )
+                        holdings = holdings.drop(
+                            columns=['invested_amount', 'total_units', 'product_code_norm_cams_client'],
+                            errors='ignore')
+
+                # Clean up temp column
+                holdings = holdings.drop(columns=['product_code_norm'], errors='ignore')
+
+                prev_nav_map = load_previous_nav_map()
+                holdings["prev_nav"] = holdings["isin"].apply(
+                    lambda i: prev_nav_map.get(str(i).strip().upper()) if pd.notna(i) else None
+                )
+                holdings["one_day_diff"] = (
+                        (holdings["current_nav"] - holdings["prev_nav"]) * holdings["units"]
+                ).fillna(0.0)
+
+                total_invested = holdings['file_aum'].sum()
+                total_current = holdings['nav_based_aum'].sum() or 0
+                total_gain_loss = total_current - total_invested
+                total_one_day_diff = holdings["one_day_diff"].sum()
+
+                h1, h2, h3, h4, h5 = st.columns(5)
+                h1.metric("Total Invested", format_aum(total_invested))
+                h2.metric("Current Value", format_aum(total_current))
+                h3.metric("Gain / Loss", format_aum(total_gain_loss),
+                          delta=f"{(total_gain_loss / total_invested * 100):.2f}%" if total_invested > 0 else "0%")
+                h4.metric("Total Folios", len(all_folios))
+                h5.metric("1-Day Diff", format_aum(total_one_day_diff), delta=format_aum(total_one_day_diff))
+
+                holdings["gain_loss"] = holdings["nav_based_aum"] - holdings["file_aum"]
+
+                # ═══════════════════════════════════════════════════════════
+                # COMPUTE XIRR PER FOLIO (like invested value calculation)
+                # ═══════════════════════════════════════════════════════════
+                st.caption("⏳ Computing XIRR per folio...")
+
+                folio_xirr_map = {}
+                xirr_errors = []
+
+                for fid in holdings["folio_id"].unique():
+                    folio_rows = holdings[holdings["folio_id"] == fid]
+                    if folio_rows.empty:
+                        continue
+
+                    folio_row = folio_rows.iloc[0]
+                    frta = folio_row["rta"]
+                    fprod = folio_row.get("product_code")
+                    fvalue = folio_row["nav_based_aum"]
+
+                    if pd.isna(fvalue) or fvalue <= 0:
+                        xirr_errors.append(f"{fid}: No NAV/current value")
+                        continue
+
+                    try:
+                        # Call XIRR function with verbose=True for terminal logging
+                        xres = xirr.compute_xirr_for_folio(
+                            folio_no=fid,
+                            get_conn=get_conn,
+                            rta=frta,
+                            product_code=fprod,
+                            current_value=float(fvalue),
+                            verbose=True,  # <-- Prints to terminal for Excel verification
+                        )
+
+                        if xres["xirr"] is not None:
+                            folio_xirr_map[fid] = xres["xirr"]
+                            if show_debug:
+                                st.write(f"✅ {fid}: XIRR = {xres['xirr_pct']}")
+                        else:
+                            err_msg = xres.get("error") or "Unknown error"
+                            xirr_errors.append(f"{fid}: {err_msg}")
+                            if show_debug:
+                                st.write(f"❌ {fid}: {err_msg}")
+
+                    except Exception as e:
+                        xirr_errors.append(f"{fid}: Exception - {e}")
+                        if show_debug:
+                            st.write(f"❌ {fid}: Exception - {e}")
+
+                if show_debug and xirr_errors:
+                    with st.expander("XIRR Errors"):
+                        for err in xirr_errors:
+                            st.caption(err)
+
+                # ── Club rows by scheme (across folios) for display ──
+                grouped_holdings = (
+                    holdings.groupby(["amc_name", "scheme_name"], dropna=False)
+                    .agg(
+                        units=("units", "sum"),
+                        file_aum=("file_aum", "sum"),
+                        nav_based_aum=("nav_based_aum", "sum"),
+                        one_day_diff=("one_day_diff", "sum"),
+                        folios=("folio_id", "nunique"),
+                        rta=("rta", lambda s: ", ".join(sorted(set(s.dropna())))),
+                        folio_ids=("folio_id", lambda s: list(s.unique())),
                     )
-                    grouped_holdings["gain_loss"] = grouped_holdings["nav_based_aum"] - grouped_holdings["file_aum"]
-                    grouped_holdings["portfolio_pct"] = (
-                            grouped_holdings["nav_based_aum"] / total_current * 100
-                    ).fillna(0) if total_current > 0 else 0
+                    .reset_index()
+                )
+                grouped_holdings["gain_loss"] = grouped_holdings["nav_based_aum"] - grouped_holdings["file_aum"]
+                grouped_holdings["portfolio_pct"] = (
+                        grouped_holdings["nav_based_aum"] / total_current * 100
+                ).fillna(0) if total_current > 0 else 0
 
+                # ── Average XIRR across folios for each scheme ──
+                def _avg_xirr_for_scheme(folio_ids):
+                    vals = [folio_xirr_map.get(fid) for fid in folio_ids if fid in folio_xirr_map]
+                    return sum(vals) / len(vals) if vals else None
 
-                    # ── Average XIRR across folios for each scheme ──
-                    def _avg_xirr_for_scheme(folio_ids):
-                        vals = [folio_xirr_map.get(fid) for fid in folio_ids if fid in folio_xirr_map]
-                        return sum(vals) / len(vals) if vals else None
+                grouped_holdings["xirr"] = grouped_holdings["folio_ids"].apply(_avg_xirr_for_scheme)
 
+                display_holdings = grouped_holdings[[
+                    'rta', 'amc_name', 'scheme_name', 'folios', 'units', 'file_aum',
+                    'nav_based_aum', 'gain_loss', 'one_day_diff', 'xirr', 'portfolio_pct'
+                ]].rename(columns={
+                    'rta': 'RTA', 'amc_name': 'AMC', 'scheme_name': 'Scheme', 'folios': 'Folios',
+                    'file_aum': 'Invested', 'nav_based_aum': 'Current Value',
+                    'gain_loss': 'Gain/Loss', 'one_day_diff': '1D Diff',
+                    'xirr': 'XIRR', 'portfolio_pct': '% Portfolio'
+                })
 
-                    grouped_holdings["xirr"] = grouped_holdings["folio_ids"].apply(_avg_xirr_for_scheme)
+                display_holdings_sorted = display_holdings.sort_values("Current Value", ascending=False).reset_index(
+                    drop=True)
 
-                    display_holdings = grouped_holdings[[
-                        'rta', 'amc_name', 'scheme_name', 'folios', 'units', 'file_aum',
-                        'nav_based_aum', 'gain_loss', 'one_day_diff', 'xirr', 'portfolio_pct'
-                    ]].rename(columns={
-                        'rta': 'RTA', 'amc_name': 'AMC', 'scheme_name': 'Scheme', 'folios': 'Folios',
-                        'file_aum': 'Invested', 'nav_based_aum': 'Current Value',
-                        'gain_loss': 'Gain/Loss', 'one_day_diff': '1D Diff',
-                        'xirr': 'XIRR', 'portfolio_pct': '% Portfolio'
-                    })
+                selected = st.dataframe(
+                    display_holdings_sorted,
+                    width="stretch", hide_index=True, on_select="rerun", selection_mode="single-row",
+                    column_config={
+                        "Units": st.column_config.NumberColumn(format="%.4f"),
+                        "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "Current Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "1D Diff": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "XIRR": st.column_config.NumberColumn(format="%.2f%%"),
+                        "% Portfolio": st.column_config.NumberColumn(format="%.2f%%"),
+                    }
+                )
 
-                    display_holdings_sorted = display_holdings.sort_values("Current Value",
-                                                                           ascending=False).reset_index(
-                        drop=True)
+                # Transaction View
+                if selected and len(selected["selection"]["rows"]) > 0:
+                    idx = selected["selection"]["rows"][0]
+                    row = display_holdings_sorted.iloc[idx]
+                    scheme_sel = row['Scheme']
+                    amc_sel = row['AMC']
 
-                    selected = st.dataframe(
-                        display_holdings_sorted,
-                        width="stretch", hide_index=True, on_select="rerun", selection_mode="single-row",
-                        column_config={
-                            "Units": st.column_config.NumberColumn(format="%.4f"),
-                            "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
-                            "Current Value": st.column_config.NumberColumn(format="₹ %.2f"),
-                            "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
-                            "1D Diff": st.column_config.NumberColumn(format="₹ %.2f"),
-                            "XIRR": st.column_config.NumberColumn(format="%.2f%%"),
-                            "% Portfolio": st.column_config.NumberColumn(format="%.2f%%"),
-                        }
-                    )
+                    # Underlying folios for this scheme
+                    scheme_folios = holdings[
+                        (holdings['scheme_name'] == scheme_sel) & (holdings['amc_name'] == amc_sel)
+                        ][['folio_id', 'rta']].drop_duplicates().reset_index(drop=True)
 
-                    # Transaction View
-                    if selected and len(selected["selection"]["rows"]) > 0:
-                        idx = selected["selection"]["rows"][0]
-                        row = display_holdings_sorted.iloc[idx]
-                        scheme_sel = row['Scheme']
-                        amc_sel = row['AMC']
+                    st.divider()
+                    st.subheader(f"📜 Transactions — {scheme_sel}")
 
-                        # Underlying folios for this scheme
-                        scheme_folios = holdings[
-                            (holdings['scheme_name'] == scheme_sel) & (holdings['amc_name'] == amc_sel)
-                            ][['folio_id', 'rta']].drop_duplicates().reset_index(drop=True)
+                    if len(scheme_folios) > 1:
+                        folio_options = ["All Folios"] + [
+                            f"{r['folio_id']} ({r['rta']})" for _, r in scheme_folios.iterrows()
+                        ]
+                        folio_choice = st.radio(
+                            "Filter by Folio", folio_options, horizontal=True, key="txn_folio_filter"
+                        )
+                    else:
+                        folio_choice = "All Folios"
 
-                        st.divider()
-                        st.subheader(f"📜 Transactions — {scheme_sel}")
+                    if folio_choice == "All Folios":
+                        folios_to_fetch = scheme_folios
+                    else:
+                        sel_folio_id = folio_choice.split(" (")[0]
+                        folios_to_fetch = scheme_folios[scheme_folios['folio_id'] == sel_folio_id]
 
-                        if len(scheme_folios) > 1:
-                            folio_options = ["All Folios"] + [
-                                f"{r['folio_id']} ({r['rta']})" for _, r in scheme_folios.iterrows()
-                            ]
-                            folio_choice = st.radio(
-                                "Filter by Folio", folio_options, horizontal=True, key="txn_folio_filter"
+                    txn_frames = []
+
+                    folio_ids_selected = folios_to_fetch['folio_id'].tolist()
+                    sel_holdings = holdings[
+                        (holdings['scheme_name'] == scheme_sel) &
+                        (holdings['amc_name'] == amc_sel) &
+                        (holdings['folio_id'].isin(folio_ids_selected))
+                        ]
+
+                    sel_invested = sel_holdings['file_aum'].sum()
+                    sel_current = sel_holdings['nav_based_aum'].sum()
+                    sel_gain = sel_current - sel_invested
+
+                    tm1, tm2, tm3 = st.columns(3)
+                    tm1.metric("Invested (selected folio(s))", format_aum(sel_invested))
+                    tm2.metric("Current Value (selected folio(s))", format_aum(sel_current))
+                    tm3.metric("Gain/Loss (selected folio(s))", format_aum(sel_gain))
+
+                    # ── Per-folio breakdown: show invested + current per folio
+                    # so multi-folio schemes are transparent
+                    if len(scheme_folios) > 1:
+                        per_folio_breakdown = (
+                            holdings[
+                                (holdings['scheme_name'] == scheme_sel) &
+                                (holdings['amc_name'] == amc_sel)
+                                ]
+                            .groupby('folio_id', dropna=False)
+                            .agg(
+                                rta=('rta', 'first'),
+                                units=('units', 'sum'),
+                                invested=('file_aum', 'sum'),
+                                current_value=('nav_based_aum', 'sum'),
                             )
-                        else:
-                            folio_choice = "All Folios"
+                            .reset_index()
+                        )
+                        per_folio_breakdown['gain_loss'] = (
+                                per_folio_breakdown['current_value'] - per_folio_breakdown['invested']
+                        )
 
-                        if folio_choice == "All Folios":
-                            folios_to_fetch = scheme_folios
-                        else:
-                            sel_folio_id = folio_choice.split(" (")[0]
-                            folios_to_fetch = scheme_folios[scheme_folios['folio_id'] == sel_folio_id]
-
-                        # ── Per-folio Invested / Current / Gain-Loss for whatever's
-                        # selected. Pulled from `holdings` (per-folio rows, before
-                        # the scheme-level groupby) so this reflects exactly the
-                        # folio(s) currently filtered, not the whole scheme's total.
-                        folio_ids_selected = folios_to_fetch['folio_id'].tolist()
-                        sel_holdings = holdings[
-                            (holdings['scheme_name'] == scheme_sel) &
-                            (holdings['amc_name'] == amc_sel) &
-                            (holdings['folio_id'].isin(folio_ids_selected))
-                            ]
-
-                        sel_invested = sel_holdings['file_aum'].sum()
-                        sel_current = sel_holdings['nav_based_aum'].sum()
-                        sel_gain = sel_current - sel_invested
-
-                        tm1, tm2, tm3 = st.columns(3)
-                        tm1.metric("Invested (selected folio(s))", format_aum(sel_invested))
-                        tm2.metric("Current Value (selected folio(s))", format_aum(sel_current))
-                        tm3.metric("Gain/Loss (selected folio(s))", format_aum(sel_gain))
-
-                        # ── Per-folio breakdown table — every folio in this
-                        # scheme side by side, so if two folios don't sum to the
-                        # scheme total shown in the main holdings table above,
-                        # it's visible exactly where.
-                        if len(scheme_folios) > 1:
-                            per_folio_breakdown = (
-                                holdings[(holdings['scheme_name'] == scheme_sel) & (holdings['amc_name'] == amc_sel)]
-                                .groupby('folio_id', dropna=False)
-                                .agg(
-                                    rta=('rta', 'first'),
-                                    units=('units', 'sum'),
-                                    invested=('file_aum', 'sum'),
-                                    current_value=('nav_based_aum', 'sum'),
-                                )
-                                .reset_index()
+                        with st.expander("📊 Per-folio breakdown for this scheme", expanded=False):
+                            st.dataframe(
+                                per_folio_breakdown.rename(columns={
+                                    'folio_id': 'Folio', 'rta': 'RTA', 'units': 'Units',
+                                    'invested': 'Invested', 'current_value': 'Current Value',
+                                    'gain_loss': 'Gain/Loss'
+                                }),
+                                width="stretch", hide_index=True,
+                                column_config={
+                                    'Units': st.column_config.NumberColumn(format="%.4f"),
+                                    'Invested': st.column_config.NumberColumn(format="₹ %.2f"),
+                                    'Current Value': st.column_config.NumberColumn(format="₹ %.2f"),
+                                    'Gain/Loss': st.column_config.NumberColumn(format="₹ %.2f"),
+                                }
                             )
-                            per_folio_breakdown['gain_loss'] = (
-                                    per_folio_breakdown['current_value'] - per_folio_breakdown['invested']
+                            breakdown_sum_invested = per_folio_breakdown['invested'].sum()
+                            breakdown_sum_current = per_folio_breakdown['current_value'].sum()
+                            st.caption(
+                                f"Sum of folios above → Invested: {format_aum(breakdown_sum_invested)}, "
+                                f"Current: {format_aum(breakdown_sum_current)}. Compare this to the "
+                                f"scheme row in the main table above — if they differ, the scheme-level "
+                                f"groupby and this per-folio sum are reading different data somewhere."
                             )
+                    with get_conn() as conn:
+                        for _, fr in folios_to_fetch.iterrows():
+                            fid, frta = fr['folio_id'], fr['rta']
+                            if frta == 'CAMS':
+                                df_t = pd.read_sql("""
+                                                   SELECT trxnno,
+                                                          traddate,
+                                                          trxntype,
+                                                          trxnmode,
+                                                          trxnstat,
+                                                          purprice,
+                                                          units,
+                                                          amount,
+                                                          brokcode,
+                                                          subbrok,
+                                                          remarks
+                                                   FROM cams_wbr2_transaction
+                                                   WHERE folio_no = ?
+                                                   ORDER BY traddate DESC
+                                                   """, conn, params=(fid,))
+                            else:
+                                df_t = pd.read_sql("""
+                                                   SELECT td_trno   as trxnno,
+                                                          td_trdt   as traddate,
+                                                          td_purred as trxntype,
+                                                          trnmode   as trxnmode,
+                                                          trnstat   as trxnstat,
+                                                          td_pop    as purprice,
+                                                          td_units  as units,
+                                                          td_amt    as amount,
+                                                          td_broker as brokcode,
+                                                          ''        as subbrok,
+                                                          trdesc    as remarks
+                                                   FROM kfin_mfsd201_transaction
+                                                   WHERE td_acno = ?
+                                                   ORDER BY td_trdt DESC
+                                                   """, conn, params=(fid,))
+                            if not df_t.empty:
+                                df_t.insert(0, 'folio_id', fid)
+                                df_t.insert(1, 'rta', frta)
+                            txn_frames.append(df_t)
 
-                            with st.expander("📊 Per-folio breakdown for this scheme", expanded=False):
-                                st.dataframe(
-                                    per_folio_breakdown.rename(columns={
-                                        'folio_id': 'Folio', 'rta': 'RTA', 'units': 'Units',
-                                        'invested': 'Invested', 'current_value': 'Current Value',
-                                        'gain_loss': 'Gain/Loss'
-                                    }),
-                                    width="stretch", hide_index=True,
-                                    column_config={
-                                        'Units': st.column_config.NumberColumn(format="%.4f"),
-                                        'Invested': st.column_config.NumberColumn(format="₹ %.2f"),
-                                        'Current Value': st.column_config.NumberColumn(format="₹ %.2f"),
-                                        'Gain/Loss': st.column_config.NumberColumn(format="₹ %.2f"),
-                                    }
-                                )
-                                breakdown_sum_invested = per_folio_breakdown['invested'].sum()
-                                breakdown_sum_current = per_folio_breakdown['current_value'].sum()
-                                st.caption(
-                                    f"Sum of folios above → Invested: {format_aum(breakdown_sum_invested)}, "
-                                    f"Current: {format_aum(breakdown_sum_current)}. Compare this to the "
-                                    f"scheme row in the main table above — if they differ, the scheme-level "
-                                    f"groupby and this per-folio sum are reading different data somewhere."
-                                )
+                    txn_df = pd.concat(txn_frames, ignore_index=True) if txn_frames else pd.DataFrame()
 
-                        txn_frames = []
-                        with get_conn() as conn:
-                            for _, fr in folios_to_fetch.iterrows():
-                                fid, frta = fr['folio_id'], fr['rta']
-                                if frta == 'CAMS':
-                                    df_t = pd.read_sql("""
-                                        SELECT trxnno, traddate, trxntype, trxnmode, trxnstat,
-                                               purprice, units, amount, brokcode, subbrok, remarks
-                                        FROM cams_wbr2_transaction
-                                        WHERE folio_no = ?
-                                    """, conn, params=(fid,))
-                                else:
-                                    df_t = pd.read_sql("""
-                                        SELECT td_trno   as trxnno,
-                                               td_trdt   as traddate,
-                                               td_purred as trxntype,
-                                               trnmode   as trxnmode,
-                                               trnstat   as trxnstat,
-                                               td_pop    as purprice,
-                                               td_units  as units,
-                                               td_amt    as amount,
-                                               td_broker as brokcode,
-                                               ''        as subbrok,
-                                               trdesc    as remarks
-                                        FROM kfin_mfsd201_transaction
-                                        WHERE td_acno = ?
-                                    """, conn, params=(fid,))
+                    if not txn_df.empty:
+                        try:
+                            from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
-                                if not df_t.empty:
-                                    # ── CRITICAL FIX: chronological sort, not string sort ──
-                                    df_t["_sort_date"] = pd.to_datetime(df_t["traddate"], errors="coerce")
-                                    df_t = (
-                                        df_t.sort_values("_sort_date", ascending=False)
-                                        .drop(columns=["_sort_date"])
-                                        .reset_index(drop=True)
-                                    )
-                                    df_t.insert(0, 'folio_id', fid)
-                                    df_t.insert(1, 'rta', frta)
-                                txn_frames.append(df_t)
-
-                        txn_df = pd.concat(txn_frames, ignore_index=True) if txn_frames else pd.DataFrame()
-
-                        if not txn_df.empty:
-                            try:
-                                from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
-
-                                gb = GridOptionsBuilder.from_dataframe(txn_df)
-                                gb.configure_default_column(filter=True, sortable=True, resizable=True, flex=1)
-                                gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=15)
-                                gb.configure_grid_options(domLayout='normal')
-                                grid_opts = gb.build()
-                                AgGrid(
-                                    txn_df,
-                                    gridOptions=grid_opts,
-                                    height=350,
-                                    update_mode=GridUpdateMode.NO_UPDATE,
-                                    fit_columns_on_grid_load=True,
-                                    allow_unsafe_jscode=True,
-                                    theme="alpine-dark" if dark else "alpine",
-                                    key=f"txn_grid_{scheme_sel}_{folio_choice}"
-                                )
-                            except ImportError:
-                                st.dataframe(
-                                    txn_df,
-                                    width="stretch",
-                                    hide_index=True,
-                                    column_config={
-                                        "units": st.column_config.NumberColumn(format="%.4f"),
-                                        "amount": st.column_config.NumberColumn(format="₹ %.2f"),
-                                        "purprice": st.column_config.NumberColumn(format="₹ %.4f"),
-                                    }
-                                )
-                        else:
-                            st.info("No transactions found for this folio.")
-                else:
-                    st.info("No holdings found.")
+                            gb = GridOptionsBuilder.from_dataframe(txn_df)
+                            gb.configure_default_column(filter=True, sortable=True, resizable=True, flex=1)
+                            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=15)
+                            gb.configure_grid_options(domLayout='normal')
+                            grid_opts = gb.build()
+                            AgGrid(
+                                txn_df,
+                                gridOptions=grid_opts,
+                                height=350,
+                                update_mode=GridUpdateMode.NO_UPDATE,
+                                fit_columns_on_grid_load=True,
+                                allow_unsafe_jscode=True,
+                                theme="alpine-dark" if dark else "alpine",
+                                key=f"txn_grid_{scheme_sel}_{folio_choice}"
+                            )
+                        except ImportError:
+                            st.dataframe(
+                                txn_df,
+                                width="stretch",
+                                hide_index=True,
+                                column_config={
+                                    "units": st.column_config.NumberColumn(format="%.4f"),
+                                    "amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                                    "purprice": st.column_config.NumberColumn(format="₹ %.4f"),
+                                }
+                            )
+                    else:
+                        st.info("No transactions found for this folio.")
+            else:
+                st.info("No holdings found.")
 
     # ═══════════════════════════════════════════════════════════
     # TAB 2 — Active SIPs
