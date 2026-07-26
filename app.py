@@ -1,28 +1,23 @@
-"""
-MFD Portfolio Intelligence — Minimal Version
-Only: Admin Panel (Upload + Raw Data View) + Dashboard (View All Details)
-"""
-
 import logging
 import os
 import re
+import time
+import requests
 import warnings
+from datetime import datetime, timedelta, date as date_cls
 from typing import Optional
 
 import pandas as pd
 import plotly.express as px
-import requests
 import streamlit as st
 
+import capital_gain as cg
 import data_manager
+import data_manager as dm
 import xirr
 from init_db import init_db, get_conn
 from theme_patch import THEME_WATCHER_JS, render_theme
-import capital_gain as cg
-import data_manager as dm
-from datetime import datetime, timedelta, date as date_cls
-
-
+from xirr import compute_xirr_debug
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +28,21 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(
 PAGE_SIZE = 20
 
 _WHITESPACE_RE = re.compile(r"\s+")
+
+
+
+
+
+# Delay between successive lookback requests so we don't hammer AMFI.
+LOOKBACK_DELAY_SECONDS = 1.5
+
+_AMFI_SESSION = requests.Session()
+_AMFI_SESSION.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/plain,text/html,application/xhtml+xml,*/*",
+    "Referer": "https://www.amfiindia.com/",
+})
 
 
 # ==================== DB INIT (cached per session) ====================
@@ -266,8 +276,8 @@ def compute_client_holdings(client_code: str, folio_nav_df: pd.DataFrame) -> pd.
         return holdings
 
     drop_leftover = [c for c in holdings.columns
-                      if c.endswith('_kfin') or c.endswith('_cams')
-                      or c in ('product_code_norm', 'invested_amount', 'total_units')]
+                     if c.endswith('_kfin') or c.endswith('_cams')
+                     or c in ('product_code_norm', 'invested_amount', 'total_units')]
     holdings = holdings.drop(columns=drop_leftover, errors='ignore')
     holdings['product_code_norm'] = holdings['product_code'].astype(str).str.strip().str.upper()
 
@@ -276,7 +286,7 @@ def compute_client_holdings(client_code: str, folio_nav_df: pd.DataFrame) -> pd.
         if not kfin_invested_df.empty:
             kfin_invested_df['product_code_norm'] = kfin_invested_df['product_code'].astype(str).str.strip().str.upper()
             holdings = holdings.merge(kfin_invested_df, on=['folio_id', 'product_code_norm'],
-                                       how='left', suffixes=('', '_kfin_fam'))
+                                      how='left', suffixes=('', '_kfin_fam'))
             kfin_mask = holdings['rta'] == 'KFinTech'
             has_txn = kfin_mask & holdings['invested_amount'].notna()
             holdings.loc[has_txn, 'file_aum'] = holdings.loc[has_txn, 'invested_amount']
@@ -290,7 +300,7 @@ def compute_client_holdings(client_code: str, folio_nav_df: pd.DataFrame) -> pd.
         if not cams_invested_df.empty:
             cams_invested_df['product_code_norm'] = cams_invested_df['product_code'].astype(str).str.strip().str.upper()
             holdings = holdings.merge(cams_invested_df, on=['folio_id', 'product_code_norm'],
-                                       how='left', suffixes=('', '_cams_fam'))
+                                      how='left', suffixes=('', '_cams_fam'))
             cams_mask = holdings['rta'] == 'CAMS'
             has_txn = cams_mask & holdings['invested_amount'].notna()
             holdings.loc[has_txn, 'file_aum'] = holdings.loc[has_txn, 'invested_amount']
@@ -299,7 +309,7 @@ def compute_client_holdings(client_code: str, folio_nav_df: pd.DataFrame) -> pd.
                     holdings.loc[has_txn, 'units'] * holdings.loc[has_txn, 'current_nav']
             )
             holdings = holdings.drop(columns=['invested_amount', 'total_units', 'product_code_norm_cams_fam'],
-                                      errors='ignore')
+                                     errors='ignore')
 
     holdings = holdings.drop(columns=['product_code_norm'], errors='ignore')
     holdings['client_code'] = client_code
@@ -321,7 +331,6 @@ def get_kfin_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
             WHERE td_acno = ? AND UPPER(TRIM(fmcode)) = ?
             ORDER BY td_trdt
         """, conn, params=(folio_no, product_code.strip().upper()))
-
 
 
 # ==================== Cams, Karvy and Manual entir Brokerage Data HELPERS ====================
@@ -621,6 +630,7 @@ def download_and_save_nav(timeout: int = 30) -> dict:
     log.info("[AMFI] Saved NAV file: %s (%s bytes, %s lines)", path, size, text.count("\n") + 1)
     return {"path": path, "bytes": size, "date": today}
 
+
 from datetime import time as time_cls
 
 # NAV re-publish cutoffs during the day. Domestic NAVs settle ~3 PM,
@@ -784,32 +794,6 @@ def _get_file_nav_date(path: str) -> Optional[str]:
     return None
 
 
-def download_business_day_nav(target_date, timeout: int = 30) -> dict:
-    """Fetches AMFI history for one exact calendar date. Raises ValueError if empty (holiday)."""
-    date_str = _fmt_amfi_date(target_date)
-    log.info("[AMFI-HIST] Downloading NAV history for %s", date_str)
-    res = requests.get(
-        NAV_HISTORY_URL,
-        params={"tp": 1, "frmdt": date_str, "todt": date_str},
-        timeout=timeout,
-    )
-    res.raise_for_status()
-    text = res.text
-
-    nav_map, _, _ = _parse_nav_text(text)
-    if not nav_map:
-        raise ValueError(f"No NAV records for {date_str} — likely weekend/holiday")
-
-    _ensure_text_dir()
-    iso_date = target_date.strftime("%Y-%m-%d")
-    path = _snapshot_path(iso_date)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
-    size = os.path.getsize(path)
-    log.info("[AMFI-HIST] Saved %s: %s bytes, %s ISINs", path, size, len(nav_map))
-    return {"path": path, "bytes": size, "date": iso_date, "record_count": len(nav_map)}
-
-
 def _have_snapshot_for_date(iso_date: str) -> bool:
     _ensure_text_dir()
     for fname in os.listdir(NAV_TEXT_DIR):
@@ -820,12 +804,177 @@ def _have_snapshot_for_date(iso_date: str) -> bool:
     return False
 
 
+import time
+import requests
+
+# Delay between successive lookback requests so we don't hammer AMFI.
+LOOKBACK_DELAY_SECONDS = 1.5
+
+_AMFI_SESSION = requests.Session()
+_AMFI_SESSION.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/plain,text/html,application/xhtml+xml,*/*",
+    "Referer": "https://www.amfiindia.com/",
+})
+
+
+def _looks_like_amfi_format(text: str) -> bool:
+    """
+    True if the response has AMFI's recognizable header/shape at all
+    (even with zero data rows, e.g. a genuine holiday). False means it's
+    an error/captcha/HTML page — a blocked request, not a holiday.
+    """
+    if not text or not text.strip():
+        return False
+    lowered = text.lower()
+    if "<html" in lowered or "captcha" in lowered:
+        return False
+    return "scheme code" in lowered and ";" in text
+
+
+def _normalize_history_text_to_live_format(text: str) -> str:
+    """
+    Rewrites DownloadNAVHistoryReport_Po.aspx's 8-column rows:
+        Scheme Code;Scheme Name;ISIN Payout;ISIN Reinvest;NAV;Repurchase;Sale;Date
+    into the SAME 6-column layout as the live NAVAll.txt file:
+        Scheme Code;ISIN Payout;ISIN Reinvest;Scheme Name;NAV;Date
+    (dropping Repurchase/Sale price, which we don't use).
+
+    This lets every downstream reader — _parse_nav_text, _get_file_nav_date,
+    the whole AMFINavIndex — stay untouched: saved historical snapshots look
+    exactly like a live snapshot, just for a past date. Non-data lines
+    (section headers, AMC name lines, blank lines) are passed through as-is.
+    """
+    out_lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if ";" not in stripped:
+            out_lines.append(line)
+            continue
+        parts = stripped.split(";")
+        if len(parts) < 8 or parts[0].strip() == "Scheme Code":
+            # Header row or malformed — normalize header to the live format,
+            # pass through anything else unchanged.
+            if parts and parts[0].strip() == "Scheme Code":
+                out_lines.append(
+                    "Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;"
+                    "Scheme Name;Net Asset Value;Date"
+                )
+            else:
+                out_lines.append(line)
+            continue
+        scheme_code, scheme_name, isin_payout, isin_reinvest, nav, _repurchase, _sale, date_field = parts[:8]
+        out_lines.append(
+            f"{scheme_code};{isin_payout};{isin_reinvest};{scheme_name};{nav};{date_field}"
+        )
+    return "\n".join(out_lines)
+
+def _extract_nav_date_from_text(text: str) -> Optional[str]:
+
+        for line in text.splitlines():
+            line = line.strip()
+            if ";" not in line:
+                continue
+            parts = line.split(";")
+            if len(parts) < 5 or parts[0].strip() == "Scheme Code":
+                continue
+            date_field = parts[-1].strip()
+            try:
+                return datetime.strptime(date_field, "%d-%b-%Y").strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+        return None
+
+def download_business_day_nav(target_date, timeout: int = 30) -> dict:
+    """
+    Fetches AMFI history for one exact calendar date and verifies the date
+    embedded in the response actually matches what we asked for.
+
+    Returns dict with an extra "actual_date" key. Caller (the lookback loop)
+    is responsible for comparing requested vs actual and stepping back if
+    they differ — this function itself just fetches + reports, it does not
+    guess "holiday" vs "blocked".
+
+    Raises ValueError if the response doesn't parse as AMFI's format at all
+    (e.g. blocked/error page) — that's a hard failure, not a date mismatch.
+    """
+    date_str = _fmt_amfi_date(target_date)
+    log.info("[AMFI-HIST] Requesting NAV history for %s", date_str)
+
+    res = _AMFI_SESSION.get(
+        NAV_HISTORY_URL,
+        params={"tp": 1, "frmdt": date_str, "todt": date_str},
+        timeout=timeout,
+    )
+    log.info("[AMFI-HIST] Request URL: %s", res.url)
+    res.raise_for_status()
+    text = res.text
+
+    if not _looks_like_amfi_format(text):
+        # Doesn't even have AMFI's shape at all — blocked/error/captcha page,
+        # NOT a holiday. Hard failure, caller should stop, not step back.
+        snippet = text.strip()[:200].replace("\n", " ")
+        log.error(
+            "[AMFI-HIST] Response for %s doesn't look like AMFI data at all "
+            "(status=%s, len=%s). Snippet: %r — likely blocked/error page.",
+            date_str, res.status_code, len(text), snippet
+        )
+        raise ValueError(f"blocked_or_invalid_response for {date_str}: {snippet!r}")
+
+    # Normalize to the live file's 6-column layout BEFORE saving, so every
+    # downstream reader (_parse_nav_text, _get_file_nav_date, AMFINavIndex)
+    # works on historical snapshots exactly like it does on live ones.
+    text = _normalize_history_text_to_live_format(text)
+
+    actual_date = _extract_nav_date_from_text(text)
+    if actual_date is None:
+        # Not expected in practice — AMFI has always returned the last
+        # working day's data rather than a truly empty body for a holiday.
+        # If this ever fires, treat it as a hard failure rather than
+        # silently guessing, since we have no real date to trust.
+        snippet = text.strip()[:200].replace("\n", " ")
+        log.error(
+            "[AMFI-HIST] %s: response has AMFI's shape but zero parseable "
+            "date rows — unexpected. Snippet: %r", date_str, snippet
+        )
+        raise ValueError(f"no_date_in_response for {date_str}: {snippet!r}")
+
+    log.info("[AMFI-HIST] Requested %s, file actually dated %s", date_str, actual_date)
+
+    return {
+        "text": text,
+        "requested_date": target_date.strftime("%Y-%m-%d"),
+        "actual_date": actual_date,
+    }
+
+
+def _save_nav_snapshot(text: str, iso_date: str) -> dict:
+    _ensure_text_dir()
+    path = _snapshot_path(iso_date)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    nav_map, _, _ = _parse_nav_text(text)
+    size = os.path.getsize(path)
+    log.info("[AMFI-HIST] Saved %s: %s bytes, %s ISINs", path, size, len(nav_map))
+    return {"path": path, "bytes": size, "date": iso_date, "record_count": len(nav_map)}
+
+
 def sync_previous_business_day_nav(force: bool = False, timeout: int = 30, max_lookback: int = 10) -> dict:
     """
     Call AFTER today's live NAV file is downloaded. Reads the actual NAV date
-    of the latest snapshot (handles Sat/Sun where 'today's file' still carries
-    Friday's date), steps back one more business day from THAT date, fetches
-    it via history endpoint — skips network call if already held.
+    of the latest snapshot, computes target = last business day before that,
+    then fetches it via the history endpoint and checks the date embedded
+    in the response:
+      - matches target      -> save it, done.
+      - earlier than target -> AMFI has confirmed (via its own data, not a
+                                guess) that target was a holiday/weekend —
+                                it returns the last working day's NAVs
+                                instead of an empty body. We save that date
+                                and stop; no further lookback needed.
+
+    This replaces the old "empty response = holiday" heuristic, which
+    misfired when AMFI blocked/rate-limited several requests in a row.
     """
     latest_path = _latest_snapshot_path()
     if latest_path is None:
@@ -838,33 +987,79 @@ def sync_previous_business_day_nav(force: bool = False, timeout: int = 30, max_l
     latest_nav_date = datetime.strptime(latest_nav_date_str, "%Y-%m-%d").date()
     target = get_last_business_day(latest_nav_date)
 
-    for _ in range(max_lookback):
+    for i in range(max_lookback):
         iso_date = target.strftime("%Y-%m-%d")
 
         if not force and _have_snapshot_for_date(iso_date):
             log.info("[AMFI-HIST] Already have %s — skipping fetch", iso_date)
             return {"ran": False, "ok": True, "reason": f"already have {iso_date}", "date": iso_date}
 
+        if i > 0:
+            time.sleep(LOOKBACK_DELAY_SECONDS)
+
         try:
             result = download_business_day_nav(target, timeout=timeout)
-            return {"ran": True, "ok": True, "reason": "downloaded", **result}
-        except ValueError:
-            log.info("[AMFI-HIST] %s empty (holiday) — trying prior business day", iso_date)
-            target = get_last_business_day(target)
+        except ValueError as e:
+            # Genuinely blocked/error response (not AMFI's format at all).
+            # Don't misread this as a holiday — stop and surface it.
+            log.error("[AMFI-HIST] Stopping lookback — %s", e)
+            return {"ran": True, "ok": False, "reason": str(e), "date": iso_date}
         except requests.RequestException:
             log.exception("[AMFI-HIST] Network error for %s", iso_date)
             return {"ran": True, "ok": False, "reason": "network error", "date": iso_date}
+
+        actual_date = result["actual_date"]
+
+        if actual_date == iso_date:
+            # AMFI genuinely has data for the exact date we asked for.
+            saved = _save_nav_snapshot(result["text"], actual_date)
+            return {"ran": True, "ok": True, "reason": "downloaded", **saved}
+
+        # AMFI returned real data, but dated earlier than requested — this
+        # is how AMFI signals "that date was a holiday/weekend": it just
+        # gives back the last working day's NAVs instead of an empty body.
+        # Trust their date and stop; no need to loop further ourselves.
+        log.info(
+            "[AMFI-HIST] Requested %s but AMFI returned data dated %s instead (holiday/weekend)",
+            iso_date, actual_date
+        )
+        if not force and _have_snapshot_for_date(actual_date):
+            log.info("[AMFI-HIST] Already have %s — skipping save", actual_date)
+            return {"ran": False, "ok": True, "reason": f"already have {actual_date}", "date": actual_date}
+
+        saved = _save_nav_snapshot(result["text"], actual_date)
+        return {"ran": True, "ok": True, "reason": f"requested {iso_date}, saved actual {actual_date}", **saved}
 
     return {"ran": True, "ok": False, "reason": f"no business day found within {max_lookback} days"}
 
 
 def sync_previous_business_day_nav_if_needed(force: bool = False) -> dict:
-    key = "prev_nav_last_attempt"
+    """
+    Runs at most once per calendar day — but ONLY skips if the previous
+    attempt actually succeeded (i.e. we now hold a snapshot for the
+    business day just before today's live NAV date). A failed attempt
+    (blocked response, network error, etc.) does NOT set the "done" flag,
+    so the very next rerun/page load retries automatically instead of
+    silently going dark until tomorrow — which is what was happening
+    before: the old gate latched on "did we try", not "did it work".
+    """
+    key = "prev_nav_done_for"
     today = datetime.now().strftime("%Y-%m-%d")
+
     if not force and st.session_state.get(key) == today:
-        return {"ran": False, "ok": True, "reason": "already attempted this session"}
-    st.session_state[key] = today
-    return sync_previous_business_day_nav(force=force)
+        return {"ran": False, "ok": True, "reason": "already synced successfully today"}
+
+    result = sync_previous_business_day_nav(force=force)
+
+    if result.get("ok"):
+        st.session_state[key] = today
+    else:
+        log.warning(
+            "[AMFI-HIST] Previous-day sync did not succeed (%s) — will retry on next rerun",
+            result.get("reason")
+        )
+
+    return result
 
 
 # ==================== PREVIOUS NAV MAP (single definition) ====================
@@ -1753,8 +1948,6 @@ ensure_db()
 ensure_family_tables()
 
 
-
-
 # ==================== BSE SCHEME MASTER AUTO-DOWNLOAD ====================
 def _auto_bse_scheme_master():
     """Non-blocking: starts background download if needed, once per day."""
@@ -1782,6 +1975,7 @@ def _auto_bse_scheme_master():
 
 
 _auto_bse_scheme_master()
+
 
 # ==================== GLOBAL BSE DOWNLOAD/PARSE NOTIFICATION ====================
 # Runs on every page, not just Admin Panel, so the toast fires wherever the user is.
@@ -1894,7 +2088,7 @@ if mode == "📊 Dashboard":
         with st.spinner("⏳ Fetching ISIN mappings & latest NAVs from AMFI... (5–10s)"):
             try:
                 download_and_save_nav_if_needed()
-                sync_previous_business_day_nav_if_needed()
+
 
                 folio_nav_df = get_all_folios_with_isin_and_nav(get_conn)
 
@@ -2279,6 +2473,7 @@ if mode == "📊 Dashboard":
 elif mode == "👥 Clients":
     st.header("👤 Client Portfolio & Analytics")
 
+
     # ── Client Search ──
     @st.cache_data(ttl=300)
     def load_clients_search():
@@ -2297,6 +2492,7 @@ elif mode == "👥 Clients":
                 WHERE primary_holder_pan IS NOT NULL
                    OR guardian_pan IS NOT NULL
             """, conn)
+
 
     clients_df = load_clients_search()
     if clients_df.empty:
@@ -2412,7 +2608,7 @@ elif mode == "👥 Clients":
             ["👨‍👩‍👧‍👦 Family Portfolio", "📈 Portfolio & AUM", "🔄 Active SIPs"]
         )
 
-        from xirr_debug import compute_xirr_debug
+
 
         compute_xirr_debug("FOLIO123", "BANDCG", "CAMS", current_value=19217.81, get_conn=get_conn)
         compute_xirr_debug("ACCNO456", "FMCODE", "KFIN", current_value=5000.0, get_conn=get_conn)
@@ -2755,10 +2951,12 @@ elif mode == "👥 Clients":
                         grouped_holdings["nav_based_aum"] / total_current * 100
                 ).fillna(0) if total_current > 0 else 0
 
+
                 # ── Average XIRR across folios for each scheme ──
                 def _avg_xirr_for_scheme(folio_ids):
                     vals = [folio_xirr_map.get(fid) for fid in folio_ids if fid in folio_xirr_map]
                     return sum(vals) / len(vals) if vals else None
+
 
                 grouped_holdings["xirr"] = grouped_holdings["folio_ids"].apply(_avg_xirr_for_scheme)
 
@@ -3390,6 +3588,7 @@ elif mode == "🧮 Capital Gains":
         "before relying on the tax figure."
     )
 
+
     @st.cache_data(ttl=300)
     def _cg_clients():
         with get_conn() as conn:
@@ -3400,6 +3599,7 @@ elif mode == "🧮 Capital Gains":
                 FROM bse_client_master
                 WHERE primary_holder_pan IS NOT NULL
             """, conn)
+
 
     cg_clients = _cg_clients()
     if cg_clients.empty:
@@ -3582,9 +3782,9 @@ elif mode == "🧮 Capital Gains":
                 if tax_cat == "equity":
                     used, limit = hyp_tax["exemption_used"], hyp_tax["exemption_limit"]
                     st.progress(min(used / limit, 1.0) if limit else 0.0,
-                               text=f"LTCG exemption used: {format_currency(used)} / {format_currency(limit)}")
+                                text=f"LTCG exemption used: {format_currency(used)} / {format_currency(limit)}")
                     st.caption(f"Taxable LTCG: {format_currency(hyp_tax['ltcg_taxable'])} "
-                              f"— exemption assumed available in full; reduce if you have other equity LTCG this FY.")
+                               f"— exemption assumed available in full; reduce if you have other equity LTCG this FY.")
 
                 st.dataframe(cg.matches_to_df(hyp_matches), width="stretch", hide_index=True)
 
@@ -3602,7 +3802,8 @@ elif mode == "⚙️ Admin Panel":
         else:
             st.caption("📡 No NAV snapshot saved yet.")
     with nc2:
-        if st.button("🔄 Redownload NAV", width="stretch", help="Force-fetch latest NAV from AMFI, ignoring cycle cache"):
+        if st.button("🔄 Redownload NAV", width="stretch",
+                     help="Force-fetch latest NAV from AMFI, ignoring cycle cache"):
             with st.spinner("Fetching latest NAV from AMFI..."):
                 result = download_and_save_nav_if_needed(force=True)
             if result["ok"]:
@@ -3614,7 +3815,26 @@ elif mode == "⚙️ Admin Panel":
                 st.rerun()
             else:
                 st.error(f"❌ {result['reason']}")
-
+    nc3 = st.columns(1)[0]
+    with nc3:
+          prev_status = st.session_state.get("prev_nav_done_for")
+          if prev_status:
+              st.caption(f"✅ Previous business day NAV synced ({prev_status})")
+          else:
+              st.caption("⚠️ Previous business day NAV not yet synced")
+          if st.button("🔄 Sync Previous Business Day NAV", width="stretch",
+                       help="Force-retry fetching the prior working day's NAV history — "
+                            "use this if the 1-day-diff column looks empty/zero."):
+              with st.spinner("Fetching previous business day NAV from AMFI..."):
+                  result = sync_previous_business_day_nav_if_needed(force=True)
+              if result["ok"]:
+                  st.cache_data.clear()
+                  st.session_state.pop("folio_nav_df", None)
+                  st.session_state.pop("folio_nav_summary", None)
+                  st.success(f"✅ {result['reason']}")
+                  st.rerun()
+              else:
+                  st.error(f"❌ {result['reason']}")
     st.divider()
 
     tab_upload, tab_raw = st.tabs(["📤 Upload Data", "📄 View Raw Data"])
