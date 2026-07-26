@@ -2924,6 +2924,8 @@ elif mode == "👥 Clients":
                         (holdings["current_nav"] - holdings["prev_nav"]) * holdings["units"]
                 ).fillna(0.0)
 
+
+
                 total_invested = holdings['file_aum'].sum()
                 total_current = holdings['nav_based_aum'].sum() or 0
                 total_gain_loss = total_current - total_invested
@@ -2942,7 +2944,7 @@ elif mode == "👥 Clients":
                 # ═══════════════════════════════════════════════════════════
                 # COMPUTE XIRR PER FOLIO (like invested value calculation)
                 # ═══════════════════════════════════════════════════════════
-                st.caption("⏳ Computing XIRR per folio...")
+                # st.caption("⏳ Computing XIRR per folio...")
 
                 folio_xirr_map = {}
                 xirr_errors = []
@@ -2973,9 +2975,9 @@ elif mode == "👥 Clients":
                         )
 
                         if xres["xirr"] is not None:
-                            folio_xirr_map[fid] = xres["xirr"]
+                            folio_xirr_map[fid] = xres["xirr_pct"]  # use pre-computed %
                             if show_debug:
-                                st.write(f"✅ {fid}: XIRR = {xres['xirr_pct']}")
+                                st.write(f"✅ {fid}: XIRR = {xres['xirr_pct']}%")
                         else:
                             err_msg = xres.get("error") or "Unknown error"
                             xirr_errors.append(f"{fid}: {err_msg}")
