@@ -202,7 +202,13 @@ def get_family_members(family_id: int) -> pd.DataFrame:
     with get_conn() as conn:
         return pd.read_sql("""
             SELECT m.client_code, m.is_head,
-                   b.primary_holder_first_name || ' ' || b.primary_holder_last_name AS name
+                   COALESCE(
+                       NULLIF(TRIM(
+                           COALESCE(b.primary_holder_first_name,'') || ' ' ||
+                           COALESCE(b.primary_holder_last_name,'')
+                       ), ''),
+                       m.client_code
+                   ) AS name
             FROM client_family_member m
             LEFT JOIN bse_client_master b ON m.client_code = b.client_code
             WHERE m.family_id = ?
@@ -266,15 +272,16 @@ def compute_client_holdings(client_code: str, folio_nav_df: pd.DataFrame) -> pd.
     if not identity:
         return pd.DataFrame()
     name, match_pan, is_minor = identity["name"], identity["match_pan"], identity["is_minor"]
+    name_clean = name.strip().upper() if name else ""
 
     with get_conn() as conn:
         if is_minor:
             cams_f = pd.read_sql(
-                "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name))=?",
-                conn, params=(name,))
+                "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                conn, params=(name_clean,))
             kfin_f = pd.read_sql(
-                "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name))=?",
-                conn, params=(name,))
+                "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                conn, params=(name_clean,))
         else:
             cams_f = pd.read_sql(
                 "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
@@ -2626,14 +2633,16 @@ elif mode == "👥 Clients":
         st.divider()
 
     # ── Folio lookup (used by Portfolio & AUM and Active SIPs) ──
+    name_clean = name.strip().upper() if name else ""
+
     with get_conn() as conn:
         if is_minor:
             cams_f = pd.read_sql(
-                "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name))=?",
-                conn, params=(name,))
+                "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                conn, params=(name_clean,))
             kfin_f = pd.read_sql(
-                "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name))=?",
-                conn, params=(name,))
+                "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                conn, params=(name_clean,))
         else:
             cams_f = pd.read_sql(
                 "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
@@ -2686,6 +2695,8 @@ elif mode == "👥 Clients":
             member_rows = []
             for mc in member_codes:
                 h = compute_client_holdings(mc, folio_nav_df)
+                if h is None:
+                    h = pd.DataFrame()
                 mname_arr = members_df.loc[members_df['client_code'] == mc, 'name'].values
                 mname = mname_arr[0] if len(mname_arr) else mc
                 inv = h['file_aum'].sum() if not h.empty else 0.0
