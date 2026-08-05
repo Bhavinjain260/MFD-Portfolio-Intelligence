@@ -165,6 +165,67 @@ def get_client_kfin_schemes(folio_ids: list[str]) -> pd.DataFrame:
     return df[["folio_no", "prodcode", "scheme"]]
 
 
+def search_clients(query: str, limit: int = 20) -> pd.DataFrame:
+    """
+    Search bse_client_master by name, code, PAN, guardian PAN, email, mobile.
+    Includes minors who have empty primary_holder_pan but valid guardian_pan.
+    """
+    if not query or not query.strip():
+        return pd.DataFrame()
+    q = f"%{query.strip().upper()}%"
+    q_exact = query.strip().upper()
+
+    with get_conn() as conn:
+        df = pd.read_sql("""
+            SELECT
+                client_code,
+                COALESCE(
+                    NULLIF(TRIM(primary_holder_first_name || ' ' ||
+                              COALESCE(primary_holder_middle_name || ' ', '') ||
+                              primary_holder_last_name), ''),
+                    client_code
+                ) AS display_name,
+                COALESCE(
+                    NULLIF(TRIM(primary_holder_pan), ''),
+                    NULLIF(TRIM(guardian_pan), ''),
+                    '—'
+                ) AS display_pan,
+                tax_status,
+                CASE
+                    WHEN TRIM(COALESCE(primary_holder_pan,'')) = ''
+                    THEN 'Minor'
+                    ELSE 'Adult'
+                END AS client_category,
+                email,
+                indian_mobile_no AS mobile,
+                guardian_first_name || ' ' || guardian_last_name AS guardian_name
+            FROM bse_client_master
+            WHERE
+                UPPER(TRIM(client_code))                             LIKE ?
+                OR UPPER(TRIM(primary_holder_first_name))             LIKE ?
+                OR UPPER(TRIM(primary_holder_last_name))              LIKE ?
+                OR UPPER(TRIM(primary_holder_first_name || ' ' ||
+                              primary_holder_last_name))              LIKE ?
+                OR UPPER(TRIM(primary_holder_pan))                    LIKE ?
+                OR UPPER(TRIM(guardian_pan))                          LIKE ?
+                OR UPPER(TRIM(email))                                 LIKE ?
+                OR UPPER(TRIM(indian_mobile_no))                      LIKE ?
+            ORDER BY
+                CASE WHEN UPPER(TRIM(client_code)) = ? THEN 0
+                     WHEN UPPER(TRIM(primary_holder_first_name)) = ? THEN 1
+                     ELSE 2
+                END,
+                display_name
+            LIMIT ?
+        """, conn, params=(
+            q, q, q, q, q, q, q, q,
+            q_exact, q_exact,
+            limit
+        ))
+    return df
+
+
+
 def ensure_family_tables() -> None:
     with get_conn() as conn:
         conn.execute("""
@@ -249,6 +310,133 @@ def delete_family(family_id: int) -> None:
     with get_conn() as conn:
         conn.execute("DELETE FROM client_family_member WHERE family_id = ?", (family_id,))
         conn.execute("DELETE FROM client_family WHERE family_id = ?", (family_id,))
+
+
+
+# def search_clients(query: str, limit: int = 20) -> pd.DataFrame:
+#     """
+#     Search bse_client_master by name, code, PAN, guardian PAN, email, mobile.
+#     Includes minors who have empty primary_holder_pan but valid guardian_pan.
+#     """
+#     if not query or not query.strip():
+#         return pd.DataFrame()
+#     q = f"%{query.strip().upper()}%"
+#     q_exact = query.strip().upper()
+#
+#     with get_conn() as conn:
+#         df = pd.read_sql("""
+#             SELECT
+#                 client_code,
+#                 COALESCE(
+#                     NULLIF(TRIM(primary_holder_first_name || ' ' ||
+#                               COALESCE(primary_holder_middle_name || ' ', '') ||
+#                               primary_holder_last_name), ''),
+#                     client_code
+#                 ) AS display_name,
+#                 COALESCE(
+#                     NULLIF(TRIM(primary_holder_pan), ''),
+#                     NULLIF(TRIM(guardian_pan), ''),
+#                     '—'
+#                 ) AS display_pan,
+#                 tax_status,
+#                 CASE
+#                     WHEN TRIM(COALESCE(primary_holder_pan,'')) = ''
+#                     THEN 'Minor'
+#                     ELSE 'Adult'
+#                 END AS client_category,
+#                 email,
+#                 indian_mobile_no AS mobile,
+#                 guardian_first_name || ' ' || guardian_last_name AS guardian_name
+#             FROM bse_client_master
+#             WHERE
+#                 UPPER(TRIM(client_code))                             LIKE ?
+#                 OR UPPER(TRIM(primary_holder_first_name))             LIKE ?
+#                 OR UPPER(TRIM(primary_holder_last_name))              LIKE ?
+#                 OR UPPER(TRIM(primary_holder_first_name || ' ' ||
+#                               primary_holder_last_name))              LIKE ?
+#                 OR UPPER(TRIM(primary_holder_pan))                    LIKE ?
+#                 OR UPPER(TRIM(guardian_pan))                          LIKE ?
+#                 OR UPPER(TRIM(email))                                 LIKE ?
+#                 OR UPPER(TRIM(indian_mobile_no))                      LIKE ?
+#             ORDER BY
+#                 CASE WHEN UPPER(TRIM(client_code)) = ? THEN 0
+#                      WHEN UPPER(TRIM(primary_holder_first_name)) = ? THEN 1
+#                      ELSE 2
+#                 END,
+#                 display_name
+#             LIMIT ?
+#         """, conn, params=(
+#             q, q, q, q, q, q, q, q,
+#             q_exact, q_exact,
+#             limit
+#         ))
+#     return df
+
+
+def get_family_all_folios(family_id: int) -> set:
+    """
+    Gather ALL folio IDs for ALL family members.
+      • Adults  – matched by PAN in folio tables.
+      • Minors  – matched by investor_name (because their folio PAN is empty).
+    """
+    members = get_family_members(family_id)
+    if members.empty:
+        return set()
+
+    all_folios: set = set()
+
+    with get_conn() as conn:
+        for _, member in members.iterrows():
+            client_code = member["client_code"]
+            identity = get_client_identity(client_code)
+            if not identity:
+                continue
+
+            name_clean = identity["name"].strip().upper() if identity["name"] else ""
+            match_pan = identity["match_pan"]
+
+            if identity["is_minor"]:
+                if name_clean:
+                    for row in conn.execute(
+                        "SELECT foliochk FROM cams_wbr9_folio "
+                        "WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        all_folios.add(row[0])
+                    for row in conn.execute(
+                        "SELECT folio FROM kfin_mfsd211_folio "
+                        "WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        all_folios.add(row[0])
+            else:
+                if match_pan and match_pan.strip():
+                    pan_up = match_pan.strip().upper()
+                    for row in conn.execute(
+                        "SELECT foliochk FROM cams_wbr9_folio "
+                        "WHERE TRIM(UPPER(pan_no)) = ?", (pan_up,)
+                    ).fetchall():
+                        all_folios.add(row[0])
+                    for row in conn.execute(
+                        "SELECT folio FROM kfin_mfsd211_folio "
+                        "WHERE TRIM(UPPER(pan_number)) = ?", (pan_up,)
+                    ).fetchall():
+                        all_folios.add(row[0])
+                if name_clean:
+                    for row in conn.execute(
+                        "SELECT foliochk FROM cams_wbr9_folio "
+                        "WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        all_folios.add(row[0])
+                    for row in conn.execute(
+                        "SELECT folio FROM kfin_mfsd211_folio "
+                        "WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        all_folios.add(row[0])
+
+    return all_folios
 
 
 def get_client_identity(client_code: str) -> Optional[dict]:
@@ -2562,11 +2750,10 @@ elif mode == "👥 Clients":
                        email,
                        city
                 FROM bse_client_master
-                WHERE primary_holder_pan IS NOT NULL
-                   OR guardian_pan IS NOT NULL
             """, conn)
 
     clients_df = load_clients_search()
+
     if clients_df.empty:
         st.warning("No clients found. Upload client master.")
         st.stop()
