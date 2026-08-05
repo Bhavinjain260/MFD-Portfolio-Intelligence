@@ -1279,6 +1279,12 @@ def sync_previous_business_day_nav_if_needed(force: bool = False) -> dict:
 def _previous_snapshot_path(current_nav_date: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
     _ensure_text_dir()
     available = sorted(f for f in os.listdir(NAV_TEXT_DIR) if f.startswith("nav_") and f.endswith(".txt"))
+
+    # ── DEBUG ──
+    st.write(f"🐞 [_previous_snapshot_path] NAV_TEXT_DIR={NAV_TEXT_DIR}")
+    st.write(f"🐞 Available snapshots: {available}")
+    # ── END DEBUG ──
+
     if not available:
         return None, None
 
@@ -1296,17 +1302,21 @@ def _previous_snapshot_path(current_nav_date: Optional[str] = None) -> tuple[Opt
     return None, None
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+# @st.cache_data(ttl=3600, show_spinner=False)
 def load_previous_nav_map() -> dict:
-    path, _ = _previous_snapshot_path()
+    path, prev_date = _previous_snapshot_path()   # <-- changed from path, _
+    st.write(f"🐞 [load_previous_nav_map] path={path}, prev_date={prev_date}")
     if not path:
+        st.write("🐞 No previous snapshot found — returning empty dict")
         return {}
     try:
         with open(path, "r", encoding="utf-8") as f:
             text = f.read()
-    except Exception:
+    except Exception as e:
+        st.write(f"🐞 Failed to read file: {e}")
         return {}
     nav_map, _, _ = _parse_nav_text(text)
+    st.write(f"🐞 Parsed {len(nav_map)} ISINs from previous snapshot")
     return {isin: nav for isin, (nav, _) in nav_map.items()}
 
 
@@ -2350,7 +2360,7 @@ if mode == "📊 Dashboard":
         with st.spinner("⏳ Fetching ISIN mappings & latest NAVs from AMFI... (5–10s)"):
             try:
                 download_and_save_nav_if_needed()
-
+                sync_previous_business_day_nav_if_needed()
 
                 folio_nav_df = get_all_folios_with_isin_and_nav(get_conn)
 
@@ -3117,12 +3127,89 @@ elif mode == "👥 Clients":
                 holdings = holdings.drop(columns=['product_code_norm'], errors='ignore')
 
                 prev_nav_map = load_previous_nav_map()
-                holdings["prev_nav"] = holdings["isin"].apply(
-                    lambda i: prev_nav_map.get(str(i).strip().upper()) if pd.notna(i) else None
-                )
+
+                # ── DEBUG: 1D Diff diagnosis ──
+                st.divider()
+                st.subheader("🐞 DEBUG: 1-Day Diff")
+
+                st.write(f"**Previous NAV map size:** {len(prev_nav_map)} ISINs")
+                st.write(f"**Previous NAV date:** {get_previous_nav_date() or 'None'}")
+
+                if not prev_nav_map:
+                    st.error("❌ prev_nav_map is EMPTY")
+                else:
+                    sample = dict(list(prev_nav_map.items())[:3])
+                    st.write("**Sample prev_nav_map:**", sample)
+
+
+                # Track why prev_nav is missing
+                def _lookup_prev(isin):
+                    if pd.isna(isin):
+                        return None, "ISIN is NaN"
+                    s = str(isin).strip().upper()
+                    if not s:
+                        return None, "ISIN is empty string"
+                    val = prev_nav_map.get(s)
+                    if val is None:
+                        return None, f"ISIN {s} not in prev map"
+                    return val, "OK"
+
+
+                prev_info = holdings["isin"].apply(_lookup_prev)
+                holdings["_prev_nav"] = prev_info.apply(lambda x: x[0])
+                holdings["_prev_reason"] = prev_info.apply(lambda x: x[1])
+
+                # Show summary
+                reason_counts = holdings["_prev_reason"].value_counts().to_dict()
+                st.write("**Prev NAV lookup reasons:**", reason_counts)
+
+                # Rows that have current_nav but no prev_nav
+                missing_prev = holdings[
+                    holdings["current_nav"].notna() & holdings["_prev_nav"].isna()
+                    ]
+                st.write(f"**Rows with current_nav but NO prev_nav:** {len(missing_prev)}")
+
+                if not missing_prev.empty:
+                    with st.expander("🔍 Schemes missing previous NAV"):
+                        st.dataframe(
+                            missing_prev[["folio_id", "rta", "scheme_name", "isin", "current_nav", "_prev_reason"]]
+                            .head(20),
+                            hide_index=True
+                        )
+
+                # Now compute 1D Diff using our debug column to be sure
+                holdings["prev_nav"] = holdings["_prev_nav"]
                 holdings["one_day_diff"] = (
                         (holdings["current_nav"] - holdings["prev_nav"]) * holdings["units"]
                 ).fillna(0.0)
+
+                # Distinguish "missing" from "genuinely zero"
+                holdings["_diff_reason"] = holdings.apply(lambda r:
+                                                          "missing prev_nav" if pd.isna(r["_prev_nav"]) and pd.notna(
+                                                              r["current_nav"])
+                                                          else (
+                                                              "zero units" if pd.isna(r.get("units")) or r.get("units",
+                                                                                                               0) == 0
+                                                              else (
+                                                                  "nav unchanged" if r["current_nav"] == r["_prev_nav"]
+                                                                  else "calculated")),
+                                                          axis=1
+                                                          )
+
+                zero_diff = holdings[holdings["one_day_diff"].fillna(0) == 0]
+                if not zero_diff.empty:
+                    with st.expander(f"🔍 Why 1D Diff = 0 ({len(zero_diff)} rows)"):
+                        st.write(zero_diff["_diff_reason"].value_counts().to_dict())
+                        st.dataframe(
+                            zero_diff[["folio_id", "rta", "scheme_name", "isin", "current_nav", "prev_nav", "units",
+                                       "_diff_reason"]]
+                            .head(20),
+                            hide_index=True
+                        )
+
+                # Cleanup temp columns
+                holdings = holdings.drop(columns=["_prev_nav", "_prev_reason", "_diff_reason"], errors="ignore")
+                st.divider()
 
 
 
