@@ -2863,10 +2863,12 @@ elif mode == "👥 Clients":
 
     # ── Tabs ──
     if family is None:
-        tab_portfolio, tab_sips = st.tabs(["📈 Portfolio & AUM", "🔄 Active SIPs"])
+        tab_portfolio, tab_sips, tab_brokerage = st.tabs(
+            ["📈 Portfolio & AUM", "🔄 Active SIPs", "💰 Brokerage"]
+        )
     else:
-        tab_family, tab_portfolio, tab_sips = st.tabs(
-            ["👨‍👩‍👧‍👦 Family Portfolio", "📈 Portfolio & AUM", "🔄 Active SIPs"]
+        tab_family, tab_portfolio, tab_sips, tab_brokerage = st.tabs(
+            ["👨‍👩‍👧‍👦 Family Portfolio", "📈 Portfolio & AUM", "🔄 Active SIPs", "💰 Brokerage"]
         )
 
     # ═══════════════════════════════════════════════════════════
@@ -3565,6 +3567,175 @@ elif mode == "👥 Clients":
         else:
             st.info("No SIP records found.")
 
+
+    # ═══════════════════════════════════════════════════════════
+    # TAB BROKERAGE — Client-specific brokerage by month
+    # ═══════════════════════════════════════════════════════════
+
+    with tab_brokerage:
+        st.subheader("💰 Brokerage Generated")
+
+        if not all_folios:
+            st.info("No folios found for this client — cannot fetch brokerage.")
+        else:
+            folio_list = list(all_folios)
+            placeholders = ",".join(["?"] * len(folio_list))
+
+            with get_conn() as conn:
+                cams_brok = pd.read_sql(f"""
+                    SELECT proc_date, inv_name AS client, folio_no AS folio,
+                           scheme_code, trxn_no, plot_amount AS txn_amount,
+                           brkage_rate AS brokerage_pct, brkage_amt AS brokerage_amount,
+                           brkage_type AS brokerage_type
+                    FROM cams_wbr77_brokerage
+                    WHERE folio_no IN ({placeholders})
+                """, conn, params=folio_list)
+
+                kfin_brok = pd.read_sql(f"""
+                    SELECT process_date AS proc_date, investor_name AS client,
+                           account_number AS folio, scheme_code,
+                           transaction_number AS trxn_no, amount AS txn_amount,
+                           percentage AS brokerage_pct, brokerage AS brokerage_amount,
+                           brokerage_type
+                    FROM kfin_mfsd205_brokerage
+                    WHERE account_number IN ({placeholders})
+                """, conn, params=folio_list)
+
+            # ── Parse dates ──
+            if not cams_brok.empty:
+                cams_brok["proc_date"] = pd.to_datetime(
+                    cams_brok["proc_date"], errors="coerce", dayfirst=False
+                )
+                cams_brok["rta"] = "CAMS"
+            if not kfin_brok.empty:
+                kfin_brok["proc_date"] = pd.to_datetime(
+                    kfin_brok["proc_date"], errors="coerce", dayfirst=False
+                )
+                kfin_brok["rta"] = "KFinTech"
+
+            brok_df = pd.concat([cams_brok, kfin_brok], ignore_index=True)
+
+            if brok_df.empty:
+                st.info("No brokerage records found for this client's folios.")
+            else:
+                # ── FORCE datetime after concat (handles empty-side object dtype) ──
+                brok_df["proc_date"] = pd.to_datetime(brok_df["proc_date"], errors="coerce")
+                brok_df = brok_df.dropna(subset=["proc_date"])  # discard unparseable rows
+
+                # ── EXTRA GUARD: all rows may have had bad dates ──
+                if brok_df.empty:
+                    st.info("No brokerage records with valid dates found for this client.")
+                else:
+                    brok_df["month"] = brok_df["proc_date"].dt.strftime("%Y-%m")
+                    brok_df["brokerage_amount"] = pd.to_numeric(
+                        brok_df["brokerage_amount"], errors="coerce"
+                    ).fillna(0)
+
+                    # ── Monthly summary ──
+                    monthly = (
+                        brok_df.groupby("month")["brokerage_amount"]
+                        .sum()
+                        .reset_index()
+                        .sort_values("month")
+                    )
+
+                    # ── Top metrics ──
+                    total_brok = brok_df["brokerage_amount"].sum()
+                    avg_monthly = monthly["brokerage_amount"].mean() if not monthly.empty else 0
+                    if not monthly.empty:
+                        best_row = monthly.loc[monthly["brokerage_amount"].idxmax()]
+                        best_month, best_amount = best_row["month"], best_row["brokerage_amount"]
+                    else:
+                        best_month, best_amount = "-", 0
+
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Total Brokerage", format_brokerage_inr(total_brok))
+                    m2.metric("Avg Monthly", format_brokerage_inr(avg_monthly))
+                    m3.metric("Best Month", str(best_month))
+                    m4.metric("Best Month Amount", format_brokerage_inr(best_amount))
+
+                    st.divider()
+
+                    # ── Monthly bar chart ──
+                    if not monthly.empty:
+                        fig = px.bar(
+                            monthly,
+                            x="month",
+                            y="brokerage_amount",
+                            title="Monthly Brokerage Trend",
+                            labels={"brokerage_amount": "Brokerage (₹)", "month": "Month"},
+                            color_discrete_sequence=["#6366f1"],
+                        )
+                        fig = theme_plotly(fig, dark)
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.info("No monthly brokerage data to display.")
+
+                    st.divider()
+
+                    # ── Month-wise table ──
+                    st.subheader("📅 Month-wise Summary")
+                    if not monthly.empty:
+                        st.dataframe(
+                            monthly.rename(
+                                columns={"month": "Month", "brokerage_amount": "Brokerage"}
+                            ),
+                            width="stretch",
+                            hide_index=True,
+                            column_config={
+                                "Brokerage": st.column_config.NumberColumn(format="₹ %.2f")
+                            },
+                        )
+                    else:
+                        st.info("No monthly data available.")
+
+                    st.divider()
+
+                    # ── Transaction-level detail ──
+                    st.subheader("📜 Transaction-level Detail")
+                    detail_cols = [
+                        "rta", "proc_date", "client", "folio", "scheme_code",
+                        "txn_amount", "brokerage_pct", "brokerage_amount", "brokerage_type",
+                    ]
+                    detail_cols = [c for c in detail_cols if c in brok_df.columns]
+                    detail_display = brok_df[detail_cols].sort_values(
+                        "proc_date", ascending=False
+                    ).copy()
+                    detail_display["proc_date"] = detail_display["proc_date"].dt.strftime(
+                        "%Y-%m-%d"
+                    )
+
+                    st.dataframe(
+                        detail_display.rename(
+                            columns={
+                                "rta": "RTA",
+                                "proc_date": "Date",
+                                "client": "Client",
+                                "folio": "Folio",
+                                "scheme_code": "Scheme",
+                                "txn_amount": "Txn Amount",
+                                "brokerage_pct": "Brokerage %",
+                                "brokerage_amount": "Brokerage",
+                                "brokerage_type": "Type",
+                            }
+                        ),
+                        width="stretch",
+                        hide_index=True,
+                        column_config={
+                            "Txn Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                            "Brokerage %": st.column_config.NumberColumn(format="%.4f"),
+                            "Brokerage": st.column_config.NumberColumn(format="₹ %.2f"),
+                        },
+                    )
+
+                    csv = brok_df.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        "⬇️ Download Client Brokerage (CSV)",
+                        csv,
+                        f"brokerage_{client_code}.csv",
+                        "text/csv",
+                        key=f"client_brok_dl_{client_code}",
+                    )
 
 
 
