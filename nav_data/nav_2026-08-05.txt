@@ -10850,10 +10850,10 @@ SBI Mutual Fund
  
 Sundaram Mutual Fund
  
-119602;INF903J01OB6;-;Sundaram Global Brand Theme-Equity Active FOF - Direct Growth;48.3500;03-Aug-2026
-119601;INF903J01NZ7;INF903J01OA8;Sundaram Global Brand Theme-Equity Active FOF - Direct IDCW;40.5772;03-Aug-2026
-106370;INF903J01EX1;-;Sundaram Global Brand Theme-Equity Active FOF - Regular Growth;43.7266;03-Aug-2026
-106369;INF903J01EY9;INF903J01EZ6;Sundaram Global Brand Theme-Equity Active FOF - Regular IDCW;35.3478;03-Aug-2026
+119602;INF903J01OB6;-;Sundaram Global Brand Theme-Equity Active FOF - Direct Growth;48.8341;04-Aug-2026
+119601;INF903J01NZ7;INF903J01OA8;Sundaram Global Brand Theme-Equity Active FOF - Direct IDCW;40.9836;04-Aug-2026
+106370;INF903J01EX1;-;Sundaram Global Brand Theme-Equity Active FOF - Regular Growth;44.1634;04-Aug-2026
+106369;INF903J01EY9;INF903J01EZ6;Sundaram Global Brand Theme-Equity Active FOF - Regular IDCW;35.7009;04-Aug-2026
  
 Open Ended Schemes(Other Scheme - Gold ETF)
  
