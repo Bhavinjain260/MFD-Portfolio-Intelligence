@@ -3853,7 +3853,9 @@ elif mode == "💰 Brokerage Report":
     # ════════════════════════════════════════════════════════════
     st.subheader("✍️ Record Manual Brokerage Receipt")
 
-    known_amcs = sorted(detail["amc"].dropna().unique()) if not detail.empty else []
+    # Investment-based AMCs (from folio holdings) so new AMCs auto-appear
+    # when investments are uploaded, not just when brokerage files arrive.
+    known_amcs = [a for a in load_active_amcs() if a and not a.startswith("⚠️")]
     amc_dropdown_options = known_amcs + ["➕ Add new AMC..."]
 
     with st.form("manual_brokerage_form", clear_on_submit=True):
