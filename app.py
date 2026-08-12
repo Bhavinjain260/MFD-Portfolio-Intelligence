@@ -17,6 +17,8 @@ import data_manager as dm
 import xirr
 from init_db import init_db, get_conn
 from theme_patch import THEME_WATCHER_JS, render_theme
+import cams_mailback_sync
+
 from xirr import compute_xirr_debug
 
 log = logging.getLogger(__name__)
@@ -2242,6 +2244,31 @@ def _auto_bse_scheme_master():
 _auto_bse_scheme_master()
 
 
+# ==================== CAMS MAILBACK AUTO-SYNC ====================
+def _auto_cams_mailback_sync():
+    """Non-blocking: starts background IMAP sync if needed, once per day."""
+    import cams_mailback_sync as cms
+
+    if not st.session_state.get("cams_mailback_auto_toggle", True):
+        return
+
+    last_run = st.session_state.get("cams_mailback_auto_last_run")
+    today = datetime.now().strftime("%Y-%m-%d")
+    if last_run == today:
+        return
+
+    st.session_state["cams_mailback_auto_last_run"] = today
+
+    status = cms.get_sync_status()
+    if status["running"]:
+        st.info("⏳ Syncing in background...")
+    elif status["done"]:
+        st.success(status["msg"]) if status["ok"] else st.error(status["msg"])
+
+
+_auto_cams_mailback_sync()
+
+
 # ==================== GLOBAL BSE DOWNLOAD/PARSE NOTIFICATION ====================
 # Runs on every page, not just Admin Panel, so the toast fires wherever the user is.
 def _notify_bse_scheme_status():
@@ -2256,6 +2283,8 @@ def _notify_bse_scheme_status():
 
 
 _notify_bse_scheme_status()
+
+
 
 # -------------------- THEME (native Streamlit System/Light/Dark) --------------------
 current_theme = st.context.theme.type
