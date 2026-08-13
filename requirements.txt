@@ -1,0 +1,7 @@
+selenium
+pyzipper
+scipy
+pandas
+plotly
+streamlit
+requests

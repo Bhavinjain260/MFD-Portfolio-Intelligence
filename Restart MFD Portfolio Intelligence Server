@@ -1,0 +1,43 @@
+# Restart MFD Portfolio Intelligence Server
+
+## 1. SSH into Termux
+```
+ssh U0_a313@100.94.7.23 -p 8022
+```
+
+## 2. Enter proot Debian
+```
+proot-distro login debian --bind /storage/emulated/0:/root/storage
+```
+
+## 3. Start code-server (if not already running)
+```
+export PATH="$HOME/.local/bin:$PATH"
+nohup code-server --bind-addr 0.0.0.0:8080 /root/storage/pictures/USB/MFD-Portfolio-Intelligence > ~/code-server.log 2>&1 &
+disown
+```
+Access at: `http://100.94.7.23:8080`
+Password: `cat ~/.config/code-server/config.yaml`
+
+## 4. In code-server terminal — activate venv
+```
+source ~/venvs/mfd/bin/activate
+```
+
+## 5. Go to project and run Streamlit
+```
+cd /mnt/sdcard/pictures/USB/MFD-Portfolio-Intelligence
+streamlit run app.py --server.port 8501 --server.address 0.0.0.0
+```
+Access at: `http://100.94.7.23:8501`
+
+To run in background instead:
+```
+nohup streamlit run app.py --server.port 8501 --server.address 0.0.0.0 > ~/streamlit.log 2>&1 &
+disown
+```
+
+## Notes
+- Use `/mnt/sdcard/...` path, not `/root/storage/...` — the bind-mount path throws PermissionError on file writes (FUSE/exFAT write restriction). `/mnt/sdcard` works fine.
+- If port 8501 busy: `pkill -f streamlit` or use a different port (`--server.port 8502`).
+- venv location: `~/venvs/mfd` (proot's own ext4, not the FUSE-mounted USB drive — avoids symlink/write issues).
