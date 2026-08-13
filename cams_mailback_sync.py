@@ -76,6 +76,50 @@ _sync_status = {
     "finished_at": None,
 }
 
+# ══════════════════════════════════════════════════════════════
+# BACKGROUND POLLING LOOP (checks every N minutes while app runs)
+# ══════════════════════════════════════════════════════════════
+POLL_ENABLED_KEY = "cams_mailback_poll_enabled"
+
+_poller_started = False
+_poller_lock = threading.Lock()
+
+
+def is_polling_enabled() -> bool:
+    return get_setting(POLL_ENABLED_KEY, "1") == "1"
+
+
+def set_polling_enabled(enabled: bool) -> None:
+    set_setting(POLL_ENABLED_KEY, "1" if enabled else "0")
+
+
+def _poll_loop(interval_seconds: int = POLL_INTERVAL_SECONDS):
+    while True:
+        try:
+            if is_polling_enabled() and credentials_configured() and not _sync_status["running"]:
+                log.info("[CAMS-POLL] Checking for new mailback files...")
+                result = sync_once()
+                log.info(
+                    "[CAMS-POLL] %s downloaded, %s parsed, %s failed",
+                    len(result["downloaded"]), len(result["parsed"]), len(result["parse_failed"])
+                )
+                set_setting(SETTINGS_KEYS["last_sync_at"], datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        except Exception:
+            log.exception("[CAMS-POLL] Poll cycle failed")
+        time.sleep(interval_seconds)
+
+
+def ensure_poller_started(interval_seconds: int = POLL_INTERVAL_SECONDS) -> None:
+    """Idempotent — safe to call on every Streamlit rerun. Starts the loop once per process."""
+    global _poller_started
+    with _poller_lock:
+        if _poller_started:
+            return
+        t = threading.Thread(target=_poll_loop, args=(interval_seconds,), daemon=True)
+        t.start()
+        _poller_started = True
+        log.info("[CAMS-POLL] Background poller started (every %ss)", interval_seconds)
+
 
 def get_sync_status() -> dict:
     """Return copy of current sync status — safe for UI display."""

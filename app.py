@@ -3,8 +3,10 @@ import os
 import re
 import time
 import requests
+import threading
 import warnings
 from datetime import datetime, timedelta, date as date_cls
+from datetime import time as time_cls
 from typing import Optional
 
 import pandas as pd
@@ -13,6 +15,7 @@ import streamlit as st
 
 import capital_gain as cg
 import data_manager
+import nav_scheduler
 import data_manager as dm
 import xirr
 from init_db import init_db, get_conn
@@ -845,12 +848,10 @@ def download_and_save_nav(timeout: int = 30) -> dict:
     return {"path": path, "bytes": size, "date": today}
 
 
-from datetime import time as time_cls
 
 # NAV re-publish cutoffs during the day. Domestic NAVs settle ~3 PM,
 # foreign/international scheme NAVs land later, ~11 PM.
 NAV_REDOWNLOAD_TIMES = [time_cls(15, 0), time_cls(23, 0)]
-
 
 def _last_passed_cutoff_today(now: datetime) -> Optional[time_cls]:
     """Latest cutoff time that has already passed today, or None if before all of them."""
@@ -2267,6 +2268,8 @@ def _auto_cams_mailback_sync():
 
 
 _auto_cams_mailback_sync()
+cams_mailback_sync.ensure_poller_started()
+nav_scheduler.ensure_started(get_conn, download_and_save_nav_if_needed, _amfi.load)
 
 
 # ==================== GLOBAL BSE DOWNLOAD/PARSE NOTIFICATION ====================
@@ -4582,6 +4585,31 @@ elif mode == "⚙️ Admin Panel":
                   st.rerun()
               else:
                   st.error(f"❌ {result['reason']}")
+    st.divider()
+
+    st.subheader("🔁 Background Automation")
+
+    ac1, ac2 = st.columns(2)
+    with ac1:
+        cams_poll_on = st.toggle(
+            "📥 Auto-check CAMS mailback (every 5 min)",
+            value=cams_mailback_sync.is_polling_enabled(),
+            key="cams_poll_toggle"
+        )
+        if cams_poll_on != cams_mailback_sync.is_polling_enabled():
+            cams_mailback_sync.set_polling_enabled(cams_poll_on)
+            st.rerun()
+
+    with ac2:
+        nav_sched_on = st.toggle(
+            "📈 Auto NAV download (11 AM & 3 PM daily)",
+            value=nav_scheduler.is_nav_schedule_enabled(get_conn),
+            key="nav_sched_toggle"
+        )
+        if nav_sched_on != nav_scheduler.is_nav_schedule_enabled(get_conn):
+            nav_scheduler.set_nav_schedule_enabled(get_conn, nav_sched_on)
+            st.rerun()
+
     st.divider()
 
     tab_upload, tab_raw = st.tabs(["📤 Upload Data", "📄 View Raw Data"])
