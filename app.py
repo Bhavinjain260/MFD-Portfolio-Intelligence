@@ -13,6 +13,8 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+import capital_gain as cg
+
 import capital_gain as cg_row
 import data_manager
 import nav_scheduler
@@ -4589,26 +4591,22 @@ elif mode == "⚙️ Admin Panel":
 
     st.subheader("🔁 Background Automation")
 
+
     ac1, ac2 = st.columns(2)
+
     with ac1:
-        cams_poll_on = st.toggle(
-            "📥 Auto-check CAMS mailback (every 5 min)",
-            value=cams_mailback_sync.is_polling_enabled(),
-            key="cams_poll_toggle"
-        )
-        if cams_poll_on != cams_mailback_sync.is_polling_enabled():
-            cams_mailback_sync.set_polling_enabled(cams_poll_on)
-            st.rerun()
+        with st.expander("📬 Mailback Auto-Sync (CAMS + KFinTech)", expanded=False):            
+            cams_mailback_sync.render_settings_ui()
 
     with ac2:
-        nav_sched_on = st.toggle(
-            "📈 Auto NAV download (11 AM & 3 PM daily)",
-            value=nav_scheduler.is_nav_schedule_enabled(get_conn),
-            key="nav_sched_toggle"
-        )
-        if nav_sched_on != nav_scheduler.is_nav_schedule_enabled(get_conn):
-            nav_scheduler.set_nav_schedule_enabled(get_conn, nav_sched_on)
-            st.rerun()
+        nav_sched_on = st.toggle(            
+            "📈 Auto NAV download (11 AM & 3 PM daily)",            
+            value=nav_scheduler.is_nav_schedule_enabled(get_conn),            
+            key="nav_sched_toggle"        
+            )
+    if nav_sched_on != nav_scheduler.is_nav_schedule_enabled(get_conn):            
+        nav_scheduler.set_nav_schedule_enabled(get_conn, nav_sched_on)            
+        st.rerun()
 
     st.divider()
 
