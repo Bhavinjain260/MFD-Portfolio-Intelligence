@@ -13,7 +13,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-import capital_gain as cg
+import capital_gain as cg_row
 import data_manager
 import nav_scheduler
 import data_manager as dm
