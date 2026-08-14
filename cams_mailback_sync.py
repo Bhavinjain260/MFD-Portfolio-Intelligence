@@ -56,7 +56,10 @@ RTA_CONFIG = {
     },
     "KFinTech": {
         "sender": "distributorcare@kfintech.com",
-        "reports": ["MFSD201", "MFSD211", "MFSD205", "MFSD243", "MFSD203"],
+        "reports": [
+            "MFSD201", "MFSD211", "MFSD205", "MFSD243", "MFSD203",
+            "MFSD307", "MFSD313", "MFSD311",   # ← Karvy aliases
+        ],
         "parsers": {
             "MFSD201": dm.parse_kfin_mfsd201_transaction,
             "MFSD211": dm.parse_kfin_mfsd211_folio,
@@ -64,12 +67,22 @@ RTA_CONFIG = {
             "MFSD243": dm.parse_kfin_mfsd243_sip,
             "MFSD203": dm.parse_kfin_mfsd203_aum,
         },
+        "aliases": {   # ← NEW: map aliases → canonical codes
+            "MFSD307": "MFSD201",
+            "MFSD313": "MFSD243",
+            "MFSD311": "MFSD211",
+        },
         "password_key": "kfintech_mailback_zip_password",
     },
 }
 
+# Extract all report codes from RTA_CONFIG
+REPORT_CODES = []
+for rta_config in RTA_CONFIG.values():
+    REPORT_CODES.extend(rta_config["reports"])
+
 BASE_DIR = Path("mailback_sync")
-POLL_INTERVAL_SECONDS = 300
+POLL_INTERVAL_SECONDS = 43200
 
 
 
@@ -228,24 +241,41 @@ def _detect_rta(sender: str) -> str | None:
     return None
 
 
-def _extract_report_code(subject: str, rta: str) -> str | None:
-    """Extract report code for the given RTA."""
-    reports = RTA_CONFIG[rta]["reports"]
-    for code in reports:
-        if re.search(rf"\b{code}\b", subject, re.I):
-            return code
-    return None
+# def _extract_report_code(subject: str, rta: str) -> str | None:
+#     """Extract report code for the given RTA."""
+#     reports = RTA_CONFIG[rta]["reports"]
+#     for code in reports:
+#         if re.search(rf"\b{code}\b", subject, re.I):
+#             return code
+#     return None
+
+# def _resolve_report_code(rta: str, code: str) -> str:
+#     """Resolve alias report codes (e.g. MFSD307) to canonical codes (e.g. MFSD201)."""
+#     aliases = RTA_CONFIG[rta].get("aliases", {})
+#     return aliases.get(code, code)
 
 
-def _extract_download_url(body: str) -> str | None:
-    """Extract download URL (works for both CAMS and KFinTech)."""
-    # CAMS: https://mailback*.camsonline.com/mailback_result/*.zip
-    # KFinTech: https://mfs.kfintech.com/... (URL varies, generic pattern)
-    m = re.search(r'https://\S+\.zip(?:\?|\s|$)', body)
-    if m:
-        url = m.group(0).strip('?"\'')
-        return url if url.endswith('.zip') else url[:url.rfind('.zip') + 4]
-    return None
+# def _extract_download_url(body: str) -> str | None:
+#     """
+#     Extract download URL from email body.
+#     Handles HTML hrefs, quotes, and query parameters.
+#     """
+#     # Pattern 1: Direct URL ending in .zip with optional query params
+#     # Allow .zip followed by ?, &, =, /, or typical URL chars, then a boundary
+#     m = re.search(r'https?://[^\s"<>]+\.zip(?:\?[^\s"<>]*)?', body, re.I)
+#     if m:
+#         url = m.group(0)
+#         # Clean trailing punctuation that might be captured
+#         url = url.rstrip('"\'<>);,')
+#         return url
+
+#     # Pattern 2: Generic .zip link (fallback)
+#     m = re.search(r'https?://\S+\.zip', body, re.I)
+#     if m:
+#         url = m.group(0).rstrip('"\'<>);,')
+#         return url
+
+#     return None
 
 
 def _is_no_data(body: str) -> bool:
@@ -373,6 +403,55 @@ def get_done_counts() -> dict:
 # ══════════════════════════════════════════════════════════════
 # MAIN SYNC (supports both CAMS and KFinTech)
 # ══════════════════════════════════════════════════════════════
+def _extract_report_code(subject: str, body: str, rta: str) -> str | None:
+    """Extract report code from subject first, then fall back to body."""
+    reports = RTA_CONFIG[rta]["reports"]
+    for code in reports:
+        if re.search(rf"\b{code}\b", subject, re.I):
+            return code
+    # Fallback: search body if not found in subject
+    for code in reports:
+        if re.search(rf"\b{code}\b", body, re.I):
+            return code
+    return None
+
+
+def _resolve_report_code(rta: str, code: str) -> str:
+    """Resolve alias report codes (e.g. MFSD307) to canonical codes (e.g. MFSD201)."""
+    aliases = RTA_CONFIG[rta].get("aliases", {})
+    return aliases.get(code, code)
+
+
+def _extract_download_url(body: str) -> str | None:
+    """Extract download URL from email body.
+    
+    Handles:
+    - CAMS direct .zip links
+    - KFinTech scdelivery redirect links (no .zip in URL)
+    - KFinTech mfs portal links
+    """
+    # Pattern 1: Direct .zip URL (CAMS and some KFinTech)
+    m = re.search(r'https?://[^\s"<>]+\.zip(?:\?[^\s"<>]*)?', body, re.I)
+    if m:
+        url = m.group(0).rstrip('"\'<>);,')
+        return url
+
+    # Pattern 2: KFinTech scdelivery redirect URLs 
+    # Example: https://scdelivery.kfintech.com/c/?u=...&p=...&e=...
+    m = re.search(r'https?://scdelivery\.kfintech\.com/c/\?u=[^\s"<>]+', body, re.I)
+    if m:
+        url = m.group(0).rstrip('"\'<>);,')
+        return url
+
+    # Pattern 3: Generic KFinTech mfs links (fallback)
+    m = re.search(r'https?://mfs\.kfintech\.com/[^\s"<>]+', body, re.I)
+    if m:
+        url = m.group(0).rstrip('"\'<>);,')
+        return url
+
+    return None
+
+
 def sync_once() -> dict:
     """
     One sync run:
@@ -423,13 +502,18 @@ def sync_once() -> dict:
 
             msg = email.message_from_bytes(msg_data[0][1])
             subject = _decode_subject(msg.get("Subject"))
-            report_code = _extract_report_code(subject, rta)
-            
+            body = _get_body_text(msg)
+
+            # ── TRACE: log what we see ──
+            log.info("[%s] Processing email: %s", rta, subject[:100])
+
+            report_code = _extract_report_code(subject, body, rta)
             if not report_code:
-                log.debug("[%s] No recognized report code in: %s", rta, subject)
+                log.warning("[%s] No report code found in subject/body for: %s", rta, subject[:80])
                 continue
 
-            body = _get_body_text(msg)
+            report_code = _resolve_report_code(rta, report_code)
+            log.info("[%s-%s] Report code resolved", rta, report_code)
 
             if _is_no_data(body):
                 log.info("[%s-%s] No data — marking read, skipping", rta, report_code)
@@ -439,9 +523,14 @@ def sync_once() -> dict:
 
             url = _extract_download_url(body)
             if not url:
-                log.warning("[%s-%s] No DownloadURL found: %s", rta, report_code, subject)
+                log.error("[%s-%s] No download URL found in body", rta, report_code)
+                log.debug("[%s-%s] Body snippet: %s", rta, report_code, body[:500].replace('\n', ' '))
                 results["errors"].append(f"{rta}: {subject} — no URL found")
+                # Mark read so broken emails don't poll forever
+                imap.store(mid, "+FLAGS", "\\Seen")
                 continue
+
+            log.info("[%s-%s] Download URL found: %s", rta, report_code, url[:120])
 
             try:
                 saved = _download_and_extract(url, rta, report_code, zip_password)
@@ -570,7 +659,7 @@ def render_settings_ui():
     
     toggle_col1, toggle_col2 = st.columns([4, 1])
     with toggle_col1:
-        st.caption("Background polling checks Gmail every 5 minutes for new reports.")
+        st.caption("Background polling checks Gmail every 2 hours for new reports.")
     with toggle_col2:
         new_state = st.toggle(
             "Auto-sync",
@@ -736,202 +825,3 @@ def render_settings_ui():
             st.markdown("**✅ Imported (Done)**")
             for rta, count in done.items():
                 st.caption(f"{rta}: {count} files")
-    """Render mailback sync settings in Streamlit (call from Admin Panel)."""
-    try:
-        import streamlit as st
-    except ImportError:
-        log.warning("Streamlit not available for UI rendering")
-        return
-
-    st.subheader("📬 Mailback Auto-Sync Settings (CAMS + KFinTech)")
-    st.caption(
-        "Configure automatic downloads of CAMS & KFinTech mailback reports via Gmail IMAP. "
-        "Both RTAs can be enabled independently."
-    )
-
-    # ── Toggle auto-sync ──
-    auto_enabled = is_polling_enabled()
-    new_state = st.toggle(
-        "🔄 Auto-sync enabled",
-        value=auto_enabled,
-        help="Enable/disable background polling for mailback emails",
-        key="mailback_auto_toggle"
-    )
-    if new_state != auto_enabled:
-        set_polling_enabled(new_state)
-        st.rerun()
-
-    st.divider()
-
-    # ── IMAP Credentials ──
-    st.markdown("### 🔐 Gmail IMAP Credentials (Shared)")
-    st.caption(
-        "Use the same Gmail account for both CAMS and KFinTech mailback subscriptions. "
-        "Create an App Password: [Google Account Security](https://myaccount.google.com/apppasswords)"
-    )
-
-    creds = get_credentials()
-
-    ic1, ic2 = st.columns(2)
-    with ic1:
-        imap_user = st.text_input(
-            "Gmail address",
-            value=creds["imap_user"],
-            placeholder="your-email@gmail.com",
-            key="imap_user_input",
-            help="The Gmail account where CAMS & KFinTech send mailback reports"
-        )
-    with ic2:
-        imap_app_password = st.text_input(
-            "App password (from Google Account)",
-            value=creds["imap_app_password"],
-            type="password",
-            placeholder="••••••••••••••••",
-            key="imap_app_password_input",
-            help="NOT your regular Gmail password — use App Password from Google Account Security"
-        )
-
-    st.divider()
-
-    # ── RTA-specific Zip Passwords ──
-    st.markdown("### 🔒 Zip Passwords (One per RTA)")
-
-    rta_col1, rta_col2 = st.columns(2)
-
-    # ── CAMS ──
-    with rta_col1:
-        st.markdown("#### 🟢 CAMS Mailback")
-        cams_zip_password = st.text_input(
-            "CAMS zip password",
-            value=creds["cams_zip_password"],
-            type="password",
-            placeholder="••••••••",
-            key="cams_zip_password_input",
-            help="Password to extract CAMS mailback zips (from your CAMS mailback subscription settings)"
-        )
-        cams_enabled = st.checkbox(
-            "Enable CAMS auto-download",
-            value=bool(creds["cams_zip_password"]),
-            key="cams_enabled_check",
-            help="Download WBR2, WBR9, WBR49, WBR77, WBR4 reports"
-        )
-
-    # ── KFinTech ──
-    with rta_col2:
-        st.markdown("#### 🔵 KFinTech Mailback")
-        kfintech_zip_password = st.text_input(
-            "KFinTech zip password",
-            value=creds["kfintech_zip_password"],
-            type="password",
-            placeholder="••••••••",
-            key="kfintech_zip_password_input",
-            help="Password to extract KFinTech mailback zips (from your KFinTech mailback subscription settings)"
-        )
-        kfintech_enabled = st.checkbox(
-            "Enable KFinTech auto-download",
-            value=bool(creds["kfintech_zip_password"]),
-            key="kfintech_enabled_check",
-            help="Download MFSD201, MFSD211, MFSD205, MFSD243, MFSD203 reports"
-        )
-
-    st.divider()
-
-    # ── Save button ──
-    if st.button("💾 Save Credentials", width="stretch", key="save_mailback_creds"):
-        save_credentials(
-            imap_user=imap_user if imap_user else None,
-            imap_app_password=imap_app_password if imap_app_password else None,
-            cams_zip_password=cams_zip_password if cams_enabled and cams_zip_password else None,
-            kfintech_zip_password=kfintech_zip_password if kfintech_enabled and kfintech_zip_password else None
-        )
-        st.cache_data.clear()
-        st.success("✅ Credentials saved!")
-        st.rerun()
-
-    st.divider()
-
-    # ── Manual Sync button ──
-    st.markdown("### 🔄 Manual Sync")
-
-    if st.button("🔄 Sync Now (Background)", width="stretch", key="manual_mailback_sync"):
-        start_background_sync()
-        st.info("⏳ Sync started in background...")
-
-    # ── Sync status ──
-    status = get_sync_status()
-
-    if status["running"]:
-        st.warning(f"⏳ Sync running since {status['started_at']}")
-    elif status["done"]:
-        if status["ok"]:
-            st.success(f"✅ {status['msg']}")
-            if status["result"]:
-                with st.expander("📋 Sync Details", expanded=False):
-                    res = status["result"]
-                    st.write(f"**Checked:** {res['checked']}")
-                    st.write(f"**Downloaded:** {len(res['downloaded'])} files")
-                    if res["downloaded"]:
-                        for item in res["downloaded"]:
-                            st.caption(f"  • {item.get('rta')}: {item.get('subject')}")
-                    st.write(f"**Imported:** {len(res['parsed'])} files")
-                    st.write(f"**Failed:** {len(res['parse_failed'])} files")
-                    if res["parse_failed"]:
-                        with st.expander("❌ Failed Files"):
-                            for item in res["parse_failed"]:
-                                st.caption(f"  • {item.get('file')}: {item.get('msg')}")
-                    st.write(f"**No Data:** {len(res['no_data'])} emails")
-                    if res["errors"]:
-                        with st.expander("⚠️ Errors"):
-                            for err in res["errors"]:
-                                st.caption(f"  • {err}")
-        else:
-            st.error(f"❌ {status['msg']}")
-    else:
-        last_sync = dm.get_credential("mailback_last_sync_at")
-        if last_sync:
-            st.info(f"✅ Last sync: {last_sync}")
-        else:
-            st.info("No sync yet — configure credentials and click 'Sync Now'")
-
-    st.divider()
-
-    # ── File Status ──
-    st.markdown("### 📊 File Status")
-
-    pending = get_pending_counts()
-    done = get_done_counts()
-
-    status_col1, status_col2 = st.columns(2)
-
-    with status_col1:
-        st.markdown("**⏳ Pending (Waiting to Parse)**")
-        for rta, count in pending.items():
-            st.caption(f"  • {rta}: {count}")
-
-    with status_col2:
-        st.markdown("**✅ Imported (Done)**")
-        for rta, count in done.items():
-            st.caption(f"  • {rta}: {count}")
-
-    if any(pending.values()):
-        st.warning("⚠️ Some files waiting to parse. Manual sync will retry.")
-
-
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1 and sys.argv[1] == "loop":
-        log.info("Running continuous sync loop (Ctrl+C to stop)")
-        while True:
-            try:
-                result = sync_once()
-                log.info(
-                    "Sync complete: %s downloaded, %s parsed, %s parse-failed, %s no-data, %s errors",
-                    len(result["downloaded"]), len(result["parsed"]), len(result["parse_failed"]),
-                    len(result["no_data"]), len(result["errors"])
-                )
-            except Exception as e:
-                log.exception("Sync run failed")
-            time.sleep(POLL_INTERVAL_SECONDS)
-    else:
-        result = sync_once()
-        print(json.dumps(result, indent=2, default=str))

@@ -11,6 +11,7 @@ import threading
 import logging
 from datetime import datetime
 from pathlib import Path
+import shutil
 
 log = logging.getLogger(__name__)
 
@@ -159,7 +160,14 @@ def _do_download() -> dict:
 
     driver = None
     try:
-        service = Service(ChromeDriverManager().install())
+                
+
+        chromedriver_path = shutil.which("chromedriver")
+        if chromedriver_path:
+            service = Service(chromedriver_path)
+        else:
+            # Fallback for x86_64 only — will fail on ARM64 if system chromedriver missing
+            service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_opts)
         driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
         wait = WebDriverWait(driver, 30)

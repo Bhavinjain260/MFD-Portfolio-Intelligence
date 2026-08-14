@@ -1921,32 +1921,22 @@ def render_data_manager():
     with st.expander("📧 CAMS Mailback Auto-Sync", expanded=False):
         import cams_mailback_sync as cms
 
+        # Settings + auto-sync toggle (moved from Admin Panel)
+        cms.render_settings_ui()
+
+        st.divider()
         st.caption("Polls Gmail for CAMS mailback report emails (WBR2/WBR9/WBR49/WBR77/WBR4), "
                    "downloads, extracts, and auto-imports into the DB.")
 
         creds = cms.get_credentials()
         configured = cms.credentials_configured()
 
-        st.markdown("**Credentials**")
-        with st.form("cams_mailback_creds_form"):
-            imap_user = st.text_input("Gmail address", value=creds["imap_user"])
-            imap_pw = st.text_input("Gmail App Password", type="password",
-                                    placeholder="●●●●●●●●●●●●●●●●" if creds["imap_app_password"] else "")
-            zip_pw = st.text_input("CAMS Mailback Zip Password", type="password",
-                                   # AFTER — safe access
-zip_pwd = creds.get("zip_password", "") if isinstance(creds, dict) else ""
-placeholder="●●●●●●●●●●●●●●●●" if zip_pwd else "")
-            if st.form_submit_button("💾 Save Credentials"):
-                cms.save_credentials(imap_user, imap_pw, zip_pw)
-                st.success("Saved.")
-                st.rerun()
-
         if configured:
             st.caption("✅ Credentials configured")
         else:
-            st.caption("⚠️ Set Gmail address, App Password, and Zip Password before syncing")
+            st.caption("⚠️ Configure credentials in the settings above before syncing")
 
-        last_sync = cms.get_setting(cms.SETTINGS_KEYS["last_sync_at"])
+        last_sync = None
         st.caption(f"🕓 Last sync: {last_sync or 'never'}")
 
         sc1, sc2 = st.columns(2)
@@ -1955,22 +1945,33 @@ placeholder="●●●●●●●●●●●●●●●●" if zip_pwd else "
                 with st.spinner("Checking Gmail, downloading, and importing..."):
                     try:
                         result = cms.sync_once()
-                        st.success(
-                            f"Checked {result['checked']} mails | "
-                            f"Downloaded {len(result['downloaded'])} | "
-                            f"Imported {len(result['parsed'])} | "
-                            f"Failed to import {len(result['parse_failed'])} | "
-                            f"No data {len(result['no_data'])} | "
-                            f"Errors {len(result['errors'])}"
-                        )
-                        if result["errors"]:
-                            st.error("Errors: " + "; ".join(result["errors"]))
-                        if result["parse_failed"]:
-                            st.warning("Import failures: " + "; ".join(
-                                f"{r['report']}/{r['file']}: {r['msg']}" for r in result["parse_failed"]
-                            ))
+                        if result:
+                            checked = result.get('checked', 0)
+                            downloaded = len(result.get('downloaded', []))
+                            parsed = len(result.get('parsed', []))
+                            parse_failed = len(result.get('parse_failed', []))
+                            no_data = len(result.get('no_data', []))
+                            errors = len(result.get('errors', []))
+                            
+                            st.success(
+                                f"Checked {checked} mails | "
+                                f"Downloaded {downloaded} | "
+                                f"Imported {parsed} | "
+                                f"Failed to import {parse_failed} | "
+                                f"No data {no_data} | "
+                                f"Errors {errors}"
+                            )
+                            if result.get("errors"):
+                                st.error("Errors: " + "; ".join(result["errors"]))
+                            if result.get("parse_failed"):
+                                st.warning("Import failures: " + "; ".join(
+                                    f"{r.get('report', '?')}/{r.get('file', '?')}: {r.get('msg', '?')}" 
+                                    for r in result["parse_failed"]
+                                ))
+                        else:
+                            st.info("No result from sync")
                     except Exception as e:
-                        st.error(str(e))
+                        st.error(f"Sync failed: {str(e)}")
 
         with sc2:
             if st.button("📥 Process Pending Files", key="cams_mailback_pending_btn"):
@@ -1981,11 +1982,14 @@ placeholder="●●●●●●●●●●●●●●●●" if zip_pwd else "
                         st.warning("; ".join(f"{r['report']}/{r['file']}: {r['msg']}" for r in res["failed"]))
 
         st.divider()
-        pending = cms.get_pending_counts()
-        done = cms.get_done_counts()
-        pc_cols = st.columns(len(cms.REPORT_CODES))
-        for i, code in enumerate(cms.REPORT_CODES):
-            with pc_cols[i]:
-                st.metric(code, f"{done.get(code, 0)} imported", delta=f"{pending.get(code, 0)} pending",
-                          delta_color="inverse" if pending.get(code, 0) else "off")
-
+        pending = cms.get_pending_counts() or {}
+        done = cms.get_done_counts() or {}
+        
+        if hasattr(cms, 'REPORT_CODES') and cms.REPORT_CODES:
+            pc_cols = st.columns(len(cms.REPORT_CODES))
+            for i, code in enumerate(cms.REPORT_CODES):
+                with pc_cols[i]:
+                    st.metric(code, f"{done.get(code, 0)} imported", delta=f"{pending.get(code, 0)} pending",
+                              delta_color="inverse" if pending.get(code, 0) else "off")
+        else:
+            st.info("No report codes configured")

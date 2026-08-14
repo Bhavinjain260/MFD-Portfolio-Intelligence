@@ -2247,31 +2247,31 @@ def _auto_bse_scheme_master():
 _auto_bse_scheme_master()
 
 
-# ==================== CAMS MAILBACK AUTO-SYNC ====================
-def _auto_cams_mailback_sync():
-    """Non-blocking: starts background IMAP sync if needed, once per day."""
-    import cams_mailback_sync as cms
+# # ==================== CAMS MAILBACK AUTO-SYNC ====================
+# def _auto_cams_mailback_sync():
+#     """Non-blocking: starts background IMAP sync if needed, once per day."""
+#     import cams_mailback_sync as cms
 
-    if not st.session_state.get("cams_mailback_auto_toggle", True):
-        return
+#     if not st.session_state.get("cams_mailback_auto_toggle", True):
+#         return
 
-    last_run = st.session_state.get("cams_mailback_auto_last_run")
-    today = datetime.now().strftime("%Y-%m-%d")
-    if last_run == today:
-        return
+#     last_run = st.session_state.get("cams_mailback_auto_last_run")
+#     today = datetime.now().strftime("%Y-%m-%d")
+#     if last_run == today:
+#         return
 
-    st.session_state["cams_mailback_auto_last_run"] = today
+#     st.session_state["cams_mailback_auto_last_run"] = today
 
-    status = cms.get_sync_status()
-    if status["running"]:
-        st.info("⏳ Syncing in background...")
-    elif status["done"]:
-        st.success(status["msg"]) if status["ok"] else st.error(status["msg"])
+#     status = cms.get_sync_status()
+#     if status["running"]:
+#         st.info("⏳ Syncing in background...")
+#     elif status["done"]:
+#         st.success(status["msg"]) if status["ok"] else st.error(status["msg"])
 
 
-_auto_cams_mailback_sync()
-cams_mailback_sync.ensure_poller_started()
-nav_scheduler.ensure_started(get_conn, download_and_save_nav_if_needed, _amfi.load)
+# _auto_cams_mailback_sync()
+# cams_mailback_sync.ensure_poller_started()
+# nav_scheduler.ensure_started(get_conn, download_and_save_nav_if_needed, _amfi.load)
 
 
 # ==================== GLOBAL BSE DOWNLOAD/PARSE NOTIFICATION ====================
@@ -4589,26 +4589,35 @@ elif mode == "⚙️ Admin Panel":
                   st.error(f"❌ {result['reason']}")
     st.divider()
 
-    st.subheader("🔁 Background Automation")
+    # st.subheader("🔁 Background Automation")
 
 
-    ac1, ac2 = st.columns(2)
+    # ac1, ac2 = st.columns(2)
 
-    with ac1:
-        with st.expander("📬 Mailback Auto-Sync (CAMS + KFinTech)", expanded=False):            
-            cams_mailback_sync.render_settings_ui()
+    # with ac1:
+    #     with st.expander("📬 Mailback Auto-Sync (CAMS + KFinTech)", expanded=False):            
+    #         cams_mailback_sync.render_settings_ui()
 
-    with ac2:
-        nav_sched_on = st.toggle(            
-            "📈 Auto NAV download (11 AM & 3 PM daily)",            
-            value=nav_scheduler.is_nav_schedule_enabled(get_conn),            
-            key="nav_sched_toggle"        
-            )
+    # with ac2:
+    #     nav_sched_on = st.toggle(            
+    #         "📈 Auto NAV download (11 AM & 3 PM daily)",            
+    #         value=nav_scheduler.is_nav_schedule_enabled(get_conn),            
+    #         key="nav_sched_toggle"        
+    #         )
+    # if nav_sched_on != nav_scheduler.is_nav_schedule_enabled(get_conn):            
+    #     nav_scheduler.set_nav_schedule_enabled(get_conn, nav_sched_on)            
+    #     st.rerun()
+
+    # st.divider()
+
+    nav_sched_on = st.toggle(            
+        "📈 Auto NAV download (11 AM & 3 PM daily)",            
+        value=nav_scheduler.is_nav_schedule_enabled(get_conn),            
+        key="nav_sched_toggle"        
+    )
     if nav_sched_on != nav_scheduler.is_nav_schedule_enabled(get_conn):            
         nav_scheduler.set_nav_schedule_enabled(get_conn, nav_sched_on)            
         st.rerun()
-
-    st.divider()
 
     tab_upload, tab_raw = st.tabs(["📤 Upload Data", "📄 View Raw Data"])
 
