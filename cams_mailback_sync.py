@@ -71,43 +71,7 @@ RTA_CONFIG = {
 BASE_DIR = Path("mailback_sync")
 POLL_INTERVAL_SECONDS = 300
 
-SETTINGS_KEYS = {
-    "imap_user": "mailback_imap_user",
-    "imap_app_password": "mailback_imap_app_password",
-    "cams_zip_password": "cams_mailback_zip_password",
-    "kfintech_zip_password": "kfintech_mailback_zip_password",
-    "last_sync_at": "mailback_last_sync_at",
-}
 
-
-# ══════════════════════════════════════════════════════════════
-# BACKGROUND SYNC STATUS
-# ══════════════════════════════════════════════════════════════
-_sync_status = {
-    "running": False,
-    "done": False,
-    "ok": False,
-    "msg": "",
-    "result": None,
-    "started_at": None,
-    "finished_at": None,
-}
-
-# ══════════════════════════════════════════════════════════════
-# POLLING LOOP
-# ══════════════════════════════════════════════════════════════
-POLL_ENABLED_KEY = "mailback_poll_enabled"
-
-_poller_started = False
-_poller_lock = threading.Lock()
-
-
-def is_polling_enabled() -> bool:
-    return get_setting(POLL_ENABLED_KEY, "1") == "1"
-
-
-def set_polling_enabled(enabled: bool) -> None:
-    set_setting(POLL_ENABLED_KEY, "1" if enabled else "0")
 
 
 def _poll_loop(interval_seconds: int = POLL_INTERVAL_SECONDS):
@@ -120,7 +84,7 @@ def _poll_loop(interval_seconds: int = POLL_INTERVAL_SECONDS):
                     "[MAILBACK-POLL] %s downloaded, %s parsed, %s failed",
                     len(result["downloaded"]), len(result["parsed"]), len(result["parse_failed"])
                 )
-                set_setting(SETTINGS_KEYS["last_sync_at"], datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                dm.set_credential("mailback_last_sync_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         except Exception:
             log.exception("[MAILBACK-POLL] Poll cycle failed")
         time.sleep(interval_seconds)
@@ -160,52 +124,56 @@ def _set_sync_status(**kwargs):
 
 
 # ══════════════════════════════════════════════════════════════
-# SETTINGS
+# BACKGROUND SYNC STATUS
 # ══════════════════════════════════════════════════════════════
-def _ensure_settings_table():
-    with dm.get_conn() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS app_settings (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )
-        """)
+_sync_status = {
+    "running": False,
+    "done": False,
+    "ok": False,
+    "msg": "",
+    "result": None,
+    "started_at": None,
+    "finished_at": None,
+}
+
+# ══════════════════════════════════════════════════════════════
+# POLLING LOOP
+# ══════════════════════════════════════════════════════════════
+POLL_ENABLED_KEY = "mailback_poll_enabled"
+
+_poller_started = False
+_poller_lock = threading.Lock()
 
 
-def get_setting(key: str, default: str = "") -> str:
-    _ensure_settings_table()
-    with dm.get_conn() as conn:
-        row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
-    return row[0] if row and row[0] is not None else default
+def is_polling_enabled() -> bool:
+    return dm.get_credential(POLL_ENABLED_KEY, "1") == "1"
 
 
-def set_setting(key: str, value: str) -> None:
-    _ensure_settings_table()
-    with dm.get_conn() as conn:
-        conn.execute("""
-            INSERT INTO app_settings (key, value) VALUES (?, ?)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value
-        """, (key, value))
+def set_polling_enabled(enabled: bool) -> None:
+    dm.set_credential(POLL_ENABLED_KEY, "1" if enabled else "0")
 
 
+# ══════════════════════════════════════════════════════════════
+# SETTINGS (Uses unified sync_credentials table from data_manager)
+# ══════════════════════════════════════════════════════════════
 def get_credentials() -> dict:
     return {
-        "imap_user": get_setting(SETTINGS_KEYS["imap_user"]),
-        "imap_app_password": get_setting(SETTINGS_KEYS["imap_app_password"]),
-        "cams_zip_password": get_setting(SETTINGS_KEYS["cams_zip_password"]),
-        "kfintech_zip_password": get_setting(SETTINGS_KEYS["kfintech_zip_password"]),
+        "imap_user": dm.get_credential("mailback_imap_user"),
+        "imap_app_password": dm.get_credential("mailback_imap_app_password"),
+        "cams_zip_password": dm.get_credential("cams_mailback_zip_password"),
+        "kfintech_zip_password": dm.get_credential("kfintech_mailback_zip_password"),
     }
 
 
 def save_credentials(imap_user: str, imap_app_password: str, cams_zip_password: str, kfintech_zip_password: str) -> None:
     if imap_user:
-        set_setting(SETTINGS_KEYS["imap_user"], imap_user.strip())
+        dm.set_credential("mailback_imap_user", imap_user.strip())
     if imap_app_password:
-        set_setting(SETTINGS_KEYS["imap_app_password"], imap_app_password.strip())
+        dm.set_credential("mailback_imap_app_password", imap_app_password.strip())
     if cams_zip_password:
-        set_setting(SETTINGS_KEYS["cams_zip_password"], cams_zip_password.strip())
+        dm.set_credential("cams_mailback_zip_password", cams_zip_password.strip())
     if kfintech_zip_password:
-        set_setting(SETTINGS_KEYS["kfintech_zip_password"], kfintech_zip_password.strip())
+        dm.set_credential("kfintech_mailback_zip_password", kfintech_zip_password.strip())
 
 
 def credentials_configured() -> bool:
@@ -214,7 +182,6 @@ def credentials_configured() -> bool:
         c["imap_user"] and c["imap_app_password"] and
         (c["cams_zip_password"] or c["kfintech_zip_password"])  # ← at least one RTA
     )
-
 
 # ══════════════════════════════════════════════════════════════
 # EMAIL PARSING
@@ -506,7 +473,7 @@ def sync_once() -> dict:
     results["parsed"].extend(leftover["parsed"])
     results["parse_failed"].extend(leftover["failed"])
 
-    set_setting(SETTINGS_KEYS["last_sync_at"], datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    dm.set_credential("mailback_last_sync_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     return results
 
 
@@ -563,7 +530,7 @@ def should_auto_sync() -> bool:
     """Only if credentials are set and haven't synced today."""
     if not credentials_configured():
         return False
-    last = get_setting(SETTINGS_KEYS["last_sync_at"])
+    last = dm.get_credential("mailback_last_sync_at")
     today = datetime.now().strftime("%Y-%m-%d")
     return not (last and last.startswith(today))
 
@@ -574,7 +541,201 @@ def should_auto_sync() -> bool:
 # ══════════════════════════════════════════════════════════════
 # STREAMLIT UI
 # ══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════
+# STREAMLIT UI
+# ══════════════════════════════════════════════════════════════
 def render_settings_ui():
+    """Render mailback sync settings in Streamlit (call from Admin Panel)."""
+    try:
+        import streamlit as st
+    except ImportError:
+        log.warning("Streamlit not available for UI rendering")
+        return
+
+    creds = get_credentials()
+    is_configured = credentials_configured()
+
+    # ── Header & Status Bar ──
+    col_title, col_status_badge = st.columns([3, 1])
+    with col_title:
+        st.subheader("📬 Mailback Auto-Sync")
+    with col_status_badge:
+        if is_configured:
+            st.success("✅ Ready", icon="✅")
+        else:
+            st.warning("⚠️ Setup Needed", icon="⚠️")
+
+    # ── Auto-Sync Toggle ──
+    auto_enabled = is_polling_enabled()
+    
+    toggle_col1, toggle_col2 = st.columns([4, 1])
+    with toggle_col1:
+        st.caption("Background polling checks Gmail every 5 minutes for new reports.")
+    with toggle_col2:
+        new_state = st.toggle(
+            "Auto-sync",
+            value=auto_enabled,
+            key="mailback_auto_toggle"
+        )
+    
+    if new_state != auto_enabled:
+        set_polling_enabled(new_state)
+        st.rerun()
+
+    st.divider()
+
+    # ── Credentials Configuration ──
+    with st.container(border=True):
+        st.markdown("#### 🔐 Gmail IMAP Credentials")
+        st.caption("Used to connect to Gmail and fetch CAMS/KFinTech mailback ZIPs. [Create an App Password here](https://myaccount.google.com/apppasswords)")
+        
+        g_col1, g_col2 = st.columns(2)
+        with g_col1:
+            imap_user = st.text_input(
+                "Gmail Address",
+                value=creds["imap_user"],
+                placeholder="you@example.com",
+                key="imap_user_input"
+            )
+        with g_col2:
+            imap_app_password = st.text_input(
+                "App Password",
+                value=creds["imap_app_password"],
+                type="password",
+                placeholder="xxxx xxxx xxxx xxxx",
+                key="imap_app_password_input"
+            )
+
+    st.markdown("<div style='height: 5px'></div>", unsafe_allow_html=True)
+
+    # ── RTA Passwords ──
+    rta_col1, rta_col2 = st.columns(2)
+    
+    with rta_col1:
+        with st.container(border=True):
+            st.markdown("#### 🟢 CAMS Mailback")
+            st.caption("Protects WBR2, WBR9, WBR49, WBR77, WBR4 ZIPs")
+            
+            cams_pw_status = "✅ Set" if creds["cams_zip_password"] else "❌ Missing"
+            st.markdown(f"**Status:** {cams_pw_status}")
+            
+            cams_zip_password = st.text_input(
+                "ZIP Password",
+                value=creds["cams_zip_password"],
+                type="password",
+                placeholder="Enter CAMS password",
+                key="cams_zip_password_input",
+                label_visibility="collapsed"
+            )
+            cams_enabled = st.checkbox("Enable CAMS auto-download", value=bool(creds["cams_zip_password"]), key="cams_enabled_check")
+
+    with rta_col2:
+        with st.container(border=True):
+            st.markdown("#### 🔵 KFinTech Mailback")
+            st.caption("Protects MFSD201, MFSD211, MFSD205, MFSD243, MFSD203 ZIPs")
+            
+            kfin_pw_status = "✅ Set" if creds["kfintech_zip_password"] else "❌ Missing"
+            st.markdown(f"**Status:** {kfin_pw_status}")
+            
+            kfintech_zip_password = st.text_input(
+                "ZIP Password",
+                value=creds["kfintech_zip_password"],
+                type="password",
+                placeholder="Enter KFinTech password",
+                key="kfintech_zip_password_input",
+                label_visibility="collapsed"
+            )
+            kfintech_enabled = st.checkbox("Enable KFinTech auto-download", value=bool(creds["kfintech_zip_password"]), key="kfintech_enabled_check")
+
+    st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
+
+    # ── Save Button ──
+    save_col1, save_col2, save_col3 = st.columns([1, 1, 1])
+    with save_col2:
+        if st.button("💾 Save All Credentials", type="primary", use_container_width=True, key="save_mailback_creds"):
+            save_credentials(
+                imap_user=imap_user if imap_user else None,
+                imap_app_password=imap_app_password if imap_app_password else None,
+                cams_zip_password=cams_zip_password if cams_enabled and cams_zip_password else None,
+                kfintech_zip_password=kfintech_zip_password if kfintech_enabled and kfintech_zip_password else None
+            )
+            st.cache_data.clear()
+            st.success("✅ Credentials saved successfully!")
+            st.rerun()
+
+    st.divider()
+
+    # ── Manual Sync & Status ──
+    sync_col1, sync_col2 = st.columns([1, 2])
+    
+    with sync_col1:
+        st.markdown("#### 🔄 Manual Sync")
+        if st.button("▶️ Sync Now", type="primary", use_container_width=True, key="manual_mailback_sync"):
+            if not is_configured:
+                st.error("❌ Configure credentials first!")
+            else:
+                start_background_sync()
+                st.info("⏳ Sync started in background...")
+
+    with sync_col2:
+        st.markdown("#### 📊 Last Sync Status")
+        status = get_sync_status()
+
+        if status["running"]:
+            st.warning(f"⏳ **Running** since {status['started_at']}")
+        elif status["done"]:
+            if status["ok"]:
+                st.success(status["msg"])
+                if status["result"]:
+                    with st.expander("View Details"):
+                        res = status["result"]
+                        c1, c2, c3, c4 = st.columns(4)
+                        c1.metric("Checked", res['checked'])
+                        c2.metric("Downloaded", len(res['downloaded']))
+                        c3.metric("Imported", len(res['parsed']))
+                        c4.metric("Failed", len(res['parse_failed']), delta_color="inverse")
+                        
+                        if res["parse_failed"]:
+                            st.markdown("**❌ Failed Files:**")
+                            for item in res["parse_failed"]:
+                                st.caption(f"  • `{item.get('file')}` — {item.get('msg')}")
+                        if res["errors"]:
+                            st.markdown("**⚠️ Errors:**")
+                            for err in res["errors"]:
+                                st.caption(f"  • {err}")
+            else:
+                st.error(f"❌ {status['msg']}")
+        else:
+            last_sync = dm.get_credential("mailback_last_sync_at")
+            if last_sync:
+                st.info(f"🕐 **Last sync:** {last_sync}")
+            else:
+                st.info("💤 No sync yet — configure credentials and click Sync Now")
+
+    st.divider()
+
+    # ── File Pipeline Status ──
+    with st.expander("📁 File Pipeline Status", expanded=False):
+        pending = get_pending_counts()
+        done = get_done_counts()
+        
+        pipe_col1, pipe_col2 = st.columns(2)
+        
+        with pipe_col1:
+            st.markdown("**⏳ Pending (Waiting to Parse)**")
+            if any(pending.values()):
+                for rta, count in pending.items():
+                    if count > 0:
+                        st.warning(f"{rta}: {count} files")
+                    else:
+                        st.caption(f"{rta}: 0")
+            else:
+                st.success("No pending files")
+        
+        with pipe_col2:
+            st.markdown("**✅ Imported (Done)**")
+            for rta, count in done.items():
+                st.caption(f"{rta}: {count} files")
     """Render mailback sync settings in Streamlit (call from Admin Panel)."""
     try:
         import streamlit as st
@@ -726,7 +887,7 @@ def render_settings_ui():
         else:
             st.error(f"❌ {status['msg']}")
     else:
-        last_sync = get_setting(SETTINGS_KEYS["last_sync_at"])
+        last_sync = dm.get_credential("mailback_last_sync_at")
         if last_sync:
             st.info(f"✅ Last sync: {last_sync}")
         else:

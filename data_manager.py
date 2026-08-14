@@ -19,6 +19,7 @@ import pandas as pd
 import streamlit as st
 
 import data_manager
+from init_db import get_conn
 
 print(data_manager.__file__)
 
@@ -177,6 +178,27 @@ def _inserted_dupes(before: int, conn, table: str, total: int) -> tuple[int, int
     inserted = after - before
     dupes = total - inserted
     return inserted, dupes
+
+
+
+
+def get_credential(key: str, default: str = "") -> str:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT value FROM sync_credentials WHERE key = ?", (key,)
+        ).fetchone()
+    return row[0] if row else default
+
+
+def set_credential(key: str, value: str) -> None:
+    with get_conn() as conn:
+        conn.execute("""
+            INSERT INTO sync_credentials (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = CURRENT_TIMESTAMP
+        """, (key, value))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1911,7 +1933,9 @@ def render_data_manager():
             imap_pw = st.text_input("Gmail App Password", type="password",
                                     placeholder="●●●●●●●●●●●●●●●●" if creds["imap_app_password"] else "")
             zip_pw = st.text_input("CAMS Mailback Zip Password", type="password",
-                                   placeholder="●●●●●●●●●●●●●●●●" if creds["zip_password"] else "")
+                                   # AFTER — safe access
+zip_pwd = creds.get("zip_password", "") if isinstance(creds, dict) else ""
+placeholder="●●●●●●●●●●●●●●●●" if zip_pwd else "")
             if st.form_submit_button("💾 Save Credentials"):
                 cms.save_credentials(imap_user, imap_pw, zip_pw)
                 st.success("Saved.")

@@ -1054,6 +1054,12 @@ def init_db() -> None:
         amc_name    TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS sync_credentials (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL,
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- ─────────────────────────────────────────────
     -- INDEXES
     -- ─────────────────────────────────────────────
