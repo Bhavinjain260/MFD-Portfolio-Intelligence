@@ -1918,7 +1918,7 @@ def render_data_manager():
                     (st.success(msg) if ok else st.error(msg))
 
 
-    with st.expander("📧 CAMS Mailback Auto-Sync", expanded=False):
+    with st.expander("📧 Mailback Auto-Sync", expanded=False):
         import cams_mailback_sync as cms
 
         # Settings + auto-sync toggle (moved from Admin Panel)
