@@ -4282,264 +4282,115 @@ elif mode == "🧮 Capital Gains":
             slab = 0.30  # unused for equity
 
     if is_kfin:
-        tab2, tab3 = st.tabs(["🔮 What-if Redemption", "❓ What if Not Redeemed"])
+        tab2 = st.tabs(["🔮 What-if Redemption"])[0]
         tab1 = None
     else:
-        tab1, tab2, tab3 = st.tabs(["✅ Realized Gains", "🔮 What-if Redemption", "❓ What if Not Redeemed"])
+        tab1, tab2 = st.tabs(["✅ Realized Gains", "🔮 What-if Redemption"])
 
-
-
-
-            # ── TAB 1: already-placed redemptions (CAMS only) ──
-        if tab1 is not None:
-            with tab1:
-                if not matches:
-                    st.info("No redemptions found for this folio/scheme yet.")
-                else:
-                    tax = cg.tax_for_matches(matches, tax_cat, slab)
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("Total Gain", format_currency(tax["total_gain"]))
-                    c2.metric("STCG", format_currency(tax["stcg_gain"]))
-                    c2.caption(f"Tax: {format_currency(tax['stcg_tax'])}")
-                    c3.metric("LTCG", format_currency(tax["ltcg_gain"]))
-                    c3.caption(f"Tax: {format_currency(tax['ltcg_tax'])}")
-                    c4.metric("Estimated Tax", format_currency(tax["total_tax"]))
-
-                    if tax_cat == "equity":
-                        used, limit = tax["exemption_used"], tax["exemption_limit"]
-                        st.progress(min(used / limit, 1.0) if limit else 0.0,
-                                    text=f"LTCG exemption used: {format_currency(used)} / {format_currency(limit)}")
-                        st.caption(f"Taxable LTCG: {format_currency(tax['ltcg_taxable'])} "
-                                   f"— exemption assumed available in full; reduce if you have other equity LTCG this FY.")
-                    else:
-                        st.caption(f"Slab rate applied: {slab * 100:.1f}%")
-
-                    st.dataframe(cg.matches_to_df(matches), width="stretch", hide_index=True)
-
-        # ── TAB 2: hypothetical future redemption ──
-        with tab2:
-            remaining_units = sum(l.remaining_units for l in lots)
-            st.metric("Units Currently Held (per transaction history)", f"{remaining_units:.4f}")
-
-            if remaining_units <= 0:
-                st.info("No remaining units to redeem.")
+        # ── TAB 1: already-placed redemptions (CAMS only) ──
+    if tab1 is not None:
+        with tab1:
+            if not matches:
+                st.info("No redemptions found for this folio/scheme yet.")
             else:
-                # ── Reliable NAV: reuse same canonical AMFI source as Dashboard/Client ──
-                cg_nav_df = st.session_state.get("folio_nav_df")
-                if cg_nav_df is None:
-                    download_and_save_nav_if_needed()
-                    cg_nav_df = get_all_folios_with_isin_and_nav(get_conn)
-                    st.session_state["folio_nav_df"] = cg_nav_df
+                tax = cg.tax_for_matches(matches, tax_cat, slab)
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Total Gain", format_currency(tax["total_gain"]))
+                c2.metric("STCG", format_currency(tax["stcg_gain"]))
+                c2.caption(f"Tax: {format_currency(tax['stcg_tax'])}")
+                c3.metric("LTCG", format_currency(tax["ltcg_gain"]))
+                c3.caption(f"Tax: {format_currency(tax['ltcg_tax'])}")
+                c4.metric("Estimated Tax", format_currency(tax["total_tax"]))
 
-                nav_match = cg_nav_df[
-                    (cg_nav_df["folio_id"] == folio_no) &
-                    (cg_nav_df["product_code"].astype(str).str.strip().str.upper() == prodcode.strip().upper())
-                    ]
-                auto_nav = float(nav_match["current_nav"].iloc[0]) if not nav_match.empty and pd.notna(
-                    nav_match["current_nav"].iloc[0]) else 0.0
-                auto_nav_date = nav_match["nav_date"].iloc[0] if not nav_match.empty and pd.notna(
-                    nav_match["nav_date"].iloc[0]) else None
-
-                invested_value = sum(l.remaining_units * l.rate for l in lots)
-                current_value_est = remaining_units * auto_nav
-                unrealized_gain = current_value_est - invested_value
-
-                s1, s2, s3 = st.columns(3)
-                s1.metric("Invested", format_currency(invested_value))
-                s2.metric("Current Value", format_currency(current_value_est))
-                s3.metric("Unrealized Gain", format_currency(unrealized_gain))
-
-                n1, n2 = st.columns(2)
-                with n1:
-                    nav_key = f"cg_hyp_nav_{folio_no}_{prodcode}"
-                    if nav_key not in st.session_state:
-                        st.session_state[nav_key] = auto_nav
-                    nav_input = st.number_input(
-                        "Redemption NAV (₹)", min_value=0.0, key=nav_key,
-                        help="Auto-filled from latest AMFI NAV (folio + scheme matched). Edit to project a different price."
-                    )
-                    if auto_nav_date:
-                        st.caption(f"📅 NAV as of {auto_nav_date}")
-                    else:
-                        st.caption("⚠️ No NAV date found — enter manually")
-                with n2:
-                    units_key = f"cg_hyp_units_{folio_no}_{prodcode}"
-                    if units_key not in st.session_state:
-                        st.session_state[units_key] = float(remaining_units)
-                    redeem_units = st.number_input(
-                        "Units to redeem", min_value=0.0, max_value=float(remaining_units),
-                        key=units_key
-                    )
-
-                if nav_input <= 0:
-                    st.warning("Enter a redemption NAV to calculate.")
+                if tax_cat == "equity":
+                    used, limit = tax["exemption_used"], tax["exemption_limit"]
+                    st.progress(min(used / limit, 1.0) if limit else 0.0,
+                                text=f"LTCG exemption used: {format_currency(used)} / {format_currency(limit)}")
+                    st.caption(f"Taxable LTCG: {format_currency(tax['ltcg_taxable'])} "
+                               f"— exemption assumed available in full; reduce if you have other equity LTCG this FY.")
                 else:
-                    hyp_matches = cg.hypothetical_redemption(txns, redeem_units, nav_input)
-                    hyp_tax = cg.tax_for_matches(hyp_matches, tax_cat, slab)
+                    st.caption(f"Slab rate applied: {slab * 100:.1f}%")
 
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("Projected Gain", format_currency(hyp_tax["total_gain"]))
-                    c2.metric("STCG", format_currency(hyp_tax["stcg_gain"]))
-                    c2.caption(f"Tax: {format_currency(hyp_tax['stcg_tax'])}")
-                    c3.metric("LTCG", format_currency(hyp_tax["ltcg_gain"]))
-                    c3.caption(f"Tax: {format_currency(hyp_tax['ltcg_tax'])}")
-                    c4.metric("Estimated Tax", format_currency(hyp_tax["total_tax"]))
+                st.dataframe(cg.matches_to_df(matches), width="stretch", hide_index=True)
 
-                    if tax_cat == "equity":
-                        used, limit = hyp_tax["exemption_used"], hyp_tax["exemption_limit"]
-                        st.progress(min(used / limit, 1.0) if limit else 0.0,
-                                    text=f"LTCG exemption used: {format_currency(used)} / {format_currency(limit)}")
-                        st.caption(f"Taxable LTCG: {format_currency(hyp_tax['ltcg_taxable'])} "
-                                   f"— exemption assumed available in full; reduce if you have other equity LTCG this FY.")
+    # ── TAB 2: hypothetical future redemption ──
+    with tab2:
+        remaining_units = sum(l.remaining_units for l in lots)
+        st.metric("Units Currently Held (per transaction history)", f"{remaining_units:.4f}")
 
-                    st.dataframe(cg.matches_to_df(hyp_matches), width="stretch", hide_index=True)
+        if remaining_units <= 0:
+            st.info("No remaining units to redeem.")
+        else:
+            # ── Reliable NAV: reuse same canonical AMFI source as Dashboard/Client ──
+            cg_nav_df = st.session_state.get("folio_nav_df")
+            if cg_nav_df is None:
+                download_and_save_nav_if_needed()
+                cg_nav_df = get_all_folios_with_isin_and_nav(get_conn)
+                st.session_state["folio_nav_df"] = cg_nav_df
 
-        # ═══════════════════════════════════════════════════════════════════════════
-        # TAB 3: What if NOT Redeemed — Current Value Scenario
-        # ═══════════════════════════════════════════════════════════════════════════
-        with tab3:
-            st.subheader("📊 Scenario: Units Were NOT Redeemed")
-            st.caption("Shows current value if redemptions had NOT happened — compare to actual realized gains above.")
+            nav_match = cg_nav_df[
+                (cg_nav_df["folio_id"] == folio_no) &
+                (cg_nav_df["product_code"].astype(str).str.strip().str.upper() == prodcode.strip().upper())
+                ]
+            auto_nav = float(nav_match["current_nav"].iloc[0]) if not nav_match.empty and pd.notna(
+                nav_match["current_nav"].iloc[0]) else 0.0
+            auto_nav_date = nav_match["nav_date"].iloc[0] if not nav_match.empty and pd.notna(
+                nav_match["nav_date"].iloc[0]) else None
 
-            if not matches and not is_kfin:
-                st.info("No redemptions found — all units already held as-is.")
+            invested_value = sum(l.remaining_units * l.rate for l in lots)
+            current_value_est = remaining_units * auto_nav
+            unrealized_gain = current_value_est - invested_value
+
+            s1, s2, s3 = st.columns(3)
+            s1.metric("Invested", format_currency(invested_value))
+            s2.metric("Current Value", format_currency(current_value_est))
+            s3.metric("Unrealized Gain", format_currency(unrealized_gain))
+
+            n1, n2 = st.columns(2)
+            with n1:
+                nav_key = f"cg_hyp_nav_{folio_no}_{prodcode}"
+                if nav_key not in st.session_state:
+                    st.session_state[nav_key] = auto_nav
+                nav_input = st.number_input(
+                    "Redemption NAV (₹)", min_value=0.0, key=nav_key,
+                    help="Auto-filled from latest AMFI NAV (folio + scheme matched). Edit to project a different price."
+                )
+                if auto_nav_date:
+                    st.caption(f"📅 NAV as of {auto_nav_date}")
+                else:
+                    st.caption("⚠️ No NAV date found — enter manually")
+            with n2:
+                units_key = f"cg_hyp_units_{folio_no}_{prodcode}"
+                if units_key not in st.session_state:
+                    st.session_state[units_key] = float(remaining_units)
+                redeem_units = st.number_input(
+                    "Units to redeem", min_value=0.0, max_value=float(remaining_units),
+                    key=units_key
+                )
+
+            if nav_input <= 0:
+                st.warning("Enter a redemption NAV to calculate.")
             else:
-                # Get current NAV
-                cg_nav_df = st.session_state.get("folio_nav_df")
-                if cg_nav_df is None:
-                    download_and_save_nav_if_needed()
-                    cg_nav_df = get_all_folios_with_isin_and_nav(get_conn)
-                    st.session_state["folio_nav_df"] = cg_nav_df
+                hyp_matches = cg.hypothetical_redemption(txns, redeem_units, nav_input)
+                hyp_tax = cg.tax_for_matches(hyp_matches, tax_cat, slab)
 
-                nav_match = cg_nav_df[
-                    (cg_nav_df["folio_id"] == folio_no) &
-                    (cg_nav_df["product_code"].astype(str).str.strip().str.upper() == prodcode.strip().upper())
-                    ]
-                current_nav = float(nav_match["current_nav"].iloc[0]) if not nav_match.empty and pd.notna(
-                    nav_match["current_nav"].iloc[0]) else 0.0
-                nav_date = nav_match["nav_date"].iloc[0] if not nav_match.empty and pd.notna(
-                    nav_match["nav_date"].iloc[0]) else "Unknown"
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Projected Gain", format_currency(hyp_tax["total_gain"]))
+                c2.metric("STCG", format_currency(hyp_tax["stcg_gain"]))
+                c2.caption(f"Tax: {format_currency(hyp_tax['stcg_tax'])}")
+                c3.metric("LTCG", format_currency(hyp_tax["ltcg_gain"]))
+                c3.caption(f"Tax: {format_currency(hyp_tax['ltcg_tax'])}")
+                c4.metric("Estimated Tax", format_currency(hyp_tax["total_tax"]))
 
-                if current_nav <= 0:
-                    st.warning("⚠️ Current NAV not available. Cannot calculate current value scenario.")
-                else:
-                    # Calculate what was redeemed
-                    total_redeemed_units = sum(m.units for m in matches)
-                    total_redeemed_cost = sum(m.cost for m in matches)
-                    total_redeemed_proceeds = sum(m.proceeds for m in matches)
-                    total_redeemed_gain = total_redeemed_proceeds - total_redeemed_cost
+                if tax_cat == "equity":
+                    used, limit = hyp_tax["exemption_used"], hyp_tax["exemption_limit"]
+                    st.progress(min(used / limit, 1.0) if limit else 0.0,
+                                text=f"LTCG exemption used: {format_currency(used)} / {format_currency(limit)}")
+                    st.caption(f"Taxable LTCG: {format_currency(hyp_tax['ltcg_taxable'])} "
+                               f"— exemption assumed available in full; reduce if you have other equity LTCG this FY.")
 
-                    # Current value of those redeemed units (if NOT redeemed)
-                    unredeemed_units_current_value = total_redeemed_units * current_nav
-
-                    # Total folio current value = current holdings + unredeemed units
-                    total_current_units = sum(l.remaining_units for l in lots) + total_redeemed_units
-                    total_folio_current_value = total_current_units * current_nav
-
-                    # Total invested across all units (both held and redeemed)
-                    all_invested = sum(l.remaining_units * l.rate for l in lots) + total_redeemed_cost
-
-                    # Unrealized gain if nothing was redeemed
-                    total_unrealized_if_not_redeemed = total_folio_current_value - all_invested
-
-                    st.markdown("### 1️⃣ Redeemed Units — Current Value (if NOT redeemed)")
-                    st.markdown(
-                        f"**Units redeemed:** {total_redeemed_units:.4f} | **Current NAV:** ₹{current_nav:.4f} (as of {nav_date})")
-
-                    nr1, nr2, nr3, nr4 = st.columns(4)
-                    nr1.metric("Total Cost (Invested)", format_currency(total_redeemed_cost))
-                    nr2.metric("Actual Proceeds", format_currency(total_redeemed_proceeds))
-                    nr3.metric("Realized Gain", format_currency(total_redeemed_gain))
-                    nr4.metric("Current Value If Not Redeemed", format_currency(unredeemed_units_current_value))
-
-                    # Show comparison
-                    st.divider()
-                    st.markdown("### 2️⃣ Total Folio — Current Value Scenario")
-                    st.markdown(
-                        f"**Total units if NOT redeemed:** {total_current_units:.4f} | **Current NAV:** ₹{current_nav:.4f}")
-
-                    tf1, tf2, tf3 = st.columns(3)
-                    tf1.metric("Total Invested (All Units)", format_currency(all_invested))
-                    tf2.metric("Total Current Value", format_currency(total_folio_current_value))
-                    tf3.metric("Total Unrealized Gain (If NOT Redeemed)",
-                               format_currency(total_unrealized_if_not_redeemed))
-
-                    # Impact analysis
-                    st.divider()
-                    st.markdown("### 📈 Impact Analysis")
-
-                    impact_col1, impact_col2, impact_col3 = st.columns(3)
-
-                    with impact_col1:
-                        st.markdown("**Redemption Impact**")
-                        st.metric(
-                            "Value Lost by Redeeming",
-                            format_currency(unredeemed_units_current_value - total_redeemed_proceeds),
-                            delta=format_currency(unredeemed_units_current_value - total_redeemed_proceeds)
-                        )
-                        st.caption(
-                            f"= Current value of redeemed units ({format_currency(unredeemed_units_current_value)}) − What you received ({format_currency(total_redeemed_proceeds)})")
-
-                    with impact_col2:
-                        st.markdown("**Folio Comparison**")
-                        current_holdings = sum(l.remaining_units * current_nav for l in lots)
-                        holdings_invested = sum(l.remaining_units * l.rate for l in lots)
-                        holdings_gain = current_holdings - holdings_invested
-
-                        st.metric("Current Holdings Gain", format_currency(holdings_gain))
-                        st.caption("What you have today (excluding redeemed units)")
-
-                    with impact_col3:
-                        st.markdown("**Tax Consideration**")
-                        st.metric(
-                            "Tax Paid on Redemption",
-                            format_currency(sum(m.proceeds - m.cost for m in matches) * slab if tax_cat == "debt" else
-                                            sum(m.gain for m in matches if m.is_ltcg) * cg.LTCG_EQUITY_RATE +
-                                            sum(m.gain for m in matches if not m.is_ltcg) * cg.STCG_EQUITY_RATE)
-                        )
-                        st.caption("Tax impact of selling vs holding")
-
-                    # Summary table
-                    st.divider()
-                    st.markdown("### 📋 Scenario Comparison")
-
-                    comparison_data = {
-                        "Metric": [
-                            "Units Held",
-                            "Current Value",
-                            "Total Invested",
-                            "Unrealized Gain",
-                            "Tax Paid (if redeemed)",
-                        ],
-                        "Actual (Redeemed)": [
-                            f"{sum(l.remaining_units for l in lots):.4f}",
-                            format_currency(sum(l.remaining_units * current_nav for l in lots)),
-                            format_currency(sum(l.remaining_units * l.rate for l in lots)),
-                            format_currency(sum(l.remaining_units * current_nav for l in lots) - sum(
-                                l.remaining_units * l.rate for l in lots)),
-                            format_currency(sum(m.gain for m in matches) * slab if tax_cat == "debt" else
-                                            sum(m.gain for m in matches if m.is_ltcg) * cg.LTCG_EQUITY_RATE +
-                                            sum(m.gain for m in matches if not m.is_ltcg) * cg.STCG_EQUITY_RATE),
-                        ],
-                        "If NOT Redeemed": [
-                            f"{total_current_units:.4f}",
-                            format_currency(total_folio_current_value),
-                            format_currency(all_invested),
-                            format_currency(total_unrealized_if_not_redeemed),
-                            format_currency(0.0),
-                        ]
-                    }
-
-                    comparison_df = pd.DataFrame(comparison_data)
-                    st.dataframe(comparison_df, width="stretch", hide_index=True)
-
-                    st.divider()
-                    st.caption(
-                        "💡 **Insight:** This shows the opportunity cost of redemption. "
-                        "If the redeemed units have appreciated since redemption, holding them would have been more valuable. "
-                        "However, you've locked in your gains and avoided further market risk."
-                    )
-
+                st.dataframe(cg.matches_to_df(hyp_matches), width="stretch", hide_index=True)
+      
 # ==================== ⚙️ ADMIN PANEL ====================
 elif mode == "⚙️ Admin Panel":
     st.header("⚙️ Admin Panel")

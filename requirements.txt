@@ -5,3 +5,7 @@ pandas
 plotly
 streamlit
 requests
+openpyxl
+shutil
+imaplib
+sqlite3
