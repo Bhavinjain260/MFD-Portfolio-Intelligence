@@ -934,9 +934,16 @@ def _parse_nav_text(text: str) -> tuple[dict, dict, list[dict]]:
         isin_1 = parts[1].strip()
         isin_2 = parts[2].strip()
         scheme_name = parts[3].strip()
-        nav_str = parts[4].strip()
-        date_str = parts[5].strip()
 
+        # AMFI added Plan/Option as separate columns (8-col format, Aug 2026+).
+        # Old: Code;ISIN1;ISIN2;Name;NAV;Date (6 cols)
+        # New: Code;ISIN1;ISIN2;Name;Plan;Option;NAV;Date (8 cols)
+        if len(parts) >= 8:
+            nav_str = parts[6].strip()
+            date_str = parts[7].strip()
+        else:
+            nav_str = parts[4].strip()
+            date_str = parts[5].strip()
         try:
             nav = float(nav_str) if nav_str not in ("N.A.", "") else 0.0
         except ValueError:
@@ -1002,14 +1009,14 @@ def _get_file_nav_date(path: str) -> Optional[str]:
                 parts = line.split(";")
                 if len(parts) < 6 or parts[0] == "Scheme Code":
                     continue
+                date_str = parts[7].strip() if len(parts) >= 8 else parts[5].strip()
                 try:
-                    return datetime.strptime(parts[5].strip(), "%d-%b-%Y").strftime("%Y-%m-%d")
+                    return datetime.strptime(date_str, "%d-%b-%Y").strftime("%Y-%m-%d")
                 except ValueError:
                     continue
     except Exception:
         pass
     return None
-
 
 def _have_snapshot_for_date(iso_date: str) -> bool:
     _ensure_text_dir()
@@ -1049,14 +1056,13 @@ def _looks_like_amfi_format(text: str) -> bool:
         return False
     return "scheme code" in lowered and ";" in text
 
-
 def _normalize_history_text_to_live_format(text: str) -> str:
     """
     Rewrites DownloadNAVHistoryReport_Po.aspx's 8-column rows:
-        Scheme Code;Scheme Name;ISIN Payout;ISIN Reinvest;NAV;Repurchase;Sale;Date
+        Scheme Code;NAV Name;Plan;Option;ISIN Div Payout/ISIN Growth;
+        ISIN Div Reinvestment;Net Asset Value;Date
     into the SAME 6-column layout as the live NAVAll.txt file:
         Scheme Code;ISIN Payout;ISIN Reinvest;Scheme Name;NAV;Date
-    (dropping Repurchase/Sale price, which we don't use).
 
     This lets every downstream reader — _parse_nav_text, _get_file_nav_date,
     the whole AMFINavIndex — stay untouched: saved historical snapshots look
@@ -1071,8 +1077,6 @@ def _normalize_history_text_to_live_format(text: str) -> str:
             continue
         parts = stripped.split(";")
         if len(parts) < 8 or parts[0].strip() == "Scheme Code":
-            # Header row or malformed — normalize header to the live format,
-            # pass through anything else unchanged.
             if parts and parts[0].strip() == "Scheme Code":
                 out_lines.append(
                     "Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;"
@@ -1081,11 +1085,12 @@ def _normalize_history_text_to_live_format(text: str) -> str:
             else:
                 out_lines.append(line)
             continue
-        scheme_code, scheme_name, isin_payout, isin_reinvest, nav, _repurchase, _sale, date_field = parts[:8]
+        scheme_code, scheme_name, _plan, _option, isin_payout, isin_reinvest, nav, date_field = parts[:8]
         out_lines.append(
             f"{scheme_code};{isin_payout};{isin_reinvest};{scheme_name};{nav};{date_field}"
         )
     return "\n".join(out_lines)
+
 
 def _extract_nav_date_from_text(text: str) -> Optional[str]:
 
