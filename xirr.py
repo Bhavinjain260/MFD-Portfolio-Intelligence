@@ -11,9 +11,9 @@ import logging
 from datetime import datetime
 import pandas as pd
 from scipy.optimize import newton, brentq
+import streamlit as st
 
 log = logging.getLogger(__name__)
-
 
 def calculate_xirr(dates, amounts, guess: float = 0.01):
     """Core solver — matches Excel's XIRR(values, dates, guess)."""
@@ -40,7 +40,6 @@ def calculate_xirr(dates, amounts, guess: float = 0.01):
         return brentq(npv, -0.9999, 10.0, xtol=1e-12, maxiter=200)
     except Exception:
         return None
-
 
 def compute_xirr_debug(
     folio_no: str,
@@ -104,21 +103,25 @@ def compute_xirr_debug(
     cash_flows = [{"date": d.strftime("%Y-%m-%d"), "amount": a} for d, a in zip(dates, amounts)]
     return {"xirr_pct": xirr_pct, "cash_flows": cash_flows}
 
-
+@st.cache_data(ttl=180, show_spinner=False)
 def compute_xirr_for_folio(
     folio_no: str,
     product_code: str,
     rta: str,
     current_value: float,
-    get_conn,
+    _get_conn,
     as_of_date=None,
     verbose: bool = False,
 ) -> dict:
     """
     Folio+scheme level XIRR.
 
+    NOTE: param is _get_conn so Streamlit skips hashing the function object.
+    Callers must pass it as _get_conn=get_conn (keyword) or positionally.
+
     Returns {"xirr": float|None, "xirr_pct": float|None, "cash_flows": [...]}
     """
+    get_conn = _get_conn
     rta_clean = rta.strip().upper()
     as_of_date = pd.to_datetime(as_of_date or datetime.now())
 
@@ -202,7 +205,6 @@ def compute_xirr_for_folio(
 
     cash_flows = [{"date": d.strftime("%Y-%m-%d"), "amount": a} for d, a in zip(dates, amounts)]
     return {"xirr": xirr, "xirr_pct": xirr_pct, "cash_flows": cash_flows}
-
 
 def compute_portfolio_xirr(
     holdings_df: pd.DataFrame,

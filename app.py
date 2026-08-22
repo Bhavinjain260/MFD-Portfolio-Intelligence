@@ -101,7 +101,7 @@ def format_brokerage(val) -> str:
     except (TypeError, ValueError):
         return "Rs -"
 
-
+@st.cache_data(ttl=300, show_spinner=False)
 def get_client_cams_schemes(folio_ids: list[str]) -> pd.DataFrame:
     if not folio_ids:
         return pd.DataFrame(columns=["folio_no", "prodcode", "scheme"])
@@ -149,7 +149,7 @@ def get_isin_for_cams_product(prodcode: str) -> Optional[str]:
         """, (prodcode.strip().upper(),)).fetchone()
         return row[0] if row else None
 
-
+@st.cache_data(ttl=300, show_spinner=False)
 def get_client_kfin_schemes(folio_ids: list[str]) -> pd.DataFrame:
     if not folio_ids:
         return pd.DataFrame(columns=["folio_no", "prodcode", "scheme"])
@@ -460,9 +460,20 @@ def get_client_identity(client_code: str) -> Optional[dict]:
     match_pan = guardian_pan if is_minor else pan
     return {"name": name, "pan": pan, "is_minor": is_minor, "match_pan": match_pan}
 
+@st.cache_data(ttl=180, show_spinner=False)
+def compute_client_holdings(client_code: str, _folio_nav_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Same enrichment logic as the Clients tab, factored out so Family Portfolio
+    can reuse it per member.
 
-def compute_client_holdings(client_code: str, folio_nav_df: pd.DataFrame) -> pd.DataFrame:
-    """Same enrichment logic as the Clients tab, factored out so Family Portfolio can reuse it per member."""
+    NOTE: param is _folio_nav_df so Streamlit skips hashing it — hashing a
+    multi-thousand-row DataFrame on every call would cost nearly as much as
+    just recomputing. Cache key is client_code only. This means the cache
+    won't auto-invalidate if folio_nav_df's contents change without
+    client_code changing — st.cache_data.clear() on Refresh handles that.
+    """
+    folio_nav_df = _folio_nav_df
+
     identity = get_client_identity(client_code)
     if not identity:
         return pd.DataFrame()
@@ -500,7 +511,7 @@ def compute_client_holdings(client_code: str, folio_nav_df: pd.DataFrame) -> pd.
     holdings['product_code_norm'] = holdings['product_code'].astype(str).str.strip().str.upper()
 
     if 'KFinTech' in holdings['rta'].values:
-        kfin_invested_df = get_kfin_invested_per_scheme(kfin_f['folio'].tolist())
+        kfin_invested_df = get_kfin_invested_per_scheme(sorted(kfin_f['folio'].tolist()))
         if not kfin_invested_df.empty:
             kfin_invested_df['product_code_norm'] = kfin_invested_df['product_code'].astype(str).str.strip().str.upper()
             holdings = holdings.merge(kfin_invested_df, on=['folio_id', 'product_code_norm'],
@@ -514,7 +525,7 @@ def compute_client_holdings(client_code: str, folio_nav_df: pd.DataFrame) -> pd.
             holdings = holdings.drop(columns=['invested_amount', 'product_code_norm_kfin_fam'], errors='ignore')
 
     if 'CAMS' in holdings['rta'].values:
-        cams_invested_df = get_cams_invested_per_scheme(cams_f['foliochk'].tolist())
+        cams_invested_df = get_cams_invested_per_scheme(sorted(cams_f['foliochk'].tolist()))
         if not cams_invested_df.empty:
             cams_invested_df['product_code_norm'] = cams_invested_df['product_code'].astype(str).str.strip().str.upper()
             holdings = holdings.merge(cams_invested_df, on=['folio_id', 'product_code_norm'],
@@ -533,7 +544,6 @@ def compute_client_holdings(client_code: str, folio_nav_df: pd.DataFrame) -> pd.
     holdings['client_code'] = client_code
     holdings['client_name'] = name
     return holdings
-
 
 def get_kfin_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
     with get_conn() as conn:
@@ -1309,7 +1319,7 @@ def _previous_snapshot_path(current_nav_date: Optional[str] = None) -> tuple[Opt
     return None, None
 
 
-# @st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_previous_nav_map() -> dict:
     path, _ = _previous_snapshot_path()
     if not path:
@@ -1465,8 +1475,8 @@ def _get_bse_amc_column(get_conn) -> Optional[str]:
                 "BSE fallback name disabled — rows will rely on AMFI ISIN match only.", candidates)
     return None
 
-
-def get_all_folios_with_isin_and_nav(get_conn, force_reload: bool = False) -> pd.DataFrame:
+@st.cache_data(ttl=300, show_spinner=False)
+def get_all_folios_with_isin_and_nav(_get_conn, force_reload: bool = False) -> pd.DataFrame:
     """
     Master batch function — reads NAV/AMC from the saved file (NOT live AMFI):
       1. Load AMFI NAV + AMC index from disk (in-memory cached per process)
@@ -1478,6 +1488,10 @@ def get_all_folios_with_isin_and_nav(get_conn, force_reload: bool = False) -> pd
     force_reload=True re-reads the saved file from disk (not the network) —
     use this if you just ran download_and_save_nav() and want fresh numbers
     without restarting the app.
+
+    NOTE: param is _get_conn (leading underscore) so Streamlit's cache
+    decorator skips hashing it — get_conn is a function object and can't
+    be hashed. All internal DB calls must use _get_conn(), not get_conn().
     """
     log.info("=" * 60)
     log.info("[NAV-FLOW] Starting get_all_folios_with_isin_and_nav()")
@@ -1496,7 +1510,7 @@ def get_all_folios_with_isin_and_nav(get_conn, force_reload: bool = False) -> pd
 
     # ── Step 2: Deduplicated BSE Scheme Master subquery ──
     log.info("[NAV-FLOW][Step 2] Building deduplicated BSE lookup...")
-    bse_amc_col = _get_bse_amc_column(get_conn)
+    bse_amc_col = _get_bse_amc_column(_get_conn)
     bse_amc_select = f"MAX({bse_amc_col}) AS bse_amc_name" if bse_amc_col else "NULL AS bse_amc_name"
     bse_dedup = f"""
         SELECT 
@@ -1561,7 +1575,7 @@ def get_all_folios_with_isin_and_nav(get_conn, force_reload: bool = False) -> pd
 
     # ── Step 5: Execute Queries ──
     log.info("[NAV-FLOW][Step 5] Executing SQL queries...")
-    with get_conn() as conn:
+    with _get_conn() as conn:
         cams_df = pd.read_sql(cams_sql, conn)
         log.info("[NAV-FLOW][Step 5] CAMS rows fetched: %s", len(cams_df))
         kfin_df = pd.read_sql(kfin_sql, conn)
@@ -1679,11 +1693,13 @@ def get_all_folios_with_isin_and_nav(get_conn, force_reload: bool = False) -> pd
 #         "df": df,
 #     }
 
-def get_folio_nav_summary(get_conn, force_reload: bool = False) -> dict:
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_folio_nav_summary(_get_conn, force_reload: bool = False) -> dict:
     """Quick stats for Streamlit metrics."""
     log.info("[NAV-FLOW] Generating folio NAV summary...")
 
-    df = get_all_folios_with_isin_and_nav(get_conn, force_reload=force_reload)
+    df = get_all_folios_with_isin_and_nav(_get_conn, force_reload=force_reload)
     cams_df = df[df["rta"] == "CAMS"]
     kfin_df = df[df["rta"] == "KFinTech"]
 
@@ -1720,7 +1736,6 @@ def get_folio_nav_summary(get_conn, force_reload: bool = False) -> dict:
 
         "df": df,
     }
-
 
 def load_amc_breakdown_by_isin(get_conn) -> pd.DataFrame:
     """AMC-wise AUM + folio breakdown, grouped by canonical AMFI AMC name (via ISIN)."""
@@ -2925,7 +2940,7 @@ elif mode == "👥 Clients":
             fam_holdings_list = []
             member_rows = []
             for mc in member_codes:
-                h = compute_client_holdings(mc, folio_nav_df)
+                h = compute_client_holdings(mc, _folio_nav_df=folio_nav_df)
                 if h is None:
                     h = pd.DataFrame()
                 mname_arr = members_df.loc[members_df['client_code'] == mc, 'name'].values
@@ -2986,7 +3001,7 @@ elif mode == "👥 Clients":
                 )
                 selected_member_code = member_options[selected_member_label]
 
-                member_holdings = compute_client_holdings(selected_member_code, folio_nav_df)
+                member_holdings = compute_client_holdings(selected_member_code, _folio_nav_df=folio_nav_df)
                 if not member_holdings.empty:
                     mem_inv = member_holdings["file_aum"].sum()
                     mem_cur = member_holdings["nav_based_aum"].sum()
@@ -3281,10 +3296,10 @@ elif mode == "👥 Clients":
                         # Call XIRR function with verbose=True for terminal logging
                         xres = xirr.compute_xirr_for_folio(
                             folio_no=fid,
-                            get_conn=get_conn,
+                            _get_conn=get_conn,
                             rta=frta,
                             product_code=fprod,
-                            current_value=float(fvalue),
+                            current_value=round(float(fvalue), 2), 
                             verbose=True,  # <-- Prints to terminal for Excel verification
                         )
 
