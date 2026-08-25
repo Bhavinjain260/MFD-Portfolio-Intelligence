@@ -3260,13 +3260,14 @@ elif mode == "👥 Clients":
                 total_gain_loss = total_current - total_invested
                 total_one_day_diff = holdings["one_day_diff"].sum()
 
-                h1, h2, h3, h4, h5 = st.columns(5)
+                h1, h2, h3 = st.columns(3)
                 h1.metric("Total Invested", format_aum(total_invested))
                 h2.metric("Current Value", format_aum(total_current))
                 h3.metric("Gain / Loss", format_aum(total_gain_loss),
-                          delta=f"{(total_gain_loss / total_invested * 100):.2f}%" if total_invested > 0 else "0%")
+                        delta=f"{(total_gain_loss / total_invested * 100):.2f}%" if total_invested > 0 else "0%")
+                h4, h5 = st.columns(2)
                 h4.metric("Total Folios", len(all_folios))
-                h5.metric("1-Day Diff", format_aum(total_one_day_diff), delta=format_aum(total_one_day_diff))
+                h5.metric("1-Day Diff", format_aum(total_one_day_diff))
 
                 holdings["gain_loss"] = holdings["nav_based_aum"] - holdings["file_aum"]
 
@@ -3350,16 +3351,21 @@ elif mode == "👥 Clients":
                     return sum(vals) / len(vals) if vals else None
 
                 grouped_holdings["xirr"] = grouped_holdings["folio_ids"].apply(_avg_xirr_for_scheme)
+                grouped_holdings["abs_return"] = grouped_holdings.apply(
+                    lambda r: (r["gain_loss"] / r["file_aum"] * 100) if r["file_aum"] else None, axis=1
+                    )
 
                 display_holdings = grouped_holdings[[
-                    'rta', 'amc_name', 'scheme_name', 'folios', 'units', 'file_aum',
-                    'nav_based_aum', 'gain_loss', 'one_day_diff', 'xirr', 'portfolio_pct', 'current_nav', 'prev_nav'
-                ]].rename(columns={
-                    'rta': 'RTA', 'amc_name': 'AMC', 'scheme_name': 'Scheme', 'folios': 'Folios',
-                    'file_aum': 'Invested', 'nav_based_aum': 'Current Value',
-                    'gain_loss': 'Gain/Loss', 'one_day_diff': '1D Diff',
-                    'xirr': 'XIRR', 'portfolio_pct': '% Portfolio', 'current_nav': 'Today NAV', 'prev_nav': 'Prev NAV'
-                })
+    'rta', 'amc_name', 'scheme_name', 'folios', 'units', 'file_aum',
+    'nav_based_aum', 'gain_loss', 'one_day_diff', 'xirr', 'abs_return',
+    'portfolio_pct', 'current_nav', 'prev_nav'
+]].rename(columns={
+    'rta': 'RTA', 'amc_name': 'AMC', 'scheme_name': 'Scheme', 'folios': 'Folios',
+    'file_aum': 'Invested', 'nav_based_aum': 'Current Value',
+    'gain_loss': 'Gain/Loss', 'one_day_diff': '1D Diff',
+    'xirr': 'XIRR', 'abs_return': 'Abs Return', 'portfolio_pct': '% Portfolio',
+    'current_nav': 'Today NAV', 'prev_nav': 'Prev NAV'
+})
 
                 display_holdings_sorted = display_holdings.sort_values("Current Value", ascending=False).reset_index(
                     drop=True)
@@ -3374,6 +3380,7 @@ elif mode == "👥 Clients":
                         "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
                         "1D Diff": st.column_config.NumberColumn(format="₹ %.2f"),
                         "XIRR": st.column_config.NumberColumn(format="%.2f%%"),
+                        "Abs Return": st.column_config.NumberColumn(format="%.2f%%"),
                         "% Portfolio": st.column_config.NumberColumn(format="%.2f%%"),
                     }
                 )
