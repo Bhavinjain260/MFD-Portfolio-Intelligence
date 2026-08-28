@@ -82,7 +82,7 @@ for rta_config in RTA_CONFIG.values():
     REPORT_CODES.extend(rta_config["reports"])
 
 BASE_DIR = Path("mailback_sync")
-POLL_INTERVAL_SECONDS = 43200
+POLL_INTERVAL_SECONDS = 7200
 
 
 

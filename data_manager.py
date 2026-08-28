@@ -27,6 +27,19 @@ log = logging.getLogger(__name__)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "mfd_local.db")
 
+# data_version.py
+import threading
+_lock = threading.Lock()
+_version = 0
+
+def bump():
+    global _version
+    with _lock:
+        _version += 1
+
+def current():
+    return _version
+
 
 def set_db_path(path: str):
     """Override the shared DB_PATH at runtime."""

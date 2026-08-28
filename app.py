@@ -19,6 +19,7 @@ import capital_gain as cg_row
 import data_manager
 import nav_scheduler
 import data_manager as dm
+from data_manager import current as data_version
 import xirr
 from init_db import init_db, get_conn
 from theme_patch import THEME_WATCHER_JS, render_theme
@@ -101,8 +102,8 @@ def format_brokerage(val) -> str:
     except (TypeError, ValueError):
         return "Rs -"
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_client_cams_schemes(folio_ids: list[str]) -> pd.DataFrame:
+@st.cache_data(show_spinner=False)
+def get_client_cams_schemes(folio_ids: list[str], _v: int) -> pd.DataFrame:
     if not folio_ids:
         return pd.DataFrame(columns=["folio_no", "prodcode", "scheme"])
     placeholders = ",".join(["?"] * len(folio_ids))
@@ -149,8 +150,8 @@ def get_isin_for_cams_product(prodcode: str) -> Optional[str]:
         """, (prodcode.strip().upper(),)).fetchone()
         return row[0] if row else None
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_client_kfin_schemes(folio_ids: list[str]) -> pd.DataFrame:
+@st.cache_data(show_spinner=False)
+def get_client_kfin_schemes(folio_ids: list[str], _v: int) -> pd.DataFrame:
     if not folio_ids:
         return pd.DataFrame(columns=["folio_no", "prodcode", "scheme"])
     placeholders = ",".join(["?"] * len(folio_ids))
@@ -460,8 +461,8 @@ def get_client_identity(client_code: str) -> Optional[dict]:
     match_pan = guardian_pan if is_minor else pan
     return {"name": name, "pan": pan, "is_minor": is_minor, "match_pan": match_pan}
 
-@st.cache_data(ttl=180, show_spinner=False)
-def compute_client_holdings(client_code: str, _folio_nav_df: pd.DataFrame) -> pd.DataFrame:
+@st.cache_data(show_spinner=False)
+def compute_client_holdings(client_code: str, _folio_nav_df: pd.DataFrame, _v: int) -> pd.DataFrame:
     """
     Same enrichment logic as the Clients tab, factored out so Family Portfolio
     can reuse it per member.
@@ -511,7 +512,7 @@ def compute_client_holdings(client_code: str, _folio_nav_df: pd.DataFrame) -> pd
     holdings['product_code_norm'] = holdings['product_code'].astype(str).str.strip().str.upper()
 
     if 'KFinTech' in holdings['rta'].values:
-        kfin_invested_df = get_kfin_invested_per_scheme(sorted(kfin_f['folio'].tolist()))
+        kfin_invested_df = get_kfin_invested_per_scheme(sorted(kfin_f['folio'].tolist()), _v)
         if not kfin_invested_df.empty:
             kfin_invested_df['product_code_norm'] = kfin_invested_df['product_code'].astype(str).str.strip().str.upper()
             holdings = holdings.merge(kfin_invested_df, on=['folio_id', 'product_code_norm'],
@@ -572,8 +573,8 @@ def _resolve_amc_via_isin(get_conn, scheme_code_col_sql: str, table: str, scheme
     pass
 
 
-@st.cache_data(ttl=60, show_spinner=False)
-def load_brokerage_report(_get_conn) -> dict:
+@st.cache_data(show_spinner=False)
+def load_brokerage_report(_get_conn, _v: int) -> dict:
     """
     Returns {
         "merged":     DataFrame[amc, month, file_amount, manual_amount, variance, status]
@@ -755,8 +756,8 @@ def format_brokerage_inr(val) -> str:
         return "Rs -"
 
 
-@st.cache_data(ttl=60, show_spinner=False)
-def load_dedup_sip_counts() -> dict:
+@st.cache_data(show_spinner=False)
+def load_dedup_sip_counts(_v: int) -> dict:
     def _clean_regn(val):
         if pd.isna(val):
             return ""
@@ -1475,8 +1476,8 @@ def _get_bse_amc_column(get_conn) -> Optional[str]:
                 "BSE fallback name disabled — rows will rely on AMFI ISIN match only.", candidates)
     return None
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_all_folios_with_isin_and_nav(_get_conn, force_reload: bool = False) -> pd.DataFrame:
+@st.cache_data(show_spinner=False)
+def get_all_folios_with_isin_and_nav(_get_conn, _v: int, force_reload: bool = False) -> pd.DataFrame:
     """
     Master batch function — reads NAV/AMC from the saved file (NOT live AMFI):
       1. Load AMFI NAV + AMC index from disk (in-memory cached per process)
@@ -1694,12 +1695,12 @@ def get_all_folios_with_isin_and_nav(_get_conn, force_reload: bool = False) -> p
 #     }
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_folio_nav_summary(_get_conn, force_reload: bool = False) -> dict:
+@st.cache_data(show_spinner=False)
+def get_folio_nav_summary(_get_conn, _v: int, force_reload: bool = False) -> dict:
     """Quick stats for Streamlit metrics."""
     log.info("[NAV-FLOW] Generating folio NAV summary...")
 
-    df = get_all_folios_with_isin_and_nav(_get_conn, force_reload=force_reload)
+    df = get_all_folios_with_isin_and_nav(_get_conn, _v, force_reload=force_reload)
     cams_df = df[df["rta"] == "CAMS"]
     kfin_df = df[df["rta"] == "KFinTech"]
 
@@ -1737,9 +1738,10 @@ def get_folio_nav_summary(_get_conn, force_reload: bool = False) -> dict:
         "df": df,
     }
 
-def load_amc_breakdown_by_isin(get_conn) -> pd.DataFrame:
+def load_amc_breakdown_by_isin(get_conn, _v) -> pd.DataFrame:
+
     """AMC-wise AUM + folio breakdown, grouped by canonical AMFI AMC name (via ISIN)."""
-    df = get_all_folios_with_isin_and_nav(get_conn)
+    df = get_all_folios_with_isin_and_nav(get_conn, _v)
     if df.empty:
         return pd.DataFrame()
 
@@ -1759,10 +1761,10 @@ def load_amc_breakdown_by_isin(get_conn) -> pd.DataFrame:
     return grouped
 
 
-@st.cache_data(ttl=60, show_spinner=False)
-def load_active_amcs() -> list:
+@st.cache_data(show_spinner=False)
+def load_active_amcs(_v: int) -> list:
     """AMCs you currently have business with (from folio holdings, not brokerage files)."""
-    df = get_all_folios_with_isin_and_nav(get_conn)
+    df = get_all_folios_with_isin_and_nav(get_conn, _v)
     if df.empty:
         return []
     return sorted(df["amc_name"].dropna().unique().tolist())
@@ -1795,8 +1797,8 @@ def theme_plotly(fig, dark: bool):
 
 
 # Calcute the Invested Amount for Karvy Schemes
-@st.cache_data(ttl=180, show_spinner=False)
-def get_kfin_invested_amount(folio_list):
+@st.cache_data(show_spinner=False)
+def get_kfin_invested_amount(folio_list, _v: int):
     if not folio_list:
         return 0.0
 
@@ -1811,8 +1813,8 @@ def get_kfin_invested_amount(folio_list):
         return float(result) if result is not None else 0.0
 
 
-@st.cache_data(ttl=180, show_spinner=False)
-def get_kfin_invested_per_scheme(folio_list: list) -> pd.DataFrame:
+@st.cache_data(show_spinner=False)
+def get_kfin_invested_per_scheme(folio_list: list, _v: int) -> pd.DataFrame:
     """
     Return invested amount PER SCHEME for KFin folios.
     Groups by folio + product_code so each scheme gets its own total.
@@ -1834,8 +1836,8 @@ def get_kfin_invested_per_scheme(folio_list: list) -> pd.DataFrame:
         return pd.read_sql(query, conn, params=folio_list)
 
 
-@st.cache_data(ttl=180, show_spinner=False)
-def get_cams_invested_per_scheme(folio_list: list) -> pd.DataFrame:
+@st.cache_data(show_spinner=False)
+def get_cams_invested_per_scheme(folio_list: list, _v: int) -> pd.DataFrame:
     """
     Return invested amount (FIFO cost basis) AND total units PER SCHEME for CAMS folios.
 
@@ -1939,14 +1941,14 @@ def get_cams_invested_per_scheme(folio_list: list) -> pd.DataFrame:
 
 
 # ==================== DATA LOADERS ====================
-@st.cache_data(ttl=60, show_spinner=False)
-def load_table_summary(table: str) -> pd.DataFrame:
+@st.cache_data(show_spinner=False)
+def load_table_summary(table: str, _v: int) -> pd.DataFrame:
     with get_conn() as conn:
         return pd.read_sql(f"SELECT * FROM {table} LIMIT 1000", conn)
 
 
-@st.cache_data(ttl=60, show_spinner=False)
-def load_db_stats() -> dict:
+@st.cache_data(show_spinner=False)
+def load_db_stats(_v: int) -> dict:
     stats = {}
     with get_conn() as conn:
         tables = [
@@ -2027,8 +2029,8 @@ def load_db_stats() -> dict:
 #
 #     return summary
 
-@st.cache_data(ttl=60, show_spinner=False)
-def load_dashboard_summary() -> dict:
+@st.cache_data(show_spinner=False)
+def load_dashboard_summary(_v: int) -> dict:
     """Load key metrics for dashboard."""
     summary = {}
     with get_conn() as conn:
@@ -2090,8 +2092,8 @@ def load_dashboard_summary() -> dict:
     return summary
 
 
-@st.cache_data(ttl=60, show_spinner=False)
-def load_amc_breakdown() -> pd.DataFrame:
+@st.cache_data(show_spinner=False)
+def load_amc_breakdown(_v: int) -> pd.DataFrame:
     """AMC-wise AUM and folio summary. KFin uses Fund column, td_acno for join."""
     with get_conn() as conn:
         # ── CAMS ──
@@ -2186,9 +2188,8 @@ def load_amc_breakdown() -> pd.DataFrame:
         combined = combined.sort_values("aum", ascending=False)
         return combined
 
-
-@st.cache_data(ttl=60, show_spinner=False)
-def load_recent_uploads(limit: int = 10) -> pd.DataFrame:
+@st.cache_data(show_spinner=False)
+def load_recent_uploads(_v: int, limit: int = 10) -> pd.DataFrame:
     """Show recent upload batches."""
     with get_conn() as conn:
         batches = []
@@ -2292,6 +2293,9 @@ _auto_bse_scheme_master()
 # _auto_cams_mailback_sync()
 # cams_mailback_sync.ensure_poller_started()
 # nav_scheduler.ensure_started(get_conn, download_and_save_nav_if_needed, _amfi.load)
+
+cams_mailback_sync.ensure_poller_started()
+nav_scheduler.ensure_started(get_conn, download_and_save_nav_if_needed, _amfi.load)
 
 
 # ==================== GLOBAL BSE DOWNLOAD/PARSE NOTIFICATION ====================
@@ -2409,7 +2413,7 @@ if mode == "📊 Dashboard":
                 download_and_save_nav_if_needed()
                 sync_previous_business_day_nav_if_needed()
 
-                folio_nav_df = get_all_folios_with_isin_and_nav(get_conn)
+                folio_nav_df = get_all_folios_with_isin_and_nav(get_conn, data_version())
 
                 # ── Normalize product_code once for all merges ──
                 folio_nav_df['product_code_norm'] = folio_nav_df['product_code'].astype(str).str.strip().str.upper()
@@ -2419,7 +2423,7 @@ if mode == "📊 Dashboard":
                 # ═══════════════════════════════════════════════════════════
                 cams_folios_all = folio_nav_df[folio_nav_df['rta'] == 'CAMS']['folio_id'].unique().tolist()
                 if cams_folios_all:
-                    cams_invested_all = get_cams_invested_per_scheme(cams_folios_all)
+                    cams_invested_all = get_cams_invested_per_scheme(cams_folios_all, data_version())
                     if not cams_invested_all.empty:
                         cams_invested_all['product_code_norm'] = cams_invested_all['product_code'].astype(
                             str).str.strip().str.upper()
@@ -2447,7 +2451,7 @@ if mode == "📊 Dashboard":
                 # ═══════════════════════════════════════════════════════════
                 kfin_folios_all = folio_nav_df[folio_nav_df['rta'] == 'KFinTech']['folio_id'].unique().tolist()
                 if kfin_folios_all:
-                    kfin_invested_all = get_kfin_invested_per_scheme(kfin_folios_all)
+                    kfin_invested_all = get_kfin_invested_per_scheme(kfin_folios_all, data_version())
                     if not kfin_invested_all.empty:
                         kfin_invested_all['product_code_norm'] = kfin_invested_all['product_code'].astype(
                             str).str.strip().str.upper()
@@ -2472,7 +2476,7 @@ if mode == "📊 Dashboard":
                 # Clean up temp column
                 folio_nav_df = folio_nav_df.drop(columns=['product_code_norm'], errors='ignore')
 
-                nav_stats = get_folio_nav_summary(get_conn)
+                nav_stats = get_folio_nav_summary(get_conn, data_version())
                 st.session_state["folio_nav_df"] = folio_nav_df
                 st.session_state["folio_nav_summary"] = nav_stats
                 nav_ready = True
@@ -2510,7 +2514,7 @@ if mode == "📊 Dashboard":
         st.stop()
 
     # ── Merge base stats + NAV stats ──
-    base_summary = load_dashboard_summary()
+    base_summary = load_dashboard_summary(data_version())
     summary = {**base_summary, **nav_stats}
 
     # ── Refresh button ──
@@ -2561,7 +2565,7 @@ if mode == "📊 Dashboard":
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("👥 Clients", summary.get("total_clients", 0))
     m2.metric("📋 BSE SIPs", summary.get("total_xsip", 0))
-    dedup_sips = load_dedup_sip_counts()
+    dedup_sips = load_dedup_sip_counts(data_version())
     m3.metric("✅ Active SIPs", dedup_sips["active_sips_deduped"])
     m4.metric("🏢 CAMS AMCs", summary.get("cams_amcs", 0))
     m5.metric("🏢 KFinTech AMCs", summary.get("kfin_amcs", 0))
@@ -2779,7 +2783,7 @@ if mode == "📊 Dashboard":
     # ── Recent Uploads ──
     st.divider()
     st.subheader("📤 Recent Uploads")
-    uploads_df = load_recent_uploads()
+    uploads_df = load_recent_uploads(data_version())
     if not uploads_df.empty:
         st.dataframe(uploads_df, width="stretch", hide_index=True)
     else:
@@ -2793,8 +2797,8 @@ elif mode == "👥 Clients":
     st.header("👤 Client Portfolio & Analytics")
 
     # ── Client Search ──
-    @st.cache_data(ttl=300)
-    def load_clients_search():
+    @st.cache_data
+    def load_clients_search(_v: int):
         with get_conn() as conn:
             return pd.read_sql("""
                 SELECT client_code,
@@ -2809,7 +2813,7 @@ elif mode == "👥 Clients":
                 FROM bse_client_master
             """, conn)
 
-    clients_df = load_clients_search()
+    clients_df = load_clients_search(data_version())
 
     if clients_df.empty:
         st.warning("No clients found. Upload client master.")
@@ -2857,7 +2861,7 @@ elif mode == "👥 Clients":
     if "folio_nav_df" not in st.session_state:
         with st.spinner("Loading NAV..."):
             download_and_save_nav_if_needed()
-            st.session_state["folio_nav_df"] = get_all_folios_with_isin_and_nav(get_conn)
+            st.session_state["folio_nav_df"] = get_all_folios_with_isin_and_nav(get_conn, data_version())
 
     folio_nav_df = st.session_state["folio_nav_df"]
 
@@ -2940,7 +2944,7 @@ elif mode == "👥 Clients":
             fam_holdings_list = []
             member_rows = []
             for mc in member_codes:
-                h = compute_client_holdings(mc, _folio_nav_df=folio_nav_df)
+                h = compute_client_holdings(mc, _folio_nav_df=folio_nav_df, _v=data_version())
                 if h is None:
                     h = pd.DataFrame()
                 mname_arr = members_df.loc[members_df['client_code'] == mc, 'name'].values
@@ -3001,7 +3005,7 @@ elif mode == "👥 Clients":
                 )
                 selected_member_code = member_options[selected_member_label]
 
-                member_holdings = compute_client_holdings(selected_member_code, _folio_nav_df=folio_nav_df)
+                member_holdings = compute_client_holdings(selected_member_code, _folio_nav_df=folio_nav_df, _v=data_version())
                 if not member_holdings.empty:
                     mem_inv = member_holdings["file_aum"].sum()
                     mem_cur = member_holdings["nav_based_aum"].sum()
@@ -3048,7 +3052,7 @@ elif mode == "👥 Clients":
                     st.info("No holdings found for this member.")
 
             with st.expander("⚙️ Manage Family Members"):
-                all_clients_df = load_clients_search()
+                all_clients_df = load_clients_search(data_version())
                 all_clients_df["display"] = all_clients_df.apply(
                     lambda r: f"{r['name']} | PAN: {r['pan'] or 'Minor'} | {r['client_code']}",
                     axis=1,
@@ -3128,7 +3132,7 @@ elif mode == "👥 Clients":
 
                 # ── KFinTech: replace file_aum with transaction-summed invested amount ──
                 if 'KFinTech' in holdings['rta'].values:
-                    kfin_invested_df = get_kfin_invested_per_scheme(kfin_f['folio'].tolist())
+                    kfin_invested_df = get_kfin_invested_per_scheme(kfin_f['folio'].tolist(), data_version())
                     if not kfin_invested_df.empty:
                         kfin_invested_df['product_code_norm'] = kfin_invested_df['product_code'].astype(
                             str).str.strip().str.upper()
@@ -3149,7 +3153,7 @@ elif mode == "👥 Clients":
 
                 # ── CAMS: replace file_aum AND units with transaction-summed values ──
                 if 'CAMS' in holdings['rta'].values:
-                    cams_invested_df = get_cams_invested_per_scheme(cams_f['foliochk'].tolist())
+                    cams_invested_df = get_cams_invested_per_scheme(cams_f['foliochk'].tolist(), data_version())
                     if not cams_invested_df.empty:
                         cams_invested_df['product_code_norm'] = cams_invested_df['product_code'].astype(
                             str).str.strip().str.upper()
@@ -3887,7 +3891,7 @@ elif mode == "💰 Brokerage Report":
         "ISIN)."
     )
 
-    data = load_brokerage_report(get_conn)
+    data = load_brokerage_report(get_conn, data_version())
     merged = data["merged"]
     detail = data["detail"]
 
@@ -3916,7 +3920,7 @@ elif mode == "💰 Brokerage Report":
 
     # Investment-based AMCs (from folio holdings) so new AMCs auto-appear
     # when investments are uploaded, not just when brokerage files arrive.
-    known_amcs = [a for a in load_active_amcs() if a and not a.startswith("⚠️")]
+    known_amcs = [a for a in load_active_amcs(data_version()) if a and not a.startswith("⚠️")]
     amc_dropdown_options = known_amcs + ["➕ Add new AMC..."]
 
     with st.form("manual_brokerage_form", clear_on_submit=True):
@@ -4017,7 +4021,7 @@ elif mode == "💰 Brokerage Report":
             .reset_index()
         )
 
-        active_amcs = load_active_amcs()
+        active_amcs = load_active_amcs(data_version())
         amc_summary = pd.DataFrame({"amc": active_amcs}).merge(amc_grouped, on="amc", how="left")
         amc_summary[["file_amount", "manual_amount", "variance"]] = amc_summary[
             ["file_amount", "manual_amount", "variance"]
@@ -4218,8 +4222,9 @@ elif mode == "🧮 Capital Gains":
     )
 
 
-    @st.cache_data(ttl=300)
-    def _cg_clients():
+
+    @st.cache_data
+    def _cg_clients(_v: int):
         with get_conn() as conn:
             return pd.read_sql("""
                 SELECT client_code,
@@ -4230,7 +4235,7 @@ elif mode == "🧮 Capital Gains":
             """, conn)
 
 
-    cg_clients = _cg_clients()
+    cg_clients = _cg_clients(data_version())
     if cg_clients.empty:
         st.warning("No clients found.")
         st.stop()
@@ -4260,10 +4265,10 @@ elif mode == "🧮 Capital Gains":
         st.info("No folios for this client.")
         st.stop()
 
-    cams_schemes = get_client_cams_schemes(cams_folio_ids)
+    cams_schemes = get_client_cams_schemes(cams_folio_ids, data_version())
     cams_schemes["rta"] = "CAMS"
 
-    kfin_schemes = get_client_kfin_schemes(kfin_folio_ids)
+    kfin_schemes = get_client_kfin_schemes(kfin_folio_ids, data_version())
     kfin_schemes["rta"] = "KFinTech"
 
     schemes_df = pd.concat([cams_schemes, kfin_schemes], ignore_index=True)
@@ -4351,7 +4356,7 @@ elif mode == "🧮 Capital Gains":
             cg_nav_df = st.session_state.get("folio_nav_df")
             if cg_nav_df is None:
                 download_and_save_nav_if_needed()
-                cg_nav_df = get_all_folios_with_isin_and_nav(get_conn)
+                cg_nav_df = get_all_folios_with_isin_and_nav(get_conn, data_version())
                 st.session_state["folio_nav_df"] = cg_nav_df
 
             nav_match = cg_nav_df[
@@ -4431,7 +4436,7 @@ elif mode == "🧮 Capital Gains":
             cg_nav_df = st.session_state.get("folio_nav_df")
             if cg_nav_df is None:
                 download_and_save_nav_if_needed()
-                cg_nav_df = get_all_folios_with_isin_and_nav(get_conn)
+                cg_nav_df = get_all_folios_with_isin_and_nav(get_conn, data_version())
                 st.session_state["folio_nav_df"] = cg_nav_df
 
             nav_match = cg_nav_df[
@@ -4793,7 +4798,7 @@ elif mode == "⚙️ Admin Panel":
         # DB Stats at bottom
         st.divider()
         st.subheader("🗄️ Database Stats")
-        stats = load_db_stats()
+        stats = load_db_stats(data_version())
 
         cols = st.columns(3)
         categories = {
