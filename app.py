@@ -1535,6 +1535,97 @@ def load_dedup_sip_counts(_v: int) -> dict:
     }
 
 
+# ══════════════════════════════════════════════════════════════
+# EMAIL REPORT BUTTON UI COMPONENT
+# ══════════════════════════════════════════════════════════════
+
+def render_email_report_button(
+    client_code: str,
+    client_name: str,
+    report_type: str,  # "Capital Gain" or "Valuation"
+    fy_str: str = None,
+    html_content: str = None,
+    pdf_content: bytes = None,
+    key_prefix: str = "email",
+):
+    """
+    Render an 'Email Report' button with recipient input and status display.
+    
+    Returns:
+        True if email was triggered, False otherwise
+    """
+    import cams_mailback_sync as mail_sync
+    
+    # Get client email
+    client_email = mail_sync.get_client_email(client_code)
+    creds_configured = mail_sync.credentials_configured()
+    
+    # Check if Gmail is configured
+    if not creds_configured:
+        st.caption("📧 *Gmail not configured — set up in Admin > Mailback Sync to enable emailing*")
+        return False
+    
+    with st.expander("📧 Email This Report", expanded=False):
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            recipient_email = st.text_input(
+                "Recipient Email",
+                value=client_email or "",
+                placeholder="client@example.com",
+                key=f"{key_prefix}_recipient"
+            )
+        
+        with col2:
+            st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+            send_btn = st.button(
+                "📤 Send",
+                type="primary",
+                use_container_width=True,
+                key=f"{key_prefix}_send_btn",
+                disabled=not recipient_email or not html_content
+            )
+        
+        # Optional CC
+        cc_input = st.text_input(
+            "CC (optional, comma-separated)",
+            placeholder="advisor@example.com, partner@example.com",
+            key=f"{key_prefix}_cc"
+        )
+        cc_list = [e.strip() for e in cc_input.split(",") if e.strip()] if cc_input else None
+        
+        # Status display
+        email_status = mail_sync.get_email_status()
+        if email_status["sending"]:
+            st.info("⏳ Sending email...")
+        elif email_status["done"]:
+            if email_status["ok"]:
+                st.success(email_status["msg"])
+            else:
+                st.error(email_status["msg"])
+        
+        if send_btn and recipient_email and html_content:
+            # Build filename
+            safe_name = client_name.replace(" ", "_").replace("/", "-")[:30]
+            if report_type == "Capital Gain" and fy_str:
+                filename = f"Capital_Gain_{safe_name}_FY{fy_str}.pdf"
+                subject = f"Capital Gain Report - FY {fy_str} - {client_name}"
+            else:
+                filename = f"Valuation_{safe_name}_{datetime.now().strftime('%Y%m%d')}.pdf"
+                subject = f"Portfolio Valuation Report - {client_name} - {datetime.now().strftime('%d/%m/%Y')}"
+            
+            mail_sync.send_report_email_background(
+                to_email=recipient_email,
+                subject=subject,
+                html_body=html_content,
+                pdf_bytes=pdf_content,
+                pdf_filename=filename,
+                cc_emails=cc_list,
+            )
+            st.rerun()
+            return True
+    
+    return False
 # ==================== AMFI NAV SERVICE ====================
 
 AMFI_TEXT_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
@@ -5632,6 +5723,76 @@ elif mode == "📊 Reports":
                     help="PDF requires fpdf2 (`pip install fpdf2`) and a Unicode font. Use HTML download as alternative.",
                     use_container_width=True,
                 )
+        # ═══════════════════════════════════════════════
+        #  EMAIL REPORT
+        # ═══════════════════════════════════════════════
+        st.markdown("<div style='height: 8px'></div>", unsafe_allow_html=True)
+        
+        # Get client email
+        client_email = cams_mailback_sync.get_client_email(client_code)
+        default_cc = cams_mailback_sync.get_default_cc()
+        creds_configured = cams_mailback_sync.credentials_configured()
+        
+        if not creds_configured:
+            st.caption("📧 *Gmail not configured — set up in Admin > Mailback Sync to enable emailing*")
+        else:
+            with st.expander("📧 Email This Report", expanded=False):
+                email_col1, email_col2 = st.columns([3, 1])
+                
+                with email_col1:
+                    recipient_email = st.text_input(
+                        "To",
+                        value=client_email or "",
+                        placeholder="client@example.com",
+                        key="cg_email_recipient"
+                    )
+                
+                with email_col2:
+                    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+                    send_btn = st.button(
+                        "📤 Send",
+                        type="primary",
+                        use_container_width=True,
+                        key="cg_email_send_btn",
+                        disabled=not recipient_email or not html_content
+                    )
+                
+                # CC with default value
+                cc_input = st.text_input(
+                    "CC (optional)",
+                    value=default_cc or "",
+                    placeholder="advisor@example.com",
+                    key="cg_email_cc"
+                )
+                cc_list = [e.strip() for e in cc_input.split(",") if e.strip()] if cc_input else None
+                
+                # Status display
+                email_status = cams_mailback_sync.get_email_status()
+                if email_status["sending"]:
+                    st.info("⏳ Sending email...")
+                elif email_status["done"]:
+                    if email_status["ok"]:
+                        st.success(email_status["msg"])
+                    else:
+                        st.error(email_status["msg"])
+                
+                if send_btn and recipient_email and html_content:
+                    # Build filename and subject
+                    safe_name = client_name.replace(" ", "_").replace("/", "-")[:30]
+                    filename = f"Capital_Gain_{safe_name}_FY{cgr_fy}.pdf"
+                    subject = f"Capital Gain Report - FY {cgr_fy} - {client_name}"
+                    
+                    cams_mailback_sync.send_report_email_background(
+                        to_email=recipient_email,
+                        subject=subject,
+                        html_body=html_content,
+                        pdf_bytes=pdf_bytes,
+                        pdf_filename=filename,
+                        cc_emails=cc_list,
+                    )
+                    st.rerun()
+
+
 # ==================== 🧮 CAPITAL GAINS ====================
 elif mode == "🧮 Capital Gains":
     st.header("🧮 Capital Gains (CAMS, FIFO)")

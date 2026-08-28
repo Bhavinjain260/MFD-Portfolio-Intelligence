@@ -825,3 +825,182 @@ def render_settings_ui():
             st.markdown("**✅ Imported (Done)**")
             for rta, count in done.items():
                 st.caption(f"{rta}: {count} files")
+
+
+# ══════════════════════════════════════════════════════════════
+# EMAIL SENDING (Reuses Gmail IMAP credentials)
+# ══════════════════════════════════════════════════════════════
+
+def get_client_email(client_code: str) -> str | None:
+    """Get email address for a client from bse_client_master."""
+    from init_db import get_conn
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT email FROM bse_client_master WHERE client_code = ?",
+            (client_code,)
+        ).fetchone()
+    return row[0] if row and row[0] else None
+
+
+def send_report_email(
+    to_email: str,
+    subject: str,
+    html_body: str,
+    pdf_bytes: bytes | None = None,
+    pdf_filename: str = "report.pdf",
+    cc_emails: list[str] | None = None,
+) -> tuple[bool, str]:
+    """
+    Send an email with optional PDF attachment using configured Gmail credentials.
+    
+    Uses SMTP (not IMAP) for sending - same credentials work for both.
+    
+    Args:
+        to_email: Recipient email address
+        subject: Email subject line
+        html_body: HTML content for the email body
+        pdf_bytes: Optional PDF bytes to attach
+        pdf_filename: Name for the PDF attachment
+        cc_emails: Optional list of CC recipients
+    
+    Returns:
+        (success, message) tuple
+    """
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.application import MIMEApplication
+    
+    creds = get_credentials()
+    if not creds["imap_user"] or not creds["imap_app_password"]:
+        return False, "Gmail credentials not configured. Please set up in Admin > Mailback Sync."
+    
+    gmail_user = creds["imap_user"]
+    gmail_app_password = creds["imap_app_password"]
+    
+    # Validate recipient
+    if not to_email or "@" not in to_email:
+        return False, "Invalid recipient email address"
+    
+    try:
+        # Create message
+        msg = MIMEMultipart('alternative')
+        msg['From'] = gmail_user
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        
+        if cc_emails:
+            msg['Cc'] = ", ".join(cc_emails)
+        
+        # Plain text fallback (minimal)
+        plain_text = "Please view this email in HTML mode to see the report properly."
+        plain_part = MIMEText(plain_text, 'plain', 'utf-8')
+        msg.attach(plain_part)
+        
+        # Attach HTML body
+        html_part = MIMEText(html_body, 'html', 'utf-8')
+        msg.attach(html_part)
+        
+        # Attach PDF if provided
+        if pdf_bytes:
+            pdf_part = MIMEApplication(pdf_bytes, Name=pdf_filename)
+            pdf_part['Content-Disposition'] = f'attachment; filename="{pdf_filename}"'
+            msg.attach(pdf_part)
+        
+        # Build recipient list (to + cc)
+        all_recipients = [to_email]
+        if cc_emails:
+            all_recipients.extend(cc_emails)
+        
+        # Send via Gmail SMTP
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=30) as server:
+            server.login(gmail_user, gmail_app_password)
+            server.send_message(msg, to_addrs=all_recipients)
+        
+        log.info("[EMAIL] Sent '%s' to %s", subject, to_email)
+        return True, f"✅ Email sent to {to_email}"
+    
+    except smtplib.SMTPAuthenticationError:
+        return False, "❌ Authentication failed. Check your App Password in Admin settings."
+    except smtplib.SMTPException as e:
+        return False, f"❌ SMTP error: {e}"
+    except Exception as e:
+        log.exception("[EMAIL] Failed to send report")
+        return False, f"❌ Failed to send: {e}"
+
+
+# ══════════════════════════════════════════════════════════════
+# EMAIL STATUS TRACKING
+# ══════════════════════════════════════════════════════════════
+_email_status = {
+    "sending": False,
+    "done": False,
+    "ok": False,
+    "msg": "",
+    "sent_at": None,
+}
+
+def get_email_status() -> dict:
+    return _email_status.copy()
+
+def _reset_email_status():
+    _email_status.update({
+        "sending": False,
+        "done": False,
+        "ok": False,
+        "msg": "",
+        "sent_at": None,
+    })
+
+def _email_worker(to_email: str, subject: str, html_body: str, 
+                  pdf_bytes: bytes | None, pdf_filename: str,
+                  cc_emails: list[str] | None = None):
+    """Background thread worker for sending emails."""
+    _email_status.update({
+        "sending": True,
+        "done": False,
+    })
+    try:
+        success, msg = send_report_email(
+            to_email=to_email,
+            subject=subject,
+            html_body=html_body,
+            pdf_bytes=pdf_bytes,
+            pdf_filename=pdf_filename,
+            cc_emails=cc_emails,
+        )
+        _email_status.update({
+            "sending": False,
+            "done": True,
+            "ok": success,
+            "msg": msg,
+            "sent_at": datetime.now().isoformat() if success else None,
+        })
+    except Exception as e:
+        _email_status.update({
+            "sending": False,
+            "done": True,
+            "ok": False,
+            "msg": f"Error: {e}",
+        })
+
+def send_report_email_background(
+    to_email: str,
+    subject: str,
+    html_body: str,
+    pdf_bytes: bytes | None = None,
+    pdf_filename: str = "report.pdf",
+    cc_emails: list[str] | None = None,
+) -> None:
+    """Start email send in background thread (non-blocking)."""
+    if _email_status["sending"]:
+        log.info("[EMAIL] Already sending, skipping")
+        return
+    _reset_email_status()
+    t = threading.Thread(
+        target=_email_worker, 
+        args=(to_email, subject, html_body, pdf_bytes, pdf_filename, cc_emails),
+        daemon=True
+    )
+    t.start()
+    log.info("[EMAIL] Started background email send")
