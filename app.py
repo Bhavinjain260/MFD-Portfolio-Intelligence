@@ -3274,7 +3274,7 @@ elif mode == "👥 Clients":
         )
     else:
         tab_family, tab_portfolio, tab_sips, tab_transactions, tab_brokerage = st.tabs(
-            ["👨‍👩‍👧‍👦 Family Portfolio", "📈 Portfolio & AUM", "🔄 Active SIPs","💰 Brokerage", "📜 Transactions" ]
+            ["👨‍👩‍👧‍👦 Family Portfolio", "📈 Portfolio & AUM", "🔄 Active SIPs","📜 Transactions", "💰 Brokerage"]
         )
 
     # ═══════════════════════════════════════════════════════════
@@ -5164,6 +5164,8 @@ elif mode == "📊 Reports":
     # ═══════════════════════════════════════════════════════════
     # SUB-REPORT 2 — Capital Gain Report
     # ═══════════════════════════════════════════════════════════
+
+
     elif sub_mode == "🧮 Capital Gain Report":
         st.subheader("🧮 Capital Gain Report")
         st.caption("Realized gains only (CAMS, FIFO). KFinTech redemption tracking isn't available yet.")
@@ -5172,15 +5174,7 @@ elif mode == "📊 Reports":
         current_fy_start = today.year if today.month >= 4 else today.year - 1
         fy_options = ["All Time"] + [f"{y}-{str(y+1)[-2:]}" for y in range(current_fy_start, current_fy_start - 8, -1)]
 
-        f1, f2, f3 = st.columns(3)
-        with f1:
-            cgr_fy = st.selectbox("FY (by sale date)", fy_options, key="cgr_fy_select")
-        with f2:
-            cgr_tax_cat_override = st.selectbox(
-                "Tax category", ["Auto (per scheme)", "Force Equity", "Force Debt"], key="cgr_tax_cat_select"
-            )
-        with f3:
-            cgr_slab = st.number_input("Debt slab rate (%)", 0.0, 42.0, 30.0, key="cgr_slab") / 100
+        cgr_fy = st.selectbox("FY (by sale date)", fy_options, key="cgr_fy_select")
 
         if cgr_fy != "All Time":
             fy_start_year = int(cgr_fy.split("-")[0])
@@ -5193,11 +5187,35 @@ elif mode == "📊 Reports":
             with get_conn() as conn:
                 return pd.read_sql("""
                     SELECT client_code,
-                           primary_holder_first_name || ' ' || primary_holder_last_name AS name,
-                           primary_holder_pan AS pan
+                            primary_holder_first_name || ' ' || primary_holder_last_name AS name,
+                            primary_holder_pan AS pan
                     FROM bse_client_master
                     WHERE primary_holder_pan IS NOT NULL
                 """, conn)
+
+        def _extract_match_dates(m):
+            """
+            Pull whatever date-like fields exist on the match object, regardless
+            of what cg.py names them (sale_date, redemption_date, txn_date, etc.).
+            Sorted chronologically: earliest = buy date, latest = sale date.
+            Works for namedtuples, dataclasses, or plain objects.
+            """
+            candidates = []
+            for attr in dir(m):
+                if attr.startswith('_'):
+                    continue
+                try:
+                    val = getattr(m, attr)
+                except Exception:
+                    continue
+                if isinstance(val, (datetime, pd.Timestamp, date_cls)):
+                    candidates.append(pd.Timestamp(val))
+            candidates = sorted(candidates)
+            if len(candidates) >= 2:
+                return candidates[0], candidates[-1]
+            elif len(candidates) == 1:
+                return candidates[0], candidates[0]
+            return None, None
 
         cgr_clients = _cgr_clients(data_version())
         if cgr_clients.empty:
@@ -5209,7 +5227,7 @@ elif mode == "📊 Reports":
         if "cgr_filter_key" not in st.session_state:
             st.session_state["cgr_filter_key"] = None
 
-        current_filter_key = (cgr_fy, cgr_tax_cat_override, cgr_slab)
+        current_filter_key = (cgr_fy,)
         gen_clicked = st.button("🔄 Generate Report", type="primary")
 
         if gen_clicked or (st.session_state["cgr_filter_key"] is None):
@@ -5248,11 +5266,9 @@ elif mode == "📊 Reports":
                             continue
 
                         for m in matches:
-                            # ── ADJUST these two lines if your match object uses different field names ──
-                            sale_date = getattr(m, "sale_date", None) or getattr(m, "date", None)
-                            buy_date = getattr(m, "buy_date", None) or getattr(m, "purchase_date", None)
+                            buy_date, sale_date = _extract_match_dates(m)
 
-                            sd = sale_date.date() if hasattr(sale_date, "date") else sale_date
+                            sd = sale_date.date() if sale_date is not None else None
                             if cgr_from and sd and not (cgr_from <= sd <= cgr_to):
                                 continue
 
@@ -5260,11 +5276,11 @@ elif mode == "📊 Reports":
                             client_rows.append({
                                 "Scheme": scheme_name,
                                 "Folio": folio_no,
-                                "Buy Date": buy_date,
+                                "Buy Date": buy_date.date() if buy_date is not None else None,
                                 "Buy Units": units,
                                 "Buy NAV": (cost / units) if units else 0,
                                 "Buy Value": cost,
-                                "Sale Date": sale_date,
+                                "Sale Date": sd,
                                 "Sell Units": units,
                                 "Sell NAV": (proceeds / units) if units else 0,
                                 "Sell Value": proceeds,
@@ -5339,7 +5355,7 @@ elif mode == "📊 Reports":
             cols = ["Scheme", "Buy Date", "Buy Units", "Buy NAV", "Buy Value",
                     "Sale Date", "Sell Units", "Sell NAV", "Sell Value", "Gain/Loss"]
             st.dataframe(
-                detail_df[cols].sort_values("Sale Date", ascending=False),
+                detail_df[cols].sort_values("Sale Date", ascending=False, na_position="last"),
                 width="stretch", hide_index=True,
                 column_config={
                     "Buy Units": st.column_config.NumberColumn(format="%.4f"),
@@ -5357,7 +5373,6 @@ elif mode == "📊 Reports":
                 f"⬇️ Download {cname} Detail (CSV)", csv,
                 f"capital_gain_{cname.replace(' ', '_')}.csv", "text/csv"
             )
-
 # ==================== 🧮 CAPITAL GAINS ====================
 elif mode == "🧮 Capital Gains":
     st.header("🧮 Capital Gains (CAMS, FIFO)")
