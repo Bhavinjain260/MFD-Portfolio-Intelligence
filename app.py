@@ -2704,39 +2704,9 @@ elif st.session_state["last_theme"] != current_theme:
 st.markdown(render_theme(dark), unsafe_allow_html=True)
 
 # ==================== CSS FIXES ====================
+
 st.markdown("""
 <style>
-    .metric-card {
-        background: linear-gradient(135deg, #1a1a2e 0%, #202036 100%);
-        border-radius: 10px;
-        padding: 1.1rem;
-        border-left: 3px solid #2d2d44;
-        margin-bottom: 0.75rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    }
-    .metric-card.primary { border-left-color: #6366f1; }
-    .metric-card.success { border-left-color: #10b981; }
-    .metric-card.info   { border-left-color: #3b82f6; }
-    .metric-card.warning{ border-left-color: #f59e0b; }
-    .metric-card .label {
-        color: #8b8b9a;
-        font-size: 0.72rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        margin-bottom: 0.4rem;
-    }
-    .metric-card .value {
-        color: #e6edf3;
-        font-size: 1.35rem;
-        font-weight: 700;
-        font-family: 'SF Mono', ui-monospace, monospace;
-    }
-    .metric-card .sub {
-        color: #6b7280;
-        font-size: 0.78rem;
-        margin-top: 0.2rem;
-    }
     [data-testid="stDataFrame"] > div[data-testid="stDataFrameContainer"] {
         background-color: transparent !important;
     }
@@ -2751,10 +2721,11 @@ with st.sidebar:
     st.markdown("## 📊 MFD Portfolio")
     st.divider()
 
-    nav_options = ["📊 Dashboard", "👥 Clients", "💰 Brokerage Report",  "📊 Valuation Report", "🧮 Capital Gains", "⚙️ Admin Panel"]
+    nav_options = ["📊 Dashboard", "👥 Clients", "💰 Brokerage Report",  "📊 Reports", "🧮 Capital Gains", "⚙️ Admin Panel"]
 
-    if "nav_mode" not in st.session_state:
+    if "nav_mode" not in st.session_state or st.session_state["nav_mode"] not in nav_options:
         st.session_state["nav_mode"] = "📊 Dashboard"
+        
 
     selected_nav = st.radio(
         "Navigation",
@@ -4791,381 +4762,600 @@ elif mode == "💰 Brokerage Report":
     st.divider()
 
 
-# ==================== 📊 VALUATION REPORT ====================
-elif mode == "📊 Valuation Report":
-    st.header("📊 Portfolio Valuation Report")
+elif mode == "📊 Reports":
+    st.header("📊 Reports")
 
-    # ── Client Search ──
-    @st.cache_data
-    def _load_all_clients(_v: int):
-        with get_conn() as conn:
-            return pd.read_sql("""
-                SELECT client_code,
-                       primary_holder_first_name || ' ' || primary_holder_last_name AS name,
-                       primary_holder_pan AS pan,
-                       indian_mobile_no AS mobile
-                FROM bse_client_master
-            """, conn)
+    report_options = ["📈 Portfolio Valuation Report", "🧮 Capital Gain Report"]
+    if "reports_sub_mode" not in st.session_state:
+        st.session_state["reports_sub_mode"] = report_options[0]
 
-    clients_df = _load_all_clients(data_version())
-    if clients_df.empty:
-        st.warning("No clients found.")
-        st.stop()
-
-    clients_df['display'] = clients_df.apply(
-        lambda r: f"{r['name']} | PAN: {r['pan'] or 'Minor'} | {r['client_code']}",
-        axis=1
+    sub_mode = st.radio(
+        "Report Type", report_options,
+        index=report_options.index(st.session_state["reports_sub_mode"]),
+        horizontal=True, key="reports_sub_nav"
     )
+    if sub_mode != st.session_state["reports_sub_mode"]:
+        st.session_state["reports_sub_mode"] = sub_mode
+        st.rerun()
 
-    c1, c2 = st.columns([3, 1])
-    with c1:
-        selected_display = st.selectbox(
-            "🔍 Select Client", clients_df['display'].tolist(),
-            index=None, placeholder="Type to search...", key="val_client_select"
-        )
-    with c2:
-        # ── FY Year selector ──
-        today = date_cls.today()
-        if today.month >= 4:
-            current_fy_start = today.year
-        else:
-            current_fy_start = today.year - 1
+    st.divider()
 
-        fy_options = [
-            f"{y}-{str(y + 1)[-2:]}"
-            for y in range(current_fy_start, current_fy_start - 8, -1)
-        ]
-        selected_fy = st.selectbox("Financial Year", fy_options, key="val_fy_select")
+    # ═══════════════════════════════════════════════════════════
+    # SUB-REPORT 1 — Portfolio Valuation Report
+    # ═══════════════════════════════════════════════════════════
+    if sub_mode == "📈 Portfolio Valuation Report":
 
-    if not selected_display:
-        st.info("Select a client to generate the report.")
-        st.stop()
+        # ── Client Search ──
+        @st.cache_data
+        def _load_all_clients(_v: int):
+            with get_conn() as conn:
+                return pd.read_sql("""
+                    SELECT client_code,
+                           primary_holder_first_name || ' ' || primary_holder_last_name AS name,
+                           primary_holder_pan AS pan,
+                           indian_mobile_no AS mobile
+                    FROM bse_client_master
+                """, conn)
 
-    selected_client = clients_df[clients_df['display'] == selected_display].iloc[0]
-    client_code = selected_client['client_code']
-    client_name = selected_client['name']
-    pan         = selected_client['pan']
-    mobile      = selected_client.get('mobile')
+        clients_df = _load_all_clients(data_version())
+        if clients_df.empty:
+            st.warning("No clients found.")
+            st.stop()
 
-    # ── Derive dates from FY ──
-    fy_start_year = int(selected_fy.split("-")[0])
-    period_from = date_cls(fy_start_year, 4, 1)
-    val_date    = date_cls(fy_start_year + 1, 3, 31)
-    val_iso     = val_date.strftime("%Y-%m-%d")
-    from_iso    = period_from.strftime("%Y-%m-%d")
-    val_ts      = pd.Timestamp(val_date)
-    from_ts     = pd.Timestamp(period_from)
-
-    is_minor = pd.isna(pan) or str(pan).strip() == ""
-    match_pan = selected_client.get('guardian_pan') if is_minor else pan
-    name_clean = client_name.strip().upper() if client_name else ""
-
-    # ── Fetch folios ──
-    with get_conn() as conn:
-        if is_minor:
-            cams_f = pd.read_sql(
-                "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
-                conn, params=(name_clean,))
-            kfin_f = pd.read_sql(
-                "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
-                conn, params=(name_clean,))
-        else:
-            cams_f = pd.read_sql(
-                "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
-                conn, params=(match_pan, client_name))
-            kfin_f = pd.read_sql(
-                "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
-                conn, params=(match_pan, client_name))
-
-    all_folios = set(cams_f['foliochk'].tolist() + kfin_f['folio'].tolist())
-
-    if not all_folios:
-        st.info("No folios found for this client.")
-        st.stop()
-
-    # ── Folio → RTA map ──
-    folio_rta_map = {}
-    for f in cams_f['foliochk'].tolist():
-        folio_rta_map[f] = 'CAMS'
-    for f in kfin_f['folio'].tolist():
-        folio_rta_map[f] = 'KFinTech'
-
-    # ── Product code → ISIN + scheme name ──
-    with get_conn() as conn:
-        pc_info = pd.read_sql("""
-            SELECT UPPER(TRIM(Channel_Partner_Code)) AS pc,
-                   MAX(ISIN)        AS isin,
-                   MAX(Scheme_Name) AS scheme_name
-            FROM bse_scheme_master
-            WHERE Channel_Partner_Code IS NOT NULL
-              AND TRIM(Channel_Partner_Code) != ''
-            GROUP BY UPPER(TRIM(Channel_Partner_Code))
-        """, conn)
-    isin_lk = dict(zip(pc_info['pc'], pc_info['isin']))
-    name_lk = dict(zip(pc_info['pc'], pc_info['scheme_name']))
-
-    # ── Historical NAV ──
-    with st.spinner(f"Loading NAV for {val_iso}…"):
-        nav_map = get_or_fetch_nav_for_date(val_iso)
-
-    if not nav_map:
-        st.warning(
-            f"⚠️ Could not load NAV for {val_iso}. "
-            "Values will show as N/A."
+        clients_df['display'] = clients_df.apply(
+            lambda r: f"{r['name']} | PAN: {r['pan'] or 'Minor'} | {r['client_code']}",
+            axis=1
         )
 
-    # ── Process all folios ──
-    all_scheme_rows = []
-    rta_scheme_txns = {'CAMS': [], 'KFinTech': []}
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            selected_display = st.selectbox(
+                "🔍 Select Client", clients_df['display'].tolist(),
+                index=None, placeholder="Type to search...", key="val_client_select"
+            )
+        with c2:
+            # ── FY Year selector ──
+            today = date_cls.today()
+            if today.month >= 4:
+                current_fy_start = today.year
+            else:
+                current_fy_start = today.year - 1
 
-    sorted_folios_list = sorted(all_folios)
-    prog = st.progress(0, text="Processing folios…")
+            fy_options = [
+                f"{y}-{str(y + 1)[-2:]}"
+                for y in range(current_fy_start, current_fy_start - 8, -1)
+            ]
+            selected_fy = st.selectbox("Financial Year", fy_options, key="val_fy_select")
 
-    for idx, folio_no in enumerate(sorted_folios_list):
-        prog.progress(
-            (idx + 1) / len(sorted_folios_list),
-            text=f"Folio {folio_no}…"
-        )
-        rta = folio_rta_map.get(folio_no)
-        if not rta:
-            continue
+        if not selected_display:
+            st.info("Select a client to generate the report.")
+            st.stop()
 
-        all_txn = fetch_all_folio_transactions(folio_no, rta)
-        if all_txn.empty:
-            continue
+        selected_client = clients_df[clients_df['display'] == selected_display].iloc[0]
+        client_code = selected_client['client_code']
+        client_name = selected_client['name']
+        pan         = selected_client['pan']
+        mobile      = selected_client.get('mobile')
 
-        for pc in all_txn['product_code'].unique():
-            opening  = calc_units_before(all_txn, pc, from_ts)
-            closing  = calc_units_upto(all_txn, pc, val_ts)
-            invested = calc_invested_upto(all_txn, pc, val_ts)
+        # ── Derive dates from FY ──
+        fy_start_year = int(selected_fy.split("-")[0])
+        period_from = date_cls(fy_start_year, 4, 1)
+        val_date    = date_cls(fy_start_year + 1, 3, 31)
+        val_iso     = val_date.strftime("%Y-%m-%d")
+        from_iso    = period_from.strftime("%Y-%m-%d")
+        val_ts      = pd.Timestamp(val_date)
+        from_ts     = pd.Timestamp(period_from)
 
-            if closing <= 0 and opening <= 0:
+        is_minor = pd.isna(pan) or str(pan).strip() == ""
+        match_pan = selected_client.get('guardian_pan') if is_minor else pan
+        name_clean = client_name.strip().upper() if client_name else ""
+
+        # ── Fetch folios ──
+        with get_conn() as conn:
+            if is_minor:
+                cams_f = pd.read_sql(
+                    "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                    conn, params=(name_clean,))
+                kfin_f = pd.read_sql(
+                    "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                    conn, params=(name_clean,))
+            else:
+                cams_f = pd.read_sql(
+                    "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+                    conn, params=(match_pan, client_name))
+                kfin_f = pd.read_sql(
+                    "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
+                    conn, params=(match_pan, client_name))
+
+        all_folios = set(cams_f['foliochk'].tolist() + kfin_f['folio'].tolist())
+
+        if not all_folios:
+            st.info("No folios found for this client.")
+            st.stop()
+
+        # ── Folio → RTA map ──
+        folio_rta_map = {}
+        for f in cams_f['foliochk'].tolist():
+            folio_rta_map[f] = 'CAMS'
+        for f in kfin_f['folio'].tolist():
+            folio_rta_map[f] = 'KFinTech'
+
+        # ── Product code → ISIN + scheme name ──
+        with get_conn() as conn:
+            pc_info = pd.read_sql("""
+                SELECT UPPER(TRIM(Channel_Partner_Code)) AS pc,
+                       MAX(ISIN)        AS isin,
+                       MAX(Scheme_Name) AS scheme_name
+                FROM bse_scheme_master
+                WHERE Channel_Partner_Code IS NOT NULL
+                  AND TRIM(Channel_Partner_Code) != ''
+                GROUP BY UPPER(TRIM(Channel_Partner_Code))
+            """, conn)
+        isin_lk = dict(zip(pc_info['pc'], pc_info['isin']))
+        name_lk = dict(zip(pc_info['pc'], pc_info['scheme_name']))
+
+        # ── Historical NAV ──
+        with st.spinner(f"Loading NAV for {val_iso}…"):
+            nav_map = get_or_fetch_nav_for_date(val_iso)
+
+        if not nav_map:
+            st.warning(
+                f"⚠️ Could not load NAV for {val_iso}. "
+                "Values will show as N/A."
+            )
+
+        # ── Process all folios ──
+        all_scheme_rows = []
+        rta_scheme_txns = {'CAMS': [], 'KFinTech': []}
+
+        sorted_folios_list = sorted(all_folios)
+        prog = st.progress(0, text="Processing folios…")
+
+        for idx, folio_no in enumerate(sorted_folios_list):
+            prog.progress(
+                (idx + 1) / len(sorted_folios_list),
+                text=f"Folio {folio_no}…"
+            )
+            rta = folio_rta_map.get(folio_no)
+            if not rta:
                 continue
 
-            isin  = isin_lk.get(pc)
-            nav   = nav_map.get(str(isin).strip().upper()) if isin else None
-            value = closing * nav if nav else None
-            gain  = (value - invested) if value is not None else None
-            sname = name_lk.get(pc, pc)
+            all_txn = fetch_all_folio_transactions(folio_no, rta)
+            if all_txn.empty:
+                continue
 
-            all_scheme_rows.append({
-                'Scheme':    sname,
-                'Folio':     folio_no,
-                'RTA':       rta,
-                'Invested':  invested,
-                'Value':     value,
-                'Gain/Loss': gain,
-            })
+            if 'trxntype' not in all_txn.columns:
+                all_txn['trxntype'] = ''
 
-            mask = (
-                (all_txn['product_code'] == pc)
-                & (all_txn['_date'] >= from_ts)
-                & (all_txn['_date'] <= val_ts)
-            )
-            pt = all_txn[mask].copy()
-            if not pt.empty:
-                pt['Balance'] = opening + pt['signed_units'].cumsum()
+            for pc in all_txn['product_code'].unique():
+                opening  = calc_units_before(all_txn, pc, from_ts)
+                closing  = calc_units_upto(all_txn, pc, val_ts)
+                invested = calc_invested_upto(all_txn, pc, val_ts)
 
-            rta_key = rta if rta in rta_scheme_txns else 'CAMS'
-            rta_scheme_txns[rta_key].append({
-                'label':   f"{sname} ({folio_no})",
-                'opening': opening,
-                'df':      pt,
-            })
+                if closing <= 0 and opening <= 0:
+                    continue
 
-    prog.empty()
+                isin  = isin_lk.get(pc)
+                nav   = nav_map.get(str(isin).strip().upper()) if isin else None
+                value = closing * nav if nav else None
+                gain  = (value - invested) if value is not None else None
+                sname = name_lk.get(pc, pc)
 
-    # ═══════════════════════════════════════════════
-    #  REPORT HEADER
-    # ═══════════════════════════════════════════════
-    st.divider()
-    hc1, hc2, hc3 = st.columns(3)
-    with hc1:
-        st.markdown(f"**{client_name}**")
-        st.caption(f"PAN: `{pan or 'Minor'}`  |  Code: `{client_code}`")
-    with hc2:
-        st.markdown(f"**FY {selected_fy}**")
-        st.caption(f"{from_iso} → {val_iso}")
-    with hc3:
-        if mobile:
-            st.caption(f"📱 {mobile}")
-    st.divider()
+                all_scheme_rows.append({
+                    'Scheme':    sname,
+                    'Folio':     folio_no,
+                    'RTA':       rta,
+                    'Invested':  invested,
+                    'Value':     value,
+                    'Gain/Loss': gain,
+                })
 
-    if not all_scheme_rows:
-        st.info("No holdings found for the selected period.")
-        st.stop()
-
-    # ═══════════════════════════════════════════════
-    #  SCHEME SUMMARY
-    # ═══════════════════════════════════════════════
-    sm_df = pd.DataFrame(all_scheme_rows)
-    rta_order = {'CAMS': 0, 'KFinTech': 1}
-    sm_df['_sort'] = sm_df['RTA'].map(rta_order).fillna(9)
-    sm_df = sm_df.sort_values(['_sort', 'Scheme']).drop(columns=['_sort'])
-
-    t_inv  = sm_df['Invested'].sum()
-    t_val  = sm_df['Value'].sum()
-    t_gain = t_val - t_inv if t_val is not None else None
-
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Total Invested", format_aum(t_inv))
-    m2.metric("Total Value", format_aum(t_val))
-    m3.metric(
-        "Gain/Loss",
-        format_aum(t_gain) if t_gain is not None else "N/A",
-        delta=(
-            f"{(t_gain / t_inv * 100):.2f}%"
-            if t_gain is not None and t_inv > 0 else None
-        ),
-    )
-
-    sm_df['Return %'] = sm_df.apply(
-        lambda r: (
-            f"{(r['Gain/Loss'] / r['Invested'] * 100):.2f}%"
-            if r['Gain/Loss'] is not None and r['Invested'] > 0
-            else "N/A"
-        ),
-        axis=1,
-    )
-
-    display_sm = sm_df[[
-        'Scheme', 'Folio', 'RTA', 'Invested', 'Value', 'Gain/Loss', 'Return %'
-    ]].copy()
-
-    total_row = pd.DataFrame([{
-        'Scheme':    '**TOTAL**',
-        'Folio':     f"{sm_df['Folio'].nunique()} folios",
-        'RTA':       '',
-        'Invested':  t_inv,
-        'Value':     t_val,
-        'Gain/Loss': t_gain,
-        'Return %': (
-            f"{(t_gain / t_inv * 100):.2f}%"
-            if t_gain is not None and t_inv > 0 else "N/A"
-        ),
-    }])
-    display_sm = pd.concat([display_sm, total_row], ignore_index=True)
-
-    st.dataframe(
-        display_sm,
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "Invested":  st.column_config.NumberColumn(format="₹ %.2f"),
-            "Value":     st.column_config.NumberColumn(format="₹ %.2f"),
-            "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
-        },
-    )
-
-    st.divider()
-
-    # ═══════════════════════════════════════════════
-    #  TRANSACTIONS (RTA-grouped)
-    # ═══════════════════════════════════════════════
-    st.markdown("### 📑 Transactions")
-    st.caption(f"Period: {from_iso} → {val_iso}  |  Opening balance as on {from_iso}")
-
-    for rta_key in ['CAMS', 'KFinTech']:
-        entries = rta_scheme_txns.get(rta_key, [])
-        if not entries:
-            continue
-
-        entries.sort(key=lambda e: e['label'])
-
-        with st.expander(
-            f"▶ {rta_key}  ({len(entries)} scheme"
-            f"{'s' if len(entries) != 1 else ''})",
-            expanded=True,
-        ):
-            for entry in entries:
-                label   = entry['label']
-                opening = entry['opening']
-                tdf     = entry['df']
-
-                st.markdown(
-                    f"**{label}** — Opening: **{opening:.4f}** units"
+                mask = (
+                    (all_txn['product_code'] == pc)
+                    & (all_txn['_date'] >= from_ts)
+                    & (all_txn['_date'] <= val_ts)
                 )
+                pt = all_txn[mask].copy()
+                if not pt.empty:
+                    pt['Balance'] = opening + pt['signed_units'].cumsum()
 
-                if tdf.empty:
-                    st.caption("_(no transactions during this period)_")
-                else:
-                    show_tdf = tdf[[
-                        '_date', 'trxntype', 'signed_units', 'amount', 'Balance'
-                    ]].copy()
-                    show_tdf['Date'] = show_tdf['_date'].dt.strftime('%Y-%m-%d')
-                    show_tdf = show_tdf[[
-                        'Date', 'trxntype', 'signed_units', 'amount', 'Balance'
-                    ]].rename(columns={
-                        'trxntype':     'Type',
-                        'signed_units': 'Units',
-                        'amount':       'Amount',
-                        'Balance':      'Balance',
-                    })
+                rta_key = rta if rta in rta_scheme_txns else 'CAMS'
+                rta_scheme_txns[rta_key].append({
+                    'label':   f"{sname} ({folio_no})",
+                    'opening': opening,
+                    'df':      pt,
+                })
 
-                    st.dataframe(
-                        show_tdf,
-                        width="stretch",
-                        hide_index=True,
-                        column_config={
-                            "Units":   st.column_config.NumberColumn(format="%.4f"),
-                            "Amount":  st.column_config.NumberColumn(format="₹ %.2f"),
-                            "Balance": st.column_config.NumberColumn(format="%.4f"),
-                        },
+        prog.empty()
+
+        # ═══════════════════════════════════════════════
+        #  REPORT HEADER
+        # ═══════════════════════════════════════════════
+        st.divider()
+        hc1, hc2, hc3 = st.columns(3)
+        with hc1:
+            st.markdown(f"**{client_name}**")
+            st.caption(f"PAN: `{pan or 'Minor'}`  |  Code: `{client_code}`")
+        with hc2:
+            st.markdown(f"**FY {selected_fy}**")
+            st.caption(f"{from_iso} → {val_iso}")
+        with hc3:
+            if mobile:
+                st.caption(f"📱 {mobile}")
+        st.divider()
+
+        if not all_scheme_rows:
+            st.info("No holdings found for the selected period.")
+            st.stop()
+
+        # ═══════════════════════════════════════════════
+        #  SCHEME SUMMARY
+        # ═══════════════════════════════════════════════
+        sm_df = pd.DataFrame(all_scheme_rows)
+        rta_order = {'CAMS': 0, 'KFinTech': 1}
+        sm_df['_sort'] = sm_df['RTA'].map(rta_order).fillna(9)
+        sm_df = sm_df.sort_values(['_sort', 'Scheme']).drop(columns=['_sort'])
+
+        t_inv  = sm_df['Invested'].sum()
+        t_val  = sm_df['Value'].sum()
+        t_gain = t_val - t_inv if t_val is not None else None
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Invested", format_aum(t_inv))
+        m2.metric("Total Value", format_aum(t_val))
+        m3.metric(
+            "Gain/Loss",
+            format_aum(t_gain) if t_gain is not None else "N/A",
+            delta=(
+                f"{(t_gain / t_inv * 100):.2f}%"
+                if t_gain is not None and t_inv > 0 else None
+            ),
+        )
+
+        sm_df['Return %'] = sm_df.apply(
+            lambda r: (
+                f"{(r['Gain/Loss'] / r['Invested'] * 100):.2f}%"
+                if r['Gain/Loss'] is not None and r['Invested'] > 0
+                else "N/A"
+            ),
+            axis=1,
+        )
+
+        display_sm = sm_df[[
+            'Scheme', 'Folio', 'RTA', 'Invested', 'Value', 'Gain/Loss', 'Return %'
+        ]].copy()
+
+        total_row = pd.DataFrame([{
+            'Scheme':    '**TOTAL**',
+            'Folio':     f"{sm_df['Folio'].nunique()} folios",
+            'RTA':       '',
+            'Invested':  t_inv,
+            'Value':     t_val,
+            'Gain/Loss': t_gain,
+            'Return %': (
+                f"{(t_gain / t_inv * 100):.2f}%"
+                if t_gain is not None and t_inv > 0 else "N/A"
+            ),
+        }])
+        display_sm = pd.concat([display_sm, total_row], ignore_index=True)
+
+        st.dataframe(
+            display_sm,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Invested":  st.column_config.NumberColumn(format="₹ %.2f"),
+                "Value":     st.column_config.NumberColumn(format="₹ %.2f"),
+                "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+            },
+        )
+
+        st.divider()
+
+        # ═══════════════════════════════════════════════
+        #  TRANSACTIONS (RTA-grouped)
+        # ═══════════════════════════════════════════════
+        st.markdown("### 📑 Transactions")
+        st.caption(f"Period: {from_iso} → {val_iso}  |  Opening balance as on {from_iso}")
+
+        for rta_key in ['CAMS', 'KFinTech']:
+            entries = rta_scheme_txns.get(rta_key, [])
+            if not entries:
+                continue
+
+            entries.sort(key=lambda e: e['label'])
+
+            with st.expander(
+                f"▶ {rta_key}  ({len(entries)} scheme"
+                f"{'s' if len(entries) != 1 else ''})",
+                expanded=True,
+            ):
+                for entry in entries:
+                    label   = entry['label']
+                    opening = entry['opening']
+                    tdf     = entry['df']
+
+                    st.markdown(
+                        f"**{label}** — Opening: **{opening:.4f}** units"
                     )
 
-                st.caption("")
+                    if tdf.empty:
+                        st.caption("_(no transactions during this period)_")
+                    else:
+                        show_tdf = tdf[[
+                            '_date', 'trxntype', 'signed_units', 'amount', 'Balance'
+                        ]].copy()
+                        show_tdf['Date'] = show_tdf['_date'].dt.strftime('%Y-%m-%d')
+                        show_tdf = show_tdf[[
+                            'Date', 'trxntype', 'signed_units', 'amount', 'Balance'
+                        ]].rename(columns={
+                            'trxntype':     'Type',
+                            'signed_units': 'Units',
+                            'amount':       'Amount',
+                            'Balance':      'Balance',
+                        })
 
-    # ═══════════════════════════════════════════════
-    #  DOWNLOAD BUTTONS
-    # ═══════════════════════════════════════════════
-    st.divider()
-    st.markdown("### 📥 Download Report")
+                        st.dataframe(
+                            show_tdf,
+                            width="stretch",
+                            hide_index=True,
+                            column_config={
+                                "Units":   st.column_config.NumberColumn(format="%.4f"),
+                                "Amount":  st.column_config.NumberColumn(format="₹ %.2f"),
+                                "Balance": st.column_config.NumberColumn(format="%.4f"),
+                            },
+                        )
 
-    dl1, dl2 = st.columns(2)
+                    st.caption("")
 
-    # ── HTML download (always works) ──
-    with dl1:
-        html_content = generate_valuation_html(
-            client_name, pan, client_code, mobile,
-            val_iso, from_iso,
-            all_scheme_rows, rta_scheme_txns,
-            t_inv, t_val, t_gain if t_gain is not None else 0,
-        )
-        st.download_button(
-            label="📄 Download HTML (Print → Save as PDF)",
-            data=html_content.encode('utf-8'),
-            file_name=f"Valuation_{client_name.replace(' ', '_')}_{selected_fy}.html",
-            mime="text/html",
-            use_container_width=True,
-        )
+        # ═══════════════════════════════════════════════
+        #  DOWNLOAD BUTTONS
+        # ═══════════════════════════════════════════════
+        st.divider()
+        st.markdown("### 📥 Download Report")
 
-    # ── PDF download (requires fpdf2 + font) ──
-    with dl2:
-        pdf_bytes = generate_valuation_pdf(
-            client_name, pan, client_code, mobile,
-            val_iso, from_iso,
-            all_scheme_rows, rta_scheme_txns,
-            t_inv, t_val, t_gain if t_gain is not None else 0,
-        )
-        if pdf_bytes:
+        dl1, dl2 = st.columns(2)
+
+        # ── HTML download (always works) ──
+        with dl1:
+            html_content = generate_valuation_html(
+                client_name, pan, client_code, mobile,
+                val_iso, from_iso,
+                all_scheme_rows, rta_scheme_txns,
+                t_inv, t_val, t_gain if t_gain is not None else 0,
+            )
             st.download_button(
-                label="📑 Download PDF",
-                data=pdf_bytes,
-                file_name=f"Valuation_{client_name.replace(' ', '_')}_{selected_fy}.pdf",
-                mime="application/pdf",
+                label="📄 Download HTML (Print → Save as PDF)",
+                data=html_content.encode('utf-8'),
+                file_name=f"Valuation_{client_name.replace(' ', '_')}_{selected_fy}.html",
+                mime="text/html",
                 use_container_width=True,
             )
+
+        # ── PDF download (requires fpdf2 + font) ──
+        with dl2:
+            pdf_bytes = generate_valuation_pdf(
+                client_name, pan, client_code, mobile,
+                val_iso, from_iso,
+                all_scheme_rows, rta_scheme_txns,
+                t_inv, t_val, t_gain if t_gain is not None else 0,
+            )
+            if pdf_bytes:
+                st.download_button(
+                    label="📑 Download PDF",
+                    data=pdf_bytes,
+                    file_name=f"Valuation_{client_name.replace(' ', '_')}_{selected_fy}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+            else:
+                st.button(
+                    "📑 Download PDF",
+                    disabled=True,
+                    help=(
+                        "PDF requires fpdf2 (`pip install fpdf2`) "
+                        "and a Unicode font (DejaVu Sans / Liberation Sans / Arial). "
+                        "Use the HTML download as an alternative — open in browser "
+                        "and press Ctrl+P → Save as PDF."
+                    ),
+                    use_container_width=True,
+                )
+
+    # ═══════════════════════════════════════════════════════════
+    # SUB-REPORT 2 — Capital Gain Report
+    # ═══════════════════════════════════════════════════════════
+    elif sub_mode == "🧮 Capital Gain Report":
+        st.subheader("🧮 Capital Gain Report")
+        st.caption("Realized gains only (CAMS, FIFO). KFinTech redemption tracking isn't available yet.")
+
+        today = date_cls.today()
+        current_fy_start = today.year if today.month >= 4 else today.year - 1
+        fy_options = ["All Time"] + [f"{y}-{str(y+1)[-2:]}" for y in range(current_fy_start, current_fy_start - 8, -1)]
+
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            cgr_fy = st.selectbox("FY (by sale date)", fy_options, key="cgr_fy_select")
+        with f2:
+            cgr_tax_cat_override = st.selectbox(
+                "Tax category", ["Auto (per scheme)", "Force Equity", "Force Debt"], key="cgr_tax_cat_select"
+            )
+        with f3:
+            cgr_slab = st.number_input("Debt slab rate (%)", 0.0, 42.0, 30.0, key="cgr_slab") / 100
+
+        if cgr_fy != "All Time":
+            fy_start_year = int(cgr_fy.split("-")[0])
+            cgr_from, cgr_to = date_cls(fy_start_year, 4, 1), date_cls(fy_start_year + 1, 3, 31)
         else:
-            st.button(
-                "📑 Download PDF",
-                disabled=True,
-                help=(
-                    "PDF requires fpdf2 (`pip install fpdf2`) "
-                    "and a Unicode font (DejaVu Sans / Liberation Sans / Arial). "
-                    "Use the HTML download as an alternative — open in browser "
-                    "and press Ctrl+P → Save as PDF."
-                ),
-                use_container_width=True,
+            cgr_from = cgr_to = None
+
+        @st.cache_data
+        def _cgr_clients(_v: int):
+            with get_conn() as conn:
+                return pd.read_sql("""
+                    SELECT client_code,
+                           primary_holder_first_name || ' ' || primary_holder_last_name AS name,
+                           primary_holder_pan AS pan
+                    FROM bse_client_master
+                    WHERE primary_holder_pan IS NOT NULL
+                """, conn)
+
+        cgr_clients = _cgr_clients(data_version())
+        if cgr_clients.empty:
+            st.warning("No clients found.")
+            st.stop()
+
+        if "cgr_selected_client" not in st.session_state:
+            st.session_state["cgr_selected_client"] = None
+        if "cgr_filter_key" not in st.session_state:
+            st.session_state["cgr_filter_key"] = None
+
+        current_filter_key = (cgr_fy, cgr_tax_cat_override, cgr_slab)
+        gen_clicked = st.button("🔄 Generate Report", type="primary")
+
+        if gen_clicked or (st.session_state["cgr_filter_key"] is None):
+            st.session_state["cgr_filter_key"] = current_filter_key
+            st.session_state["cgr_selected_client"] = None
+
+            with st.spinner("Computing realized gains across all clients…"):
+                summary_rows = []
+                matches_cache = {}
+
+                for _, crow in cgr_clients.iterrows():
+                    pan, cname, ccode = crow["pan"], crow["name"], crow["client_code"]
+
+                    with get_conn() as conn:
+                        cams_folios = pd.read_sql(
+                            "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+                            conn, params=(str(pan).upper(), cname.upper())
+                        )["foliochk"].tolist()
+
+                    if not cams_folios:
+                        continue
+
+                    schemes_df = get_client_cams_schemes(cams_folios, data_version())
+                    if schemes_df.empty:
+                        continue
+
+                    client_rows = []
+                    for _, srow in schemes_df.iterrows():
+                        folio_no, prodcode, scheme_name = srow["folio_no"], srow["prodcode"], srow["scheme"]
+                        txns = get_cams_txns_raw(folio_no, prodcode)
+                        if txns.empty:
+                            continue
+
+                        lots, matches = cg.replay_folio_scheme(txns)
+                        if not matches:
+                            continue
+
+                        for m in matches:
+                            # ── ADJUST these two lines if your match object uses different field names ──
+                            sale_date = getattr(m, "sale_date", None) or getattr(m, "date", None)
+                            buy_date = getattr(m, "buy_date", None) or getattr(m, "purchase_date", None)
+
+                            sd = sale_date.date() if hasattr(sale_date, "date") else sale_date
+                            if cgr_from and sd and not (cgr_from <= sd <= cgr_to):
+                                continue
+
+                            units, cost, proceeds, gain = m.units, m.cost, m.proceeds, m.gain
+                            client_rows.append({
+                                "Scheme": scheme_name,
+                                "Folio": folio_no,
+                                "Buy Date": buy_date,
+                                "Buy Units": units,
+                                "Buy NAV": (cost / units) if units else 0,
+                                "Buy Value": cost,
+                                "Sale Date": sale_date,
+                                "Sell Units": units,
+                                "Sell NAV": (proceeds / units) if units else 0,
+                                "Sell Value": proceeds,
+                                "Gain/Loss": gain,
+                            })
+
+                    if not client_rows:
+                        continue
+
+                    matches_cache[ccode] = client_rows
+                    t_buy = sum(r["Buy Value"] for r in client_rows)
+                    t_sale = sum(r["Sell Value"] for r in client_rows)
+                    summary_rows.append({
+                        "Client": cname, "Code": ccode,
+                        "Buy": t_buy, "Sale": t_sale, "Gain/Loss": t_sale - t_buy,
+                    })
+
+                st.session_state["cgr_summary_rows"] = summary_rows
+                st.session_state["cgr_matches_cache"] = matches_cache
+
+        summary_rows = st.session_state.get("cgr_summary_rows", [])
+        if not summary_rows:
+            st.info("No realized capital gains found for the selected period. Click Generate Report.")
+            st.stop()
+
+        summary_df = pd.DataFrame(summary_rows).sort_values("Sale", ascending=False).reset_index(drop=True)
+
+        # ═══════════════ LEVEL 1: Client Summary ═══════════════
+        if st.session_state["cgr_selected_client"] is None:
+            t_buy, t_sale = summary_df["Buy"].sum(), summary_df["Sale"].sum()
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total Buy", format_aum(t_buy))
+            m2.metric("Total Sale", format_aum(t_sale))
+            m3.metric("Total Gain/Loss", format_aum(t_sale - t_buy))
+
+            sel = st.dataframe(
+                summary_df[["Client", "Buy", "Sale", "Gain/Loss"]],
+                width="stretch", hide_index=True, on_select="rerun", selection_mode="single-row",
+                column_config={
+                    "Buy": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Sale": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+                }
+            )
+            if sel and len(sel["selection"]["rows"]) > 0:
+                idx = sel["selection"]["rows"][0]
+                st.session_state["cgr_selected_client"] = summary_df.iloc[idx]["Code"]
+                st.rerun()
+
+            csv = summary_df[["Client", "Buy", "Sale", "Gain/Loss"]].to_csv(index=False).encode("utf-8")
+            st.download_button("⬇️ Download Client Summary (CSV)", csv, "capital_gain_summary.csv", "text/csv")
+
+        # ═══════════════ LEVEL 2: Scheme/Lot Detail ═══════════════
+        else:
+            sel_code = st.session_state["cgr_selected_client"]
+            if st.button("⬅️ Back to Clients"):
+                st.session_state["cgr_selected_client"] = None
+                st.rerun()
+
+            cname = cgr_clients[cgr_clients["client_code"] == sel_code].iloc[0]["name"]
+            st.markdown(f"### {cname} — Scheme-wise Capital Gains")
+
+            rows = st.session_state.get("cgr_matches_cache", {}).get(sel_code, [])
+            detail_df = pd.DataFrame(rows)
+
+            d_buy, d_sale = detail_df["Buy Value"].sum(), detail_df["Sell Value"].sum()
+            d1, d2, d3 = st.columns(3)
+            d1.metric("Total Buy", format_currency(d_buy))
+            d2.metric("Total Sale", format_currency(d_sale))
+            d3.metric("Total Gain/Loss", format_currency(d_sale - d_buy))
+
+            cols = ["Scheme", "Buy Date", "Buy Units", "Buy NAV", "Buy Value",
+                    "Sale Date", "Sell Units", "Sell NAV", "Sell Value", "Gain/Loss"]
+            st.dataframe(
+                detail_df[cols].sort_values("Sale Date", ascending=False),
+                width="stretch", hide_index=True,
+                column_config={
+                    "Buy Units": st.column_config.NumberColumn(format="%.4f"),
+                    "Buy NAV": st.column_config.NumberColumn(format="₹ %.4f"),
+                    "Buy Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Sell Units": st.column_config.NumberColumn(format="%.4f"),
+                    "Sell NAV": st.column_config.NumberColumn(format="₹ %.4f"),
+                    "Sell Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+                }
+            )
+
+            csv = detail_df[cols].to_csv(index=False).encode("utf-8")
+            st.download_button(
+                f"⬇️ Download {cname} Detail (CSV)", csv,
+                f"capital_gain_{cname.replace(' ', '_')}.csv", "text/csv"
             )
 
 # ==================== 🧮 CAPITAL GAINS ====================

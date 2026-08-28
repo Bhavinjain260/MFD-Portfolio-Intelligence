@@ -1,7 +1,8 @@
 """
 THEME PATCH — replace your existing <style> block with this one.
 Covers: stDataFrame grid (glide canvas), metrics, selectbox popovers,
-multiselect/radio pills, buttons, tabs, expander, dividers, captions.
+multiselect/radio pills, buttons, tabs, expander, dividers, captions,
+and the custom .metric-card KPI tiles used on the Dashboard.
 """
 
 THEME_CSS = """
@@ -113,6 +114,39 @@ THEME_CSS = """
         max-width: 100% !important;
     }}
 
+    /* ---- Custom KPI tiles (Dashboard "Total AUM" / CAMS / KFinTech cards) ---- */
+    .metric-card {{
+        background: {card_bg} !important;
+        border-radius: 10px;
+        padding: 1.1rem;
+        border-left: 3px solid {card_border} !important;
+        margin-bottom: 0.75rem;
+        box-shadow: {card_shadow};
+    }}
+    .metric-card.primary {{ border-left-color: #6366f1 !important; }}
+    .metric-card.success {{ border-left-color: #10b981 !important; }}
+    .metric-card.info   {{ border-left-color: #3b82f6 !important; }}
+    .metric-card.warning{{ border-left-color: #f59e0b !important; }}
+    .metric-card .label {{
+        color: {card_label} !important;
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 0.4rem;
+    }}
+    .metric-card .value {{
+        color: {card_value} !important;
+        font-size: 1.35rem;
+        font-weight: 700;
+        font-family: 'SF Mono', ui-monospace, monospace;
+    }}
+    .metric-card .sub {{
+        color: {card_sub} !important;
+        font-size: 0.78rem;
+        margin-top: 0.2rem;
+    }}
+
     .aum-card, .aum-card-kfin, .aum-card-bse {{
         border-radius: 12px; padding: 16px 20px; margin-bottom: 8px;
         border: 1px solid rgba(255,255,255,0.1);
@@ -136,11 +170,23 @@ def render_theme(dark: bool) -> str:
             bg="#0e1117", sbg="#161b22", text="#e6edf3",
             muted="#8b949e", border="#30363d", accent="#58a6ff",
             hover="#21262d",
+            card_bg="linear-gradient(135deg, #1a1a2e 0%, #202036 100%)",
+            card_border="#2d2d44",
+            card_label="#8b8b9a",
+            card_value="#e6edf3",
+            card_sub="#6b7280",
+            card_shadow="0 2px 8px rgba(0,0,0,0.15)",
         )
     return THEME_CSS.format(
         bg="#ffffff", sbg="#f6f8fa", text="#1a1a2e",
         muted="#6b7280", border="#d0d7de", accent="#2563eb",
         hover="#eef2f7",
+        card_bg="linear-gradient(135deg, #ffffff 0%, #f4f5f9 100%)",
+        card_border="#e2e4ec",
+        card_label="#5b5f70",
+        card_value="#1a1a2e",
+        card_sub="#7a7f90",
+        card_shadow="0 2px 8px rgba(0,0,0,0.08)",
     )
 
 
