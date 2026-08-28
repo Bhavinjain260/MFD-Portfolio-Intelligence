@@ -526,7 +526,7 @@ def compute_client_holdings(client_code: str, _folio_nav_df: pd.DataFrame, _v: i
             holdings = holdings.drop(columns=['invested_amount', 'product_code_norm_kfin_fam'], errors='ignore')
 
     if 'CAMS' in holdings['rta'].values:
-        cams_invested_df = get_cams_invested_per_scheme(sorted(cams_f['foliochk'].tolist()))
+        cams_invested_df = get_cams_invested_per_scheme(sorted(cams_f['foliochk'].tolist()), _v)
         if not cams_invested_df.empty:
             cams_invested_df['product_code_norm'] = cams_invested_df['product_code'].astype(str).str.strip().str.upper()
             holdings = holdings.merge(cams_invested_df, on=['folio_id', 'product_code_norm'],
