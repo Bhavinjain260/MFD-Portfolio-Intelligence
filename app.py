@@ -5026,7 +5026,7 @@ elif mode == "📊 Reports":
         ]].copy()
 
         total_row = pd.DataFrame([{
-            'Scheme':    '**TOTAL**',
+            'Scheme':    'TOTAL',
             'Folio':     f"{sm_df['Folio'].nunique()} folios",
             'RTA':       '',
             'Invested':  t_inv,
