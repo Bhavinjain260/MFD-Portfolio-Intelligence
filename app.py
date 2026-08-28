@@ -506,97 +506,78 @@ def get_kfin_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
 
 
 # ==================== VALUATION REPORT HELPERS ====================
-
-# Keywords for substring matching — much more robust than exact set matching
-_OUT_KEYWORDS = [
-    'REDEM', 'REDEMPTION', 'WITHDRAW', 'SWITCHOUT', 'SWOUT', 'SOUT',
-    'FULL', 'PARTIAL', 'REDEMP',
-]
-_IN_KEYWORDS = [
-    'PURCHASE', 'PUR', 'SIP', 'SI', 'REINVEST', 'RI',
-    'SWITCHIN', 'SWIN', 'SIN', 'INITIAL', 'NEW', 'IP',
-    'TOPUP', 'TOP UP', 'ADDITIONAL', 'SUBSCRIPTION', 'DIVIDEND REINVEST',
-]
-
-
-def _txn_direction(txn_type: str) -> str:
-    """Substring-match against known keywords — works with any RTA variation."""
-    t = str(txn_type).strip().upper()
-    if not t or t in ('NAN', 'NONE', 'NULL', 'NA', ''):
-        return 'NEUTRAL'
-    for kw in _OUT_KEYWORDS:
-        if kw in t:
-            return 'OUT'
-    for kw in _IN_KEYWORDS:
-        if kw in t:
-            return 'IN'
-    return 'NEUTRAL'
-
-
 def fetch_all_folio_transactions(folio_no: str, rta: str) -> pd.DataFrame:
     """
-    Fetch EVERY transaction for a folio with standardised columns.
-    Matches the exact column names used in the Clients tab transaction view.
+    Reuses get_cams_txns_raw / get_kfin_txns_raw (same functions the
+    Clients > Portfolio and Transactions tabs already rely on), looping
+    over each scheme in the folio.
+
+    Sign convention matches the rest of the app:
+      - CAMS: units/amount stored positive; redemption = trxntype 'R1'
+        (same check as load_dashboard_summary / get_cams_invested_per_scheme)
+      - KFinTech: units/amount already signed at source (no direction
+        guessing needed — same assumption get_kfin_invested_per_scheme makes)
     """
-    with get_conn() as conn:
-        if rta == 'CAMS':
-            df = pd.read_sql("""
-                SELECT traddate, trxntype, trxnmode, trxnstat,
-                       purprice, units, amount,
-                       TRIM(UPPER(prodcode)) AS product_code
-                FROM cams_wbr2_transaction
-                WHERE folio_no = ?
-            """, conn, params=(folio_no,))
-        else:
-            df = pd.read_sql("""
-                SELECT td_trdt   AS traddate,
-                       td_purred AS trxntype,
-                       trnmode   AS trxnmode,
-                       trnstat   AS trxnstat,
-                       td_pop    AS purprice,
-                       td_units  AS units,
-                       td_amt    AS amount,
-                       TRIM(UPPER(fmcode)) AS product_code
-                FROM kfin_mfsd201_transaction
-                WHERE td_acno = ?
-            """, conn, params=(folio_no,))
+    if rta == 'CAMS':
+        with get_conn() as conn:
+            codes = pd.read_sql(
+                "SELECT DISTINCT TRIM(UPPER(prodcode)) AS pc "
+                "FROM cams_wbr2_transaction WHERE folio_no = ?",
+                conn, params=(folio_no,)
+            )['pc'].tolist()
+        frames = []
+        for pc in codes:
+            t = get_cams_txns_raw(folio_no, pc)
+            if not t.empty:
+                t['product_code'] = pc
+                frames.append(t)
+        df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    else:
+        with get_conn() as conn:
+            codes = pd.read_sql(
+                "SELECT DISTINCT TRIM(UPPER(fmcode)) AS pc "
+                "FROM kfin_mfsd201_transaction WHERE td_acno = ?",
+                conn, params=(folio_no,)
+            )['pc'].tolist()
+        frames = []
+        for pc in codes:
+            t = get_kfin_txns_raw(folio_no, pc)
+            if not t.empty:
+                t['product_code'] = pc
+                frames.append(t)
+        df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
     if df.empty:
-        return pd.DataFrame()
+        return df
 
-    # ── Date parsing: try dayfirst=False first, then dayfirst=True for failures ──
-    df['_date'] = pd.to_datetime(df['traddate'], errors='coerce', dayfirst=False)
-    nat_mask = df['_date'].isna() & df['traddate'].notna()
-    if nat_mask.any():
-        df.loc[nat_mask, '_date'] = pd.to_datetime(
-            df.loc[nat_mask, 'traddate'], errors='coerce', dayfirst=True
-        )
+    if 'trxntype' not in df.columns:
+        df['trxntype'] = ''
 
-    # ── Log unparseable dates instead of silently dropping ──
+    
+
+    df['_date'] = pd.to_datetime(df['traddate'], errors='coerce')
     still_nat = df['_date'].isna() & df['traddate'].notna()
     if still_nat.any():
-        bad_dates = df.loc[still_nat, 'traddate'].unique()
-        log.warning(
-            "[VALUATION] Folio %s: %d rows with unparseable dates: %s",
-            folio_no, still_nat.sum(), list(bad_dates[:5])
-        )
-
-    # Keep rows with valid dates
+        log.warning("[VALUATION] Folio %s: %d rows with unparseable dates",
+                    folio_no, still_nat.sum())
     df = df.dropna(subset=['_date'])
 
-    df['units']  = pd.to_numeric(df['units'],  errors='coerce').fillna(0)
+    df['units'] = pd.to_numeric(df['units'], errors='coerce').fillna(0)
     df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0)
     df['purprice'] = pd.to_numeric(df['purprice'], errors='coerce')
 
-    df['direction'] = df['trxntype'].apply(_txn_direction)
-    df['signed_units'] = df.apply(
-        lambda r: r['units'] if r['direction'] == 'IN'
-        else (-r['units'] if r['direction'] == 'OUT' else 0),
-        axis=1,
-    )
+    if rta == 'CAMS':
+        is_redemption = df['trxntype'].astype(str).str.strip().str.upper() == 'R1'
+        df['direction'] = is_redemption.map({True: 'OUT', False: 'IN'})
+        df['signed_units'] = df['units'].where(~is_redemption, -df['units'])
+    else:
+        df['direction'] = df['units'].apply(
+            lambda u: 'OUT' if u < 0 else ('IN' if u > 0 else 'NEUTRAL')
+        )
+        df['signed_units'] = df['units']
+
     df = df.sort_values('_date', kind='stable').reset_index(drop=True)
     return df
-
 
 def calc_units_before(txn_df: pd.DataFrame, product_code: str,
                       before_date: pd.Timestamp) -> float:
