@@ -903,6 +903,7 @@ def generate_valuation_pdf(
     return bytes(pdf.output())
 
 
+
 def generate_valuation_html(
     client_name: str,
     pan: str,
@@ -1039,6 +1040,260 @@ def generate_valuation_html(
             html += "</table>"
 
     html += f"""<div class="footer">Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}</div>
+</body></html>"""
+    return html
+
+def generate_capital_gain_pdf(
+    client_name: str,
+    pan: str,
+    client_code: str,
+    fy_str: str,
+    detail_rows: list[dict],
+    total_buy: float,
+    total_sale: float,
+    total_gain: float,
+) -> bytes | None:
+    """
+    Generate a PDF bytes buffer for the capital gain report.
+    Returns None if fpdf2 is not installed or no font found.
+    """
+    try:
+        from fpdf import FPDF
+    except ImportError:
+        return None
+
+    reg_path, bold_path = _find_font_path()
+    if not reg_path:
+        return None
+
+    pdf = FPDF(orientation='P', unit='mm', format='A4')
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.add_font('Main', '', reg_path, uni=True)
+    pdf.add_font('Main', 'B', bold_path, uni=True)
+    pdf.set_margins(12, 12, 12)
+
+    BLUE   = (41, 128, 185)
+    DARK   = (44, 62, 80)
+    GREY   = (127, 140, 141)
+    LIGHT  = (236, 240, 241)
+    WHITE  = (255, 255, 255)
+    GREEN  = (39, 174, 96)
+    RED    = (192, 57, 43)
+    PAGE_W = 210 - 24  # 186mm available
+
+    def _fmt_inr(v):
+        try:
+            return f"\u20b9{float(v):,.2f}"
+        except (TypeError, ValueError):
+            return "N/A"
+
+    def _fmt_units(v):
+        try:
+            return f"{float(v):.4f}"
+        except (TypeError, ValueError):
+            return "N/A"
+
+    def _fmt_date(v):
+        if v is None:
+            return ""
+        if isinstance(v, (datetime, pd.Timestamp, date_cls)):
+            return v.strftime("%d-%m-%Y")
+        return str(v)
+
+    pdf.add_page()
+
+    # Title
+    pdf.set_font('Main', 'B', 16)
+    pdf.set_text_color(*DARK)
+    pdf.cell(PAGE_W, 10, 'Capital Gain Report', align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+
+    # Meta
+    pdf.set_font('Main', '', 9)
+    pdf.set_text_color(*GREY)
+    pdf.cell(PAGE_W, 5, f'Client: {client_name}', new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 5, f'PAN: {pan or "N/A"}   |   Code: {client_code}   |   FY: {fy_str}', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+
+    # Metrics bar
+    pdf.set_fill_color(*LIGHT)
+    col_w = PAGE_W / 3
+    pdf.set_font('Main', 'B', 8)
+    pdf.set_text_color(*GREY)
+    pdf.cell(col_w, 5, 'Total Buy', border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Total Sale', border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Gain / Loss', border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_font('Main', 'B', 11)
+    pdf.set_text_color(*DARK)
+    pdf.cell(col_w, 7, _fmt_inr(total_buy), border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 7, _fmt_inr(total_sale), border=0, fill=True, new_x="RIGHT")
+    gain_color = GREEN if total_gain >= 0 else RED
+    pdf.set_text_color(*gain_color)
+    pdf.cell(col_w, 7, _fmt_inr(total_gain), border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(*DARK)
+    pdf.ln(6)
+
+    # Section header
+    pdf.set_font('Main', 'B', 11)
+    pdf.set_text_color(*BLUE)
+    pdf.cell(PAGE_W, 6, 'Realized Gain Details', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+
+    # ═══════════════════════════════════════════════════════════
+    # FIX: Properly calculated column widths that fit within PAGE_W
+    # ═══════════════════════════════════════════════════════════
+    headers = ['Scheme', 'Folio', 'Buy Date', 'Buy Units', 'Buy Value', 
+               'Sale Date', 'Sell Units', 'Sell Value', 'Gain/Loss']
+    
+    # Fixed widths that sum to <= PAGE_W (186mm)
+    # Scheme needs most space; dates/units/values are compact
+    widths = [40, 18, 17, 16, 20, 17, 16, 20, 22]
+    # Verify: 40+18+17+16+20+17+16+20 = 164mm
+    # Last col: 186 - 164 = 22mm ✓
+    widths[-1] = PAGE_W - sum(widths[:-1])  # Ensures exact fit
+
+    row_h = 6  # Slightly increased for readability
+    pdf.set_font('Main', 'B', 6)
+    pdf.set_fill_color(*BLUE)
+    pdf.set_text_color(*WHITE)
+    for h, w in zip(headers, widths):
+        pdf.cell(w, row_h, h, border=1, align='C', fill=True)
+    pdf.ln()
+
+    pdf.set_font('Main', '', 6)
+    pdf.set_text_color(*DARK)
+    aligns = ['L', 'C', 'C', 'R', 'R', 'C', 'R', 'R', 'R']
+    
+    for i, row in enumerate(detail_rows):
+        if i % 2 == 1:
+            pdf.set_fill_color(*LIGHT)
+            fill = True
+        else:
+            fill = False
+
+        # Truncate scheme name to fit column
+        scheme_name = str(row.get('Scheme', ''))
+        # Approximate chars that fit: column_width_mm / (font_size_mm * 0.5)
+        # For 40mm at 6pt font, roughly 28 chars safe
+        if len(scheme_name) > 28:
+            scheme_name = scheme_name[:26] + ".."
+
+        vals = [
+            scheme_name,
+            str(row.get('Folio', '')),
+            _fmt_date(row.get('Buy Date')),
+            _fmt_units(row.get('Buy Units')),
+            _fmt_inr(row.get('Buy Value')),
+            _fmt_date(row.get('Sale Date')),
+            _fmt_units(row.get('Sell Units')),
+            _fmt_inr(row.get('Sell Value')),
+            _fmt_inr(row.get('Gain/Loss')),
+        ]
+        for v, w, a in zip(vals, widths, aligns):
+            pdf.cell(w, row_h, v, border=1, align=a, fill=fill)
+        pdf.ln()
+
+    # Footer
+    pdf.set_font('Main', '', 7)
+    pdf.set_text_color(*GREY)
+    pdf.cell(PAGE_W, 4, 
+             f'Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}', 
+             align='C', new_x="LMARGIN", new_y="NEXT")
+
+    return bytes(pdf.output())
+
+def generate_capital_gain_html(
+    client_name: str,
+    pan: str,
+    client_code: str,
+    fy_str: str,
+    detail_rows: list[dict],
+    total_buy: float,
+    total_sale: float,
+    total_gain: float,
+) -> str:
+    """Generate a self-contained HTML capital gain report (print → Save as PDF)."""
+    def fi(v):
+        try:
+            return f"₹{float(v):,.2f}"
+        except:
+            return "N/A"
+    def fu(v):
+        try:
+            return f"{float(v):.4f}"
+        except:
+            return "N/A"
+    def fd(v):
+        if v is None:
+            return ""
+        if isinstance(v, (datetime, pd.Timestamp, date_cls)):
+            return v.strftime("%d-%m-%Y")
+        return str(v)
+
+    gain_cls = "positive" if total_gain >= 0 else "negative"
+
+    rows_html = ""
+    for r in detail_rows:
+        gl = r.get('Gain/Loss', 0)
+        gl_cls = "positive" if gl and gl >= 0 else "negative"
+        rows_html += f"""<tr>
+<td class="left">{r.get('Scheme','')}</td>
+<td class="center">{r.get('Folio','')}</td>
+<td class="center">{fd(r.get('Buy Date'))}</td>
+<td class="right">{fu(r.get('Buy Units'))}</td>
+<td class="right">{fi(r.get('Buy Value'))}</td>
+<td class="center">{fd(r.get('Sale Date'))}</td>
+<td class="right">{fu(r.get('Sell Units'))}</td>
+<td class="right">{fi(r.get('Sell Value'))}</td>
+<td class="right {gl_cls}">{fi(gl)}</td></tr>"""
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Capital Gain Report - {client_name}</title>
+<style>
+  @page {{ size: A4; margin: 12mm; }}
+  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #2c3e50; margin: 0; padding: 15px; }}
+  h1 {{ font-size: 17px; text-align: center; margin: 0 0 3px 0; }}
+  .meta {{ text-align: center; color: #7f8c8d; font-size: 9px; margin-bottom: 12px; }}
+  .metrics {{ display: flex; gap: 10px; margin-bottom: 14px; }}
+  .metric-box {{ flex: 1; background: #ecf0f1; padding: 8px; border-radius: 4px; text-align: center; }}
+  .metric-box .label {{ font-size: 8px; color: #7f8c8d; text-transform: uppercase; }}
+  .metric-box .value {{ font-size: 14px; font-weight: bold; margin-top: 2px; }}
+  .positive {{ color: #27ae60; }}
+  .negative {{ color: #c0392b; }}
+  h2 {{ font-size: 12px; color: #2980b9; border-bottom: 2px solid #2980b9; padding-bottom: 3px; margin: 16px 0 6px 0; }}
+  table {{ border-collapse: collapse; width: 100%; margin-bottom: 10px; font-size: 9px; }}
+  th {{ background: #2980b9; color: white; padding: 4px 5px; text-align: center; font-weight: bold; }}
+  td {{ padding: 3px 5px; border: 1px solid #dcdcdc; }}
+  tr:nth-child(even) {{ background: #f7fafc; }}
+  .total-row {{ font-weight: bold; background: #e0e0e0 !important; }}
+  .right {{ text-align: right; }}
+  .left {{ text-align: left; }}
+  .center {{ text-align: center; }}
+  .footer {{ text-align: center; color: #aaa; font-size: 8px; margin-top: 20px; border-top: 1px solid #eee; padding-top: 6px; }}
+  @media print {{ body {{ padding: 5px; }} .no-print {{ display: none; }} }}
+</style></head><body>
+<h1>Capital Gain Report</h1>
+<div class="meta">
+  {client_name} &nbsp;|&nbsp; PAN: {pan or "N/A"} &nbsp;|&nbsp; Code: {client_code} &nbsp;|&nbsp; FY: {fy_str}
+</div>
+<div class="metrics">
+  <div class="metric-box"><div class="label">Total Buy</div><div class="value">{fi(total_buy)}</div></div>
+  <div class="metric-box"><div class="label">Total Sale</div><div class="value">{fi(total_sale)}</div></div>
+  <div class="metric-box"><div class="label">Gain / Loss</div><div class="value {gain_cls}">{fi(total_gain)}</div></div>
+</div>
+
+<h2>Realized Gain Details</h2>
+<table>
+<tr><th class="left">Scheme</th><th class="center">Folio</th><th class="center">Buy Date</th><th class="right">Buy Units</th><th class="right">Buy Value</th><th class="center">Sale Date</th><th class="right">Sell Units</th><th class="right">Sell Value</th><th class="right">Gain/Loss</th></tr>
+{rows_html}
+<tr class="total-row">
+<td class="left">TOTAL</td><td class="center"></td><td class="center"></td><td class="center"></td>
+<td class="right">{fi(total_buy)}</td><td class="center"></td><td class="center"></td>
+<td class="right">{fi(total_sale)}</td><td class="right {gain_cls}">{fi(total_gain)}</td></tr>
+</table>
+
+<div class="footer">Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}</div>
 </body></html>"""
     return html
 
@@ -2377,6 +2632,53 @@ def get_cams_invested_per_scheme(folio_list: list, _v: int) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
+# ==================== CONSOLIDATED CLIENT LOADER ====================
+@st.cache_data
+def load_all_clients_with_display(_v: int) -> pd.DataFrame:
+    """Single source of truth for client search across all tabs."""
+    with get_conn() as conn:
+        return pd.read_sql("""
+            SELECT 
+                client_code,
+                primary_holder_first_name || ' ' || primary_holder_last_name AS name,
+                primary_holder_pan AS pan,
+                guardian_pan,
+                indian_mobile_no AS mobile,
+                email,
+                city
+            FROM bse_client_master
+        """, conn)
+
+def render_client_selector(key_prefix: str, exclude_minors: bool = False) -> tuple:
+    """Reusable client selector UI. Returns (client_code, client_row)."""
+    clients_df = load_all_clients_with_display(data_version())
+    
+    if clients_df.empty:
+        st.warning("No clients found.")
+        return None, None
+    
+    if exclude_minors:
+        clients_df = clients_df[clients_df['pan'].notna() & (clients_df['pan'].str.strip() != '')]
+    
+    clients_df['display'] = clients_df.apply(
+        lambda r: f"{r['name']} | PAN: {r['pan'] or 'Minor'} | {r['client_code']}",
+        axis=1
+    )
+    
+    selected = st.selectbox(
+        "🔍 Select Client",
+        clients_df['display'].tolist(),
+        index=None,
+        placeholder="Type to search...",
+        key=f"{key_prefix}_client_select"
+    )
+    
+    if not selected:
+        return None, None
+    
+    return selected, clients_df[clients_df['display'] == selected].iloc[0]
+
+
 # ==================== DATA LOADERS ====================
 @st.cache_data(show_spinner=False)
 def load_table_summary(table: str, _v: int) -> pd.DataFrame:
@@ -3141,40 +3443,11 @@ if mode == "📊 Dashboard":
 elif mode == "👥 Clients":
     st.header("👤 Client Portfolio & Analytics")
 
-    # ── Client Search ──
-    @st.cache_data
-    def load_clients_search(_v: int):
-        with get_conn() as conn:
-            return pd.read_sql("""
-                SELECT client_code,
-                       primary_holder_first_name || ' ' || primary_holder_last_name   AS name,
-                       primary_holder_pan                                             AS pan,
-                       guardian_pan                                                   AS guardian_pan,
-                       guardian_first_name || ' ' || COALESCE(guardian_last_name, '') AS guardian_name,
-                       guardian_relationship                                          AS guardian_relationship,
-                       indian_mobile_no                                               AS mobile,
-                       email,
-                       city
-                FROM bse_client_master
-            """, conn)
-
-    clients_df = load_clients_search(data_version())
-
-    if clients_df.empty:
-        st.warning("No clients found. Upload client master.")
+    selected_display, selected_client = render_client_selector("clients_tab")
+    
+    if not selected_display or selected_client is None:
         st.stop()
-
-    clients_df['display'] = clients_df.apply(
-        lambda r: f"{r['name']} | PAN: {r['pan'] or 'Minor'} | {r['client_code']}", axis=1)
-
-    selected_display = st.selectbox(
-        "🔍 Search / Select Client", clients_df['display'].tolist(), key="client_select",
-        index=None, placeholder="Type to search..."
-    )
-    if not selected_display:
-        st.stop()
-
-    selected_client = clients_df[clients_df['display'] == selected_display].iloc[0]
+    
     client_code = selected_client['client_code']
     pan = selected_client['pan']
     name = selected_client['name']
@@ -4783,60 +5056,29 @@ elif mode == "📊 Reports":
     # ═══════════════════════════════════════════════════════════
     # SUB-REPORT 1 — Portfolio Valuation Report
     # ═══════════════════════════════════════════════════════════
+
     if sub_mode == "📈 Portfolio Valuation Report":
-
-        # ── Client Search ──
-        @st.cache_data
-        def _load_all_clients(_v: int):
-            with get_conn() as conn:
-                return pd.read_sql("""
-                    SELECT client_code,
-                           primary_holder_first_name || ' ' || primary_holder_last_name AS name,
-                           primary_holder_pan AS pan,
-                           indian_mobile_no AS mobile
-                    FROM bse_client_master
-                """, conn)
-
-        clients_df = _load_all_clients(data_version())
-        if clients_df.empty:
-            st.warning("No clients found.")
-            st.stop()
-
-        clients_df['display'] = clients_df.apply(
-            lambda r: f"{r['name']} | PAN: {r['pan'] or 'Minor'} | {r['client_code']}",
-            axis=1
-        )
-
-        c1, c2 = st.columns([3, 1])
-        with c1:
-            selected_display = st.selectbox(
-                "🔍 Select Client", clients_df['display'].tolist(),
-                index=None, placeholder="Type to search...", key="val_client_select"
-            )
-        with c2:
-            # ── FY Year selector ──
-            today = date_cls.today()
-            if today.month >= 4:
-                current_fy_start = today.year
-            else:
-                current_fy_start = today.year - 1
-
-            fy_options = [
-                f"{y}-{str(y + 1)[-2:]}"
-                for y in range(current_fy_start, current_fy_start - 8, -1)
-            ]
-            selected_fy = st.selectbox("Financial Year", fy_options, key="val_fy_select")
-
-        if not selected_display:
+        selected_display, selected_client = render_client_selector("val_report")
+        
+        if not selected_display or selected_client is None:
             st.info("Select a client to generate the report.")
             st.stop()
-
-        selected_client = clients_df[clients_df['display'] == selected_display].iloc[0]
+        
         client_code = selected_client['client_code']
         client_name = selected_client['name']
-        pan         = selected_client['pan']
-        mobile      = selected_client.get('mobile')
+        pan = selected_client['pan']
+        mobile = selected_client.get('mobile')
+        
+        # ── FY Year selector ──
+        today = date_cls.today()
+        if today.month >= 4:
+            current_fy_start = today.year
+        else:
+            current_fy_start = today.year - 1
 
+        fy_options = [f"{y}-{str(y + 1)[-2:]}" for y in range(current_fy_start, current_fy_start - 8, -1)]
+        selected_fy = st.selectbox("Financial Year", fy_options, key="val_fy_select")
+        
         # ── Derive dates from FY ──
         fy_start_year = int(selected_fy.split("-")[0])
         period_from = date_cls(fy_start_year, 4, 1)
@@ -5161,19 +5403,35 @@ elif mode == "📊 Reports":
                     use_container_width=True,
                 )
 
+
     # ═══════════════════════════════════════════════════════════
     # SUB-REPORT 2 — Capital Gain Report
     # ═══════════════════════════════════════════════════════════
 
-
     elif sub_mode == "🧮 Capital Gain Report":
         st.subheader("🧮 Capital Gain Report")
-        st.caption("Realized gains only (CAMS, FIFO). KFinTech redemption tracking isn't available yet.")
+        st.caption("Realized gains (CAMS, FIFO). KFinTech redemption tracking isn't available yet.")
 
+        # ── Client selector (same pattern as Valuation Report) ──
+        selected_display, selected_client = render_client_selector("cg_report", exclude_minors=False)
+
+        if not selected_display or selected_client is None:
+            st.info("Select a client to generate the capital gain report.")
+            st.stop()
+
+        client_code = selected_client['client_code']
+        client_name = selected_client['name']
+        pan = selected_client['pan']
+        mobile = selected_client.get('mobile')
+
+        is_minor = pd.isna(pan) or str(pan).strip() == ""
+        match_pan = selected_client.get('guardian_pan') if is_minor else pan
+        name_clean = client_name.strip().upper() if client_name else ""
+
+        # ── FY selector ──
         today = date_cls.today()
         current_fy_start = today.year if today.month >= 4 else today.year - 1
         fy_options = ["All Time"] + [f"{y}-{str(y+1)[-2:]}" for y in range(current_fy_start, current_fy_start - 8, -1)]
-
         cgr_fy = st.selectbox("FY (by sale date)", fy_options, key="cgr_fy_select")
 
         if cgr_fy != "All Time":
@@ -5182,23 +5440,11 @@ elif mode == "📊 Reports":
         else:
             cgr_from = cgr_to = None
 
-        @st.cache_data
-        def _cgr_clients(_v: int):
-            with get_conn() as conn:
-                return pd.read_sql("""
-                    SELECT client_code,
-                            primary_holder_first_name || ' ' || primary_holder_last_name AS name,
-                            primary_holder_pan AS pan
-                    FROM bse_client_master
-                    WHERE primary_holder_pan IS NOT NULL
-                """, conn)
-
         def _extract_match_dates(m):
             """
             Pull whatever date-like fields exist on the match object, regardless
-            of what cg.py names them (sale_date, redemption_date, txn_date, etc.).
-            Sorted chronologically: earliest = buy date, latest = sale date.
-            Works for namedtuples, dataclasses, or plain objects.
+            of what cg.py names them. Sorted chronologically: earliest = buy date,
+            latest = sale date.
             """
             candidates = []
             for attr in dir(m):
@@ -5217,198 +5463,189 @@ elif mode == "📊 Reports":
                 return candidates[0], candidates[0]
             return None, None
 
-        cgr_clients = _cgr_clients(data_version())
-        if cgr_clients.empty:
-            st.warning("No clients found.")
-            st.stop()
-
-        if "cgr_selected_client" not in st.session_state:
-            st.session_state["cgr_selected_client"] = None
-        if "cgr_filter_key" not in st.session_state:
-            st.session_state["cgr_filter_key"] = None
-
-        current_filter_key = (cgr_fy,)
+        # ── Generate button ──
         gen_clicked = st.button("🔄 Generate Report", type="primary")
 
-        if gen_clicked or (st.session_state["cgr_filter_key"] is None):
-            st.session_state["cgr_filter_key"] = current_filter_key
-            st.session_state["cgr_selected_client"] = None
-
-            with st.spinner("Computing realized gains across all clients…"):
-                summary_rows = []
-                matches_cache = {}
-
-                for _, crow in cgr_clients.iterrows():
-                    pan, cname, ccode = crow["pan"], crow["name"], crow["client_code"]
-
-                    with get_conn() as conn:
-                        cams_folios = pd.read_sql(
-                            "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
-                            conn, params=(str(pan).upper(), cname.upper())
-                        )["foliochk"].tolist()
-
-                    if not cams_folios:
-                        continue
-
-                    schemes_df = get_client_cams_schemes(cams_folios, data_version())
-                    if schemes_df.empty:
-                        continue
-
-                    client_rows = []
-                    for _, srow in schemes_df.iterrows():
-                        folio_no, prodcode, scheme_name = srow["folio_no"], srow["prodcode"], srow["scheme"]
-                        txns = get_cams_txns_raw(folio_no, prodcode)
-                        if txns.empty:
-                            continue
-
-                        lots, matches = cg.replay_folio_scheme(txns)
-                        if not matches:
-                            continue
-
-                        for m in matches:
-                            buy_date, sale_date = _extract_match_dates(m)
-
-                            sd = sale_date.date() if sale_date is not None else None
-                            if cgr_from and sd and not (cgr_from <= sd <= cgr_to):
-                                continue
-
-                            units, cost, proceeds, gain = m.units, m.cost, m.proceeds, m.gain
-                            client_rows.append({
-                                "Scheme": scheme_name,
-                                "Folio": folio_no,
-                                "Buy Date": buy_date.date() if buy_date is not None else None,
-                                "Buy Units": units,
-                                "Buy NAV": (cost / units) if units else 0,
-                                "Buy Value": cost,
-                                "Sale Date": sd,
-                                "Sell Units": units,
-                                "Sell NAV": (proceeds / units) if units else 0,
-                                "Sell Value": proceeds,
-                                "Gain/Loss": gain,
-                            })
-
-                    if not client_rows:
-                        continue
-
-                    matches_cache[ccode] = client_rows
-                    t_buy = sum(r["Buy Value"] for r in client_rows)
-                    t_sale = sum(r["Sell Value"] for r in client_rows)
-                    summary_rows.append({
-                        "Client": cname, "Code": ccode,
-                        "Buy": t_buy, "Sale": t_sale, "Gain/Loss": t_sale - t_buy,
-                    })
-
-                st.session_state["cgr_summary_rows"] = summary_rows
-                st.session_state["cgr_matches_cache"] = matches_cache
-
-        summary_rows = st.session_state.get("cgr_summary_rows", [])
-        if not summary_rows:
-            st.info("No realized capital gains found for the selected period. Click Generate Report.")
+        if not gen_clicked:
+            st.info("Click **Generate Report** after selecting the client and FY.")
             st.stop()
 
-        summary_df = pd.DataFrame(summary_rows).sort_values("Sale", ascending=False).reset_index(drop=True)
+        with st.spinner(f"Computing realized gains for {client_name}…"):
+            # Fetch folios
+            with get_conn() as conn:
+                if is_minor:
+                    cams_folios = pd.read_sql(
+                        "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                        conn, params=(name_clean,)
+                    )["foliochk"].tolist()
+                else:
+                    cams_folios = pd.read_sql(
+                        "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+                        conn, params=(str(match_pan).upper(), name_clean)
+                    )["foliochk"].tolist()
 
-        # ═══════════════ LEVEL 1: Client Summary ═══════════════
-        if st.session_state["cgr_selected_client"] is None:
-            t_buy, t_sale = summary_df["Buy"].sum(), summary_df["Sale"].sum()
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Total Buy", format_aum(t_buy))
-            m2.metric("Total Sale", format_aum(t_sale))
-            m3.metric("Total Gain/Loss", format_aum(t_sale - t_buy))
+            if not cams_folios:
+                st.info("No CAMS folios found for this client.")
+                st.stop()
 
-            sel = st.dataframe(
-                summary_df[["Client", "Buy", "Sale", "Gain/Loss"]],
-                width="stretch", hide_index=True, on_select="rerun", selection_mode="single-row",
-                column_config={
-                    "Buy": st.column_config.NumberColumn(format="₹ %.2f"),
-                    "Sale": st.column_config.NumberColumn(format="₹ %.2f"),
-                    "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
-                }
-            )
-            if sel and len(sel["selection"]["rows"]) > 0:
-                idx = sel["selection"]["rows"][0]
-                st.session_state["cgr_selected_client"] = summary_df.iloc[idx]["Code"]
-                st.rerun()
+            schemes_df = get_client_cams_schemes(cams_folios, data_version())
+            if schemes_df.empty:
+                st.info("No schemes with transactions found for this client.")
+                st.stop()
 
-            csv = summary_df[["Client", "Buy", "Sale", "Gain/Loss"]].to_csv(index=False).encode("utf-8")
-            st.download_button("⬇️ Download Client Summary (CSV)", csv, "capital_gain_summary.csv", "text/csv")
+            detail_rows = []
+            for _, srow in schemes_df.iterrows():
+                folio_no, prodcode, scheme_name = srow["folio_no"], srow["prodcode"], srow["scheme"]
+                txns = get_cams_txns_raw(folio_no, prodcode)
+                if txns.empty:
+                    continue
 
-        # ═══════════════ LEVEL 2: Scheme/Lot Detail ═══════════════
-        else:
-            sel_code = st.session_state["cgr_selected_client"]
-            if st.button("⬅️ Back to Clients"):
-                st.session_state["cgr_selected_client"] = None
-                st.rerun()
+                lots, matches = cg.replay_folio_scheme(txns)
+                if not matches:
+                    continue
 
-            cname = cgr_clients[cgr_clients["client_code"] == sel_code].iloc[0]["name"]
-            st.markdown(f"### {cname} — Scheme-wise Capital Gains")
+                for m in matches:
+                    buy_date, sale_date = _extract_match_dates(m)
+                    sd = sale_date.date() if sale_date is not None else None
 
-            rows = st.session_state.get("cgr_matches_cache", {}).get(sel_code, [])
-            detail_df = pd.DataFrame(rows)
+                    if cgr_from and sd and not (cgr_from <= sd <= cgr_to):
+                        continue
 
-            d_buy, d_sale = detail_df["Buy Value"].sum(), detail_df["Sell Value"].sum()
-            d1, d2, d3 = st.columns(3)
-            d1.metric("Total Buy", format_currency(d_buy))
-            d2.metric("Total Sale", format_currency(d_sale))
-            d3.metric("Total Gain/Loss", format_currency(d_sale - d_buy))
+                    detail_rows.append({
+                        "Scheme": scheme_name,
+                        "Folio": folio_no,
+                        "Buy Date": buy_date.date() if buy_date is not None else None,
+                        "Buy Units": m.units,
+                        "Buy NAV": (m.cost / m.units) if m.units else 0,
+                        "Buy Value": m.cost,
+                        "Sale Date": sd,
+                        "Sell Units": m.units,
+                        "Sell NAV": (m.proceeds / m.units) if m.units else 0,
+                        "Sell Value": m.proceeds,
+                        "Gain/Loss": m.gain,
+                    })
 
-            cols = ["Scheme", "Buy Date", "Buy Units", "Buy NAV", "Buy Value",
-                    "Sale Date", "Sell Units", "Sell NAV", "Sell Value", "Gain/Loss"]
-            st.dataframe(
-                detail_df[cols].sort_values("Sale Date", ascending=False, na_position="last"),
-                width="stretch", hide_index=True,
-                column_config={
-                    "Buy Units": st.column_config.NumberColumn(format="%.4f"),
-                    "Buy NAV": st.column_config.NumberColumn(format="₹ %.4f"),
-                    "Buy Value": st.column_config.NumberColumn(format="₹ %.2f"),
-                    "Sell Units": st.column_config.NumberColumn(format="%.4f"),
-                    "Sell NAV": st.column_config.NumberColumn(format="₹ %.4f"),
-                    "Sell Value": st.column_config.NumberColumn(format="₹ %.2f"),
-                    "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
-                }
-            )
+        if not detail_rows:
+            st.info("No realized capital gains found for the selected period.")
+            st.stop()
 
+        detail_df = pd.DataFrame(detail_rows)
+        d_buy = detail_df["Buy Value"].sum()
+        d_sale = detail_df["Sell Value"].sum()
+        d_gain = d_sale - d_buy
+
+        # ═══════════════════════════════════════════════
+        #  REPORT HEADER
+        # ═══════════════════════════════════════════════
+        st.divider()
+        hc1, hc2, hc3 = st.columns(3)
+        with hc1:
+            st.markdown(f"**{client_name}**")
+            st.caption(f"PAN: `{pan or 'Minor'}`  |  Code: `{client_code}`")
+        with hc2:
+            st.markdown(f"**FY {cgr_fy}**")
+        with hc3:
+            if mobile:
+                st.caption(f"📱 {mobile}")
+        st.divider()
+
+        # ═══════════════════════════════════════════════
+        #  METRICS
+        # ═══════════════════════════════════════════════
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Buy", format_currency(d_buy))
+        m2.metric("Total Sale", format_currency(d_sale))
+        m3.metric("Total Gain/Loss", format_currency(d_gain))
+
+        # ═══════════════════════════════════════════════
+        #  DETAIL TABLE
+        # ═══════════════════════════════════════════════
+        cols = ["Scheme", "Folio", "Buy Date", "Buy Units", "Buy NAV", "Buy Value",
+                "Sale Date", "Sell Units", "Sell NAV", "Sell Value", "Gain/Loss"]
+
+        st.dataframe(
+            detail_df[cols].sort_values("Sale Date", ascending=False, na_position="last"),
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Buy Units": st.column_config.NumberColumn(format="%.4f"),
+                "Buy NAV": st.column_config.NumberColumn(format="₹ %.4f"),
+                "Buy Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Sell Units": st.column_config.NumberColumn(format="%.4f"),
+                "Sell NAV": st.column_config.NumberColumn(format="₹ %.4f"),
+                "Sell Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+            }
+        )
+
+        # ═══════════════════════════════════════════════
+        #  DOWNLOADS
+        # ═══════════════════════════════════════════════
+        st.divider()
+        st.markdown("### 📥 Download Report")
+
+        dl1, dl2, dl3 = st.columns(3)
+
+        # ── CSV (Excel-compatible) ──
+        with dl1:
             csv = detail_df[cols].to_csv(index=False).encode("utf-8")
             st.download_button(
-                f"⬇️ Download {cname} Detail (CSV)", csv,
-                f"capital_gain_{cname.replace(' ', '_')}.csv", "text/csv"
+                label="📊 Download Excel (CSV)",
+                data=csv,
+                file_name=f"CapitalGain_{client_name.replace(' ', '_')}_{cgr_fy}.csv",
+                mime="text/csv",
+                use_container_width=True,
             )
+
+        # ── HTML (Print → Save as PDF) ──
+        with dl2:
+            html_content = generate_capital_gain_html(
+                client_name, pan, client_code, cgr_fy,
+                detail_rows, d_buy, d_sale, d_gain
+            )
+            st.download_button(
+                label="📄 Download HTML (Print → PDF)",
+                data=html_content.encode('utf-8'),
+                file_name=f"CapitalGain_{client_name.replace(' ', '_')}_{cgr_fy}.html",
+                mime="text/html",
+                use_container_width=True,
+            )
+
+        # ── PDF ──
+        with dl3:
+            pdf_bytes = generate_capital_gain_pdf(
+                client_name, pan, client_code, cgr_fy,
+                detail_rows, d_buy, d_sale, d_gain
+            )
+            if pdf_bytes:
+                st.download_button(
+                    label="📑 Download PDF",
+                    data=pdf_bytes,
+                    file_name=f"CapitalGain_{client_name.replace(' ', '_')}_{cgr_fy}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+            else:
+                st.button(
+                    "📑 Download PDF",
+                    disabled=True,
+                    help="PDF requires fpdf2 (`pip install fpdf2`) and a Unicode font. Use HTML download as alternative.",
+                    use_container_width=True,
+                )
 # ==================== 🧮 CAPITAL GAINS ====================
 elif mode == "🧮 Capital Gains":
     st.header("🧮 Capital Gains (CAMS, FIFO)")
-    st.caption(
-        "FIFO cost basis. Redemption detected via trxntype='R1' or trxn_nature containing "
-        "'Redemption'. Tax category is a heuristic guess from the scheme name — confirm it "
-        "before relying on the tax figure."
-    )
-
-
-
-    @st.cache_data
-    def _cg_clients(_v: int):
-        with get_conn() as conn:
-            return pd.read_sql("""
-                SELECT client_code,
-                       primary_holder_first_name || ' ' || primary_holder_last_name AS name,
-                       primary_holder_pan AS pan
-                FROM bse_client_master
-                WHERE primary_holder_pan IS NOT NULL
-            """, conn)
-
-
-    cg_clients = _cg_clients(data_version())
-    if cg_clients.empty:
-        st.warning("No clients found.")
+    st.caption(...)
+    
+    selected_display, selected_client = render_client_selector("cg_tab", exclude_minors=True)
+    
+    if not selected_display or selected_client is None:
+        st.info("Select a client with valid PAN.")
         st.stop()
-
-    cg_clients["display"] = cg_clients["name"] + " | " + cg_clients["pan"].fillna("Minor")
-    cg_sel = st.selectbox("Client", cg_clients["display"].tolist(), index=None, placeholder="Search...")
-    if not cg_sel:
-        st.stop()
-
-    cg_row = cg_clients[cg_clients["display"] == cg_sel].iloc[0]
-    cg_pan, cg_name = cg_row["pan"], cg_row["name"]
-
+    
+    cg_pan = selected_client['pan']
+    cg_name = selected_client['name']
+    
     with get_conn() as conn:
         cg_cams_folios = pd.read_sql(
             "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
