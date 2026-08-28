@@ -1652,48 +1652,6 @@ def get_all_folios_with_isin_and_nav(_get_conn, _v: int, force_reload: bool = Fa
     return result
 
 
-# def get_folio_nav_summary(get_conn, force_reload: bool = False) -> dict:
-#     """Quick stats for Streamlit metrics. Reads from saved file via get_all_folios_with_isin_and_nav."""
-#     log.info("[NAV-FLOW] Generating folio NAV summary...")
-#
-#     df = get_all_folios_with_isin_and_nav(get_conn, force_reload=force_reload)
-#     cams_df = df[df["rta"] == "CAMS"]
-#     kfin_df = df[df["rta"] == "KFinTech"]
-#
-#     cams_nav_aum = float(cams_df["nav_based_aum"].sum()) if "nav_based_aum" in cams_df.columns else 0.0
-#     cams_file_aum = float(cams_df["file_aum"].sum()) if "file_aum" in cams_df.columns else 0.0
-#     kfin_nav_aum = float(kfin_df["nav_based_aum"].sum()) if "nav_based_aum" in kfin_df.columns else 0.0
-#
-#     cams_unmatched = int((cams_df["has_isin"] & ~cams_df["has_nav"]).sum())
-#     kfin_unmatched = int((kfin_df["has_isin"] & ~kfin_df["has_nav"]).sum())
-#
-#     return {
-#         "total_folios": len(df),
-#         "cams_wbr9_folios": len(cams_df),
-#         "kfin_mfsd211_folios": len(kfin_df),
-#         "with_isin": int(df["has_isin"].sum()),
-#         "isin_coverage_pct": round(df["has_isin"].mean() * 100, 2) if len(df) else 0,
-#         "with_nav": int(df["has_nav"].sum()),
-#         "nav_coverage_pct": round(df["has_nav"].mean() * 100, 2) if len(df) else 0,
-#         "with_amc": int(df["has_amc"].sum()),
-#         "amc_coverage_pct": round(df["has_amc"].mean() * 100, 2) if len(df) else 0,
-#         "amc_resolved_via_amfi": int((df["amc_name_source"] == "AMFI").sum()),
-#
-#         "total_aum": cams_nav_aum + kfin_nav_aum,
-#         "cams_wbr4_aum": cams_nav_aum,
-#         "cams_file_aum": cams_file_aum,
-#         "cams_unmatched_nav": cams_unmatched,
-#         "kfin_mfsd203_aum": kfin_nav_aum,
-#         "kfin_unmatched_nav": kfin_unmatched,
-#
-#         "cams_with_nav": int(cams_df["has_nav"].sum()),
-#         "cams_total": len(cams_df),
-#         "kfin_with_nav": int(kfin_df["has_nav"].sum()),
-#         "kfin_total": len(kfin_df),
-#
-#         "df": df,
-#     }
-
 
 @st.cache_data(show_spinner=False)
 def get_folio_nav_summary(_get_conn, _v: int, force_reload: bool = False) -> dict:
@@ -1965,69 +1923,6 @@ def load_db_stats(_v: int) -> dict:
             except:
                 stats[t] = 0
     return stats
-
-
-# @st.cache_data(ttl=60, show_spinner=False)
-# def load_dashboard_summary() -> dict:
-#     """Load key metrics for dashboard."""
-#     summary = {}
-#     with get_conn() as conn:
-#         # ── BSE ──
-#         summary["total_clients"] = conn.execute("SELECT COUNT(*) FROM bse_client_master").fetchone()[0]
-#         summary["total_xsip"] = conn.execute("SELECT COUNT(*) FROM bse_sip").fetchone()[0]
-#         summary["active_xsip"] = conn.execute(
-#             "SELECT COUNT(*) FROM bse_sip WHERE LOWER(COALESCE(status, '')) LIKE '%active%'"
-#         ).fetchone()[0]
-#         summary["bse_schemes"] = conn.execute("SELECT COUNT(*) FROM bse_scheme_master").fetchone()[0]
-#
-#         # ── CAMS ──
-#         summary["cams_wbr9_folios"] = conn.execute(
-#             "SELECT COUNT(DISTINCT foliochk) FROM cams_wbr9_folio"
-#         ).fetchone()[0]
-#         summary["cams_txns"] = conn.execute("SELECT COUNT(*) FROM cams_wbr2_transaction").fetchone()[0]
-#         summary["cams_wbr49_sips"] = conn.execute("SELECT COUNT(*) FROM cams_wbr49_sip").fetchone()[0]
-#         summary["cams_wbr4_aum"] = conn.execute(
-#             "SELECT COALESCE(SUM(rupee_bal), 0) FROM cams_wbr4_aum"
-#         ).fetchone()[0]
-#         summary["cams_wbr77_brokerage"] = conn.execute(
-#             "SELECT COALESCE(SUM(brkage_amt), 0) FROM cams_wbr77_brokerage"
-#         ).fetchone()[0]
-#         summary["cams_amcs"] = conn.execute(
-#             "SELECT COUNT(DISTINCT amc_code) FROM cams_wbr9_folio WHERE COALESCE(amc_code, '') != ''"
-#         ).fetchone()[0]
-#
-#         # ── KFinTech ──
-#         summary["kfin_mfsd211_folios"] = conn.execute(
-#             "SELECT COUNT(DISTINCT Folio) FROM kfin_mfsd211_folio"
-#         ).fetchone()[0]
-#         summary["kfin_txns"] = conn.execute("SELECT COUNT(*) FROM kfin_mfsd201_transaction").fetchone()[0]
-#         summary["kfin_mfsd243_sips"] = conn.execute("SELECT COUNT(*) FROM kfin_mfsd243_sip").fetchone()[0]
-#         summary["kfin_mfsd205_brokerage"] = conn.execute(
-#             "SELECT COALESCE(SUM(brokerage_rs), 0) FROM kfin_mfsd205_brokerage"
-#         ).fetchone()[0]
-#         summary["kfin_amcs"] = conn.execute(
-#             "SELECT COUNT(DISTINCT Fund) FROM kfin_mfsd211_folio WHERE COALESCE(Fund, '') != ''"
-#         ).fetchone()[0]
-#
-#         # KFin AUM: sum td_amt grouped by td_acno from MFSD201
-#         try:
-#             kfin_mfsd203_aum_result = conn.execute("""
-#                 SELECT COALESCE(SUM(inner_sum), 0) FROM (
-#                     SELECT td_acno, SUM(td_amt) as inner_sum
-#                     FROM kfin_mfsd201_transaction
-#                     GROUP BY td_acno
-#                 )
-#             """).fetchone()[0]
-#             summary["kfin_mfsd203_aum"] = float(kfin_mfsd203_aum_result) if kfin_mfsd203_aum_result else 0.0
-#         except Exception as e:
-#             log.warning("KFin AUM calculation failed: %s", e)
-#             summary["kfin_mfsd203_aum"] = 0.0
-#
-#         # ── Totals ──
-#         summary["total_aum"] = summary["cams_wbr4_aum"] + summary["kfin_mfsd203_aum"]
-#         summary["total_brokerage"] = summary["cams_wbr77_brokerage"] + summary["kfin_mfsd205_brokerage"]
-#
-#     return summary
 
 @st.cache_data(show_spinner=False)
 def load_dashboard_summary(_v: int) -> dict:
@@ -2924,12 +2819,12 @@ elif mode == "👥 Clients":
 
     # ── Tabs ──
     if family is None:
-        tab_portfolio, tab_sips, tab_brokerage = st.tabs(
-            ["📈 Portfolio & AUM", "🔄 Active SIPs", "💰 Brokerage"]
+        tab_portfolio, tab_sips, tab_transactions, tab_brokerage = st.tabs(
+            ["📈 Portfolio & AUM", "🔄 Active SIPs", "📜 Transactions", "💰 Brokerage"]
         )
     else:
-        tab_family, tab_portfolio, tab_sips, tab_brokerage = st.tabs(
-            ["👨‍👩‍👧‍👦 Family Portfolio", "📈 Portfolio & AUM", "🔄 Active SIPs", "💰 Brokerage"]
+        tab_family, tab_portfolio, tab_sips, tab_transactions, tab_brokerage = st.tabs(
+            ["👨‍👩‍👧‍👦 Family Portfolio", "📈 Portfolio & AUM", "🔄 Active SIPs","💰 Brokerage", "📜 Transactions" ]
         )
 
     # ═══════════════════════════════════════════════════════════
@@ -3709,6 +3604,211 @@ elif mode == "👥 Clients":
         else:
             st.info("No SIP records found.")
 
+    # ═══════════════════════════════════════════════════════════
+    # TAB TRANSACTIONS — All recent transactions with folio filter
+    # ═══════════════════════════════════════════════════════════
+    with tab_transactions:
+        st.subheader("📜 All Transactions")
+
+        if not all_folios:
+            st.info("No folios found for this client.")
+        else:
+            # ── Build folio → RTA map ──
+            folio_rta_map = {}
+            for f in cams_f['foliochk'].tolist():
+                folio_rta_map[f] = 'CAMS'
+            for f in kfin_f['folio'].tolist():
+                folio_rta_map[f] = 'KFinTech'
+
+            # ── Filters ──
+            fc1, fc2 = st.columns([1, 1])
+            with fc1:
+                sorted_folios = sorted(all_folios)
+                folio_options = ["All Folios"] + [
+                    f"{f} ({folio_rta_map.get(f, '?')})" for f in sorted_folios
+                ]
+                folio_choice = st.selectbox(
+                    "Select Folio", folio_options, index=0,
+                    key="txn_tab_folio_select"
+                )
+            with fc2:
+                date_filter = st.selectbox(
+                    "Time Period",
+                    ["All Time", "Last 30 Days", "Last 90 Days", "Last 6 Months", "Last 1 Year"],
+                    key="txn_tab_date_filter"
+                )
+
+            if folio_choice == "All Folios":
+                folios_to_fetch = sorted_folios
+            else:
+                sel_folio = folio_choice.split(" (")[0]
+                folios_to_fetch = [sel_folio]
+
+            # ── Separate by RTA ──
+            cams_folios_list = [f for f in folios_to_fetch if folio_rta_map.get(f) == 'CAMS']
+            kfin_folios_list = [f for f in folios_to_fetch if folio_rta_map.get(f) == 'KFinTech']
+
+            txn_frames = []
+
+            with get_conn() as conn:
+                # ── CAMS transactions ──
+                if cams_folios_list:
+                    ph = ','.join(['?'] * len(cams_folios_list))
+                    cams_txn = pd.read_sql(f"""
+                        SELECT folio_no   AS folio_id,
+                               'CAMS'      AS rta,
+                               trxnno,
+                               traddate,
+                               trxntype,
+                               trxnmode,
+                               trxnstat,
+                               purprice,
+                               units,
+                               amount,
+                               brokcode,
+                               subbrok,
+                               remarks,
+                               prodcode    AS product_code
+                        FROM cams_wbr2_transaction
+                        WHERE folio_no IN ({ph})
+                    """, conn, params=tuple(cams_folios_list))
+                    if not cams_txn.empty:
+                        txn_frames.append(cams_txn)
+
+                # ── KFinTech transactions ──
+                if kfin_folios_list:
+                    ph = ','.join(['?'] * len(kfin_folios_list))
+                    kfin_txn = pd.read_sql(f"""
+                        SELECT td_acno    AS folio_id,
+                               'KFinTech' AS rta,
+                               td_trno    AS trxnno,
+                               td_trdt    AS traddate,
+                               td_purred  AS trxntype,
+                               trnmode    AS trxnmode,
+                               trnstat    AS trxnstat,
+                               td_pop     AS purprice,
+                               td_units   AS units,
+                               td_amt     AS amount,
+                               td_broker  AS brokcode,
+                               ''         AS subbrok,
+                               trdesc     AS remarks,
+                               UPPER(TRIM(fmcode)) AS product_code
+                        FROM kfin_mfsd201_transaction
+                        WHERE td_acno IN ({ph})
+                    """, conn, params=tuple(kfin_folios_list))
+                    if not kfin_txn.empty:
+                        txn_frames.append(kfin_txn)
+
+            if txn_frames:
+                txn_df = pd.concat(txn_frames, ignore_index=True)
+
+                # ── Resolve scheme names via bse_scheme_master ──
+                if not txn_df['product_code'].dropna().empty:
+                    with get_conn() as conn:
+                        scheme_map_df = pd.read_sql("""
+                            SELECT UPPER(TRIM(Channel_Partner_Code)) AS product_code,
+                                   MAX(Scheme_Name) AS scheme_name
+                            FROM bse_scheme_master
+                            WHERE Channel_Partner_Code IS NOT NULL
+                              AND TRIM(Channel_Partner_Code) != ''
+                            GROUP BY UPPER(TRIM(Channel_Partner_Code))
+                        """, conn)
+                    scheme_map = dict(zip(
+                        scheme_map_df['product_code'],
+                        scheme_map_df['scheme_name']
+                    ))
+                    txn_df['scheme_name'] = (
+                        txn_df['product_code'].str.strip().str.upper().map(scheme_map)
+                    )
+                else:
+                    txn_df['scheme_name'] = None
+
+                # ── Parse dates for sorting & filtering ──
+                txn_df['_sort_date'] = pd.to_datetime(txn_df['traddate'], errors='coerce')
+
+                # ── Apply date filter ──
+                if date_filter != "All Time":
+                    now = datetime.now()
+                    deltas = {
+                        "Last 30 Days": 30,
+                        "Last 90 Days": 90,
+                        "Last 6 Months": 180,
+                        "Last 1 Year": 365,
+                    }
+                    days = deltas.get(date_filter)
+                    if days:
+                        cutoff = now - timedelta(days=days)
+                        txn_df = txn_df[txn_df['_sort_date'] >= cutoff]
+
+                txn_df = (
+                    txn_df
+                    .sort_values('_sort_date', ascending=False)
+                    .drop(columns=['_sort_date'])
+                    .reset_index(drop=True)
+                )
+
+                # ── Reorder & rename columns ──
+                col_order = [
+                    'traddate', 'folio_id', 'rta', 'scheme_name', 'product_code',
+                    'trxntype', 'trxnmode', 'trxnstat', 'units', 'purprice', 'amount',
+                    'brokcode', 'subbrok', 'remarks', 'trxnno'
+                ]
+                col_order = [c for c in col_order if c in txn_df.columns]
+                txn_df = txn_df[col_order]
+
+                display_txn = txn_df.rename(columns={
+                    'traddate': 'Date', 'folio_id': 'Folio', 'rta': 'RTA',
+                    'scheme_name': 'Scheme', 'product_code': 'Product Code',
+                    'trxntype': 'Type', 'trxnmode': 'Mode', 'trxnstat': 'Status',
+                    'units': 'Units', 'purprice': 'Price', 'amount': 'Amount',
+                    'brokcode': 'Broker', 'subbrok': 'Sub-Broker',
+                    'remarks': 'Remarks', 'trxnno': 'Txn No'
+                })
+
+                # ── Metrics ──
+                if not txn_df.empty:
+                    t1, t2 = st.columns(2)
+                    t1.metric("Transactions", len(txn_df))
+                    t2.metric("Total Amount", format_aum(txn_df['amount'].sum()))
+
+                    # ── AgGrid (preferred) or plain dataframe ──
+                    try:
+                        from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+                        gb = GridOptionsBuilder.from_dataframe(display_txn)
+                        gb.configure_default_column(
+                            filter=True, sortable=True, resizable=True, flex=1
+                        )
+                        gb.configure_pagination(
+                            paginationAutoPageSize=False, paginationPageSize=20
+                        )
+                        gb.configure_grid_options(domLayout='normal')
+                        grid_opts = gb.build()
+                        AgGrid(
+                            display_txn,
+                            gridOptions=grid_opts,
+                            height=450,
+                            update_mode=GridUpdateMode.NO_UPDATE,
+                            fit_columns_on_grid_load=True,
+                            allow_unsafe_jscode=True,
+                            theme="alpine-dark" if dark else "alpine",
+                            key=f"all_txn_grid_{folio_choice}_{date_filter}"
+                        )
+                    except ImportError:
+                        st.dataframe(
+                            display_txn,
+                            width="stretch",
+                            hide_index=True,
+                            column_config={
+                                "Units": st.column_config.NumberColumn(format="%.4f"),
+                                "Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                                "Price": st.column_config.NumberColumn(format="₹ %.4f"),
+                            }
+                        )
+                else:
+                    st.info("No transactions found for the selected filters.")
+            else:
+                st.info("No transactions found for this client.")
 
     # ═══════════════════════════════════════════════════════════
     # TAB BROKERAGE — Client-specific brokerage by month
