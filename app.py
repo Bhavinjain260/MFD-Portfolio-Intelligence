@@ -6279,7 +6279,7 @@ elif mode == "⚙️ Admin Panel":
         st.metric(f"Total Records in {table}", f"{total_rows:,}")
 
         if total_rows > 0:
-            df_raw = load_table_summary(table)
+            df_raw = load_table_summary(table, data_version)
             if not df_raw.empty:
                 # ── View options ──
                 view_col1, view_col2 = st.columns([1, 3])
