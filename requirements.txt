@@ -9,3 +9,4 @@ openpyxl
 shutil
 imaplib
 sqlite3
+fpdf2
