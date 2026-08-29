@@ -319,8 +319,85 @@ def delete_family(family_id: int) -> None:
         conn.execute("DELETE FROM client_family_member WHERE family_id = ?", (family_id,))
         conn.execute("DELETE FROM client_family WHERE family_id = ?", (family_id,))
 
+def get_family_folios_by_rta(family_id: int) -> tuple:
+    """Returns (cams_folio_list, kfin_folio_list) across all family members —
+    same matching logic as get_family_all_folios, but split by RTA since the
+    Valuation Report needs folio→RTA mapping, not just a flat folio set."""
+    members = get_family_members(family_id)
+    if members.empty:
+        return [], []
 
+    cams_folios = set()
+    kfin_folios = set()
 
+    with get_conn() as conn:
+        for _, member in members.iterrows():
+            client_code = member["client_code"]
+            identity = get_client_identity(client_code)
+            if not identity:
+                continue
+
+            name_clean = identity["name"].strip().upper() if identity["name"] else ""
+            match_pan = identity["match_pan"]
+
+            if identity["is_minor"]:
+                if name_clean:
+                    for row in conn.execute(
+                        "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        cams_folios.add(row[0])
+                    for row in conn.execute(
+                        "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        kfin_folios.add(row[0])
+            else:
+                if match_pan and match_pan.strip():
+                    pan_up = match_pan.strip().upper()
+                    for row in conn.execute(
+                        "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no)) = ?", (pan_up,)
+                    ).fetchall():
+                        cams_folios.add(row[0])
+                    for row in conn.execute(
+                        "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number)) = ?", (pan_up,)
+                    ).fetchall():
+                        kfin_folios.add(row[0])
+                if name_clean:
+                    for row in conn.execute(
+                        "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        cams_folios.add(row[0])
+                    for row in conn.execute(
+                        "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        kfin_folios.add(row[0])
+
+    return sorted(cams_folios), sorted(kfin_folios)
+
+def get_investor_names_for_folios(cams_folios: list, kfin_folios: list) -> dict:
+    """folio_id -> investor name, straight from the folio master tables."""
+    name_map = {}
+    with get_conn() as conn:
+        if cams_folios:
+            ph = ",".join(["?"] * len(cams_folios))
+            rows = conn.execute(
+                f"SELECT foliochk, inv_name FROM cams_wbr9_folio WHERE foliochk IN ({ph})",
+                cams_folios
+            ).fetchall()
+            for folio_id, name in rows:
+                name_map[folio_id] = (name or "").strip()
+        if kfin_folios:
+            ph = ",".join(["?"] * len(kfin_folios))
+            rows = conn.execute(
+                f"SELECT folio, investor_name FROM kfin_mfsd211_folio WHERE folio IN ({ph})",
+                kfin_folios
+            ).fetchall()
+            for folio_id, name in rows:
+                name_map.setdefault(folio_id, (name or "").strip())
+    return name_map
 
 
 def get_family_all_folios(family_id: int) -> set:
@@ -825,20 +902,10 @@ def generate_valuation_pdf(
     t_widths[-1] = PAGE_W - sum(t_widths[:-1])
     t_aligns  = ['C', 'L', 'R', 'R', 'R', 'R']
 
-    for rta_key in ['CAMS', 'KFinTech']:
-        entries = rta_txns.get(rta_key, [])
-        if not entries:
-            continue
+    all_entries = rta_txns.get('CAMS', []) + rta_txns.get('KFinTech', [])
+    all_entries.sort(key=lambda e: e['label'])
 
-        entries.sort(key=lambda e: e['label'])
-
-        # RTA section header
-        pdf.set_font('Main', 'B', 10)
-        pdf.set_text_color(*BLUE)
-        pdf.cell(PAGE_W, 7, rta_key, new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(1)
-
-        for entry in entries:
+    for entry in all_entries:
             label   = entry['label']
             opening = entry['opening']
             tdf     = entry['df']
@@ -903,7 +970,6 @@ def generate_valuation_pdf(
     return bytes(pdf.output())
 
 
-
 def generate_valuation_html(
     client_name: str,
     pan: str,
@@ -916,6 +982,7 @@ def generate_valuation_html(
     total_invested: float,
     total_value: float,
     total_gain: float,
+    show_investor: bool = False,
 ) -> str:
     """Generate a self-contained HTML report (print → Save as PDF)."""
     def fi(v):
@@ -975,10 +1042,12 @@ def generate_valuation_html(
   <div class="metric-box"><div class="label">Total Value</div><div class="value">{fi(total_value)}</div></div>
   <div class="metric-box"><div class="label">Gain / Loss</div><div class="value {gain_cls}">{fi(total_gain)}</div></div>
 </div>
+"""
 
-<h2>Scheme Summary</h2>
+    investor_th = '<th class="left">Investor</th>' if show_investor else ''
+    html += f"""<h2>Scheme Summary</h2>
 <table>
-<tr><th class="left">Scheme</th><th class="center">Folio</th><th class="right">Invested</th><th class="right">Value</th><th class="right">Gain/Loss</th><th class="right">Return %</th></tr>"""
+<tr>{investor_th}<th class="left">Scheme</th><th class="center">Folio</th><th class="right">Invested</th><th class="right">Value</th><th class="right">Gain/Loss</th><th class="right">Return %</th></tr>"""
 
     for r in summary_rows:
         gl = r.get('Gain/Loss')
@@ -987,7 +1056,9 @@ def generate_valuation_html(
             f"{(gl / r['Invested'] * 100):.2f}%"
             if gl is not None and r.get('Invested', 0) > 0 else "N/A"
         )
+        investor_td = f'<td class="left">{r.get("Investor","")}</td>' if show_investor else ''
         html += f"""<tr>
+{investor_td}
 <td class="left">{r.get('Scheme','')}</td>
 <td class="center">{r.get('Folio','')}</td>
 <td class="right">{fi(r.get('Invested'))}</td>
@@ -996,22 +1067,19 @@ def generate_valuation_html(
 <td class="right">{ret}</td></tr>"""
 
     total_ret = f"{(total_gain/total_invested*100):.2f}%" if total_invested > 0 else "N/A"
+    total_investor_td = '<td class="left"></td>' if show_investor else ''
     html += f"""<tr class="total-row">
-<td class="left">TOTAL</td><td class="center">{n_folios} folios</td>
+{total_investor_td}<td class="left">TOTAL</td><td class="center">{n_folios} folios</td>
 <td class="right">{fi(total_invested)}</td><td class="right">{fi(total_value)}</td>
 <td class="right {gain_cls}">{fi(total_gain)}</td><td class="right">{total_ret}</td></tr>
 </table>
 
 <h2>Transactions</h2>"""
 
-    for rta_key in ['CAMS', 'KFinTech']:
-        entries = rta_txns.get(rta_key, [])
-        if not entries:
-            continue
-        entries.sort(key=lambda e: e['label'])
-        html += f"<h3>{rta_key}</h3>"
+    all_entries = rta_txns.get('CAMS', []) + rta_txns.get('KFinTech', [])
+    all_entries.sort(key=lambda e: e['label'])
 
-        for entry in entries:
+    for entry in all_entries:
             label   = entry['label']
             opening = entry['opening']
             tdf     = entry['df']
@@ -1043,18 +1111,23 @@ def generate_valuation_html(
 </body></html>"""
     return html
 
-def generate_capital_gain_pdf(
+
+def generate_valuation_pdf(
     client_name: str,
     pan: str,
     client_code: str,
-    fy_str: str,
-    detail_rows: list[dict],
-    total_buy: float,
-    total_sale: float,
+    mobile: str,
+    val_date_str: str,
+    period_from_str: str,
+    summary_rows: list[dict],
+    rta_txns: dict,
+    total_invested: float,
+    total_value: float,
     total_gain: float,
+    show_investor: bool = False,
 ) -> bytes | None:
     """
-    Generate a PDF bytes buffer for the capital gain report.
+    Generate a PDF bytes buffer for the valuation report.
     Returns None if fpdf2 is not installed or no font found.
     """
     try:
@@ -1072,6 +1145,7 @@ def generate_capital_gain_pdf(
     pdf.add_font('Main', 'B', bold_path, uni=True)
     pdf.set_margins(12, 12, 12)
 
+    # ── Colour palette ──
     BLUE   = (41, 128, 185)
     DARK   = (44, 62, 80)
     GREY   = (127, 140, 141)
@@ -1079,40 +1153,47 @@ def generate_capital_gain_pdf(
     WHITE  = (255, 255, 255)
     GREEN  = (39, 174, 96)
     RED    = (192, 57, 43)
-    PAGE_W = 210 - 24  # 186mm available
+    PAGE_W = 210 - 24  # A4 width minus margins
 
-    def _fmt_inr(v):
+    def _fmt_inr(val) -> str:
         try:
-            return f"\u20b9{float(v):,.2f}"
+            return f"\u20b9{float(val):,.2f}"
         except (TypeError, ValueError):
             return "N/A"
 
-    def _fmt_units(v):
+    def _fmt_pct(val) -> str:
         try:
-            return f"{float(v):.4f}"
+            return f"{float(val):.2f}%"
         except (TypeError, ValueError):
             return "N/A"
 
-    def _fmt_date(v):
-        if v is None:
-            return ""
-        if isinstance(v, (datetime, pd.Timestamp, date_cls)):
-            return v.strftime("%d-%m-%Y")
-        return str(v)
+    def _fmt_units(val) -> str:
+        try:
+            return f"{float(val):.4f}"
+        except (TypeError, ValueError):
+            return "N/A"
 
+    # ════════════════════════════════════════
+    # PAGE 1 — HEADER + SUMMARY TABLE
+    # ════════════════════════════════════════
     pdf.add_page()
 
     # Title
     pdf.set_font('Main', 'B', 16)
     pdf.set_text_color(*DARK)
-    pdf.cell(PAGE_W, 10, 'Capital Gain Report', align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 10, 'Portfolio Valuation Report', align='C', new_x="LMARGIN", new_y="NEXT")
     pdf.ln(3)
 
-    # Meta
+    # Client info
     pdf.set_font('Main', '', 9)
     pdf.set_text_color(*GREY)
     pdf.cell(PAGE_W, 5, f'Client: {client_name}', new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(PAGE_W, 5, f'PAN: {pan or "N/A"}   |   Code: {client_code}   |   FY: {fy_str}', new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 5,
+             f'PAN: {pan or "N/A"}   |   Code: {client_code}   |   Mobile: {mobile or "N/A"}',
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 5,
+             f'Period: {period_from_str} to {val_date_str}',
+             new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
 
     # Metrics bar
@@ -1120,14 +1201,14 @@ def generate_capital_gain_pdf(
     col_w = PAGE_W / 3
     pdf.set_font('Main', 'B', 8)
     pdf.set_text_color(*GREY)
-    pdf.cell(col_w, 5, 'Total Buy', border=0, fill=True, new_x="RIGHT")
-    pdf.cell(col_w, 5, 'Total Sale', border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Total Invested', border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Total Value', border=0, fill=True, new_x="RIGHT")
     pdf.cell(col_w, 5, 'Gain / Loss', border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
 
     pdf.set_font('Main', 'B', 11)
     pdf.set_text_color(*DARK)
-    pdf.cell(col_w, 7, _fmt_inr(total_buy), border=0, fill=True, new_x="RIGHT")
-    pdf.cell(col_w, 7, _fmt_inr(total_sale), border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 7, _fmt_inr(total_invested), border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 7, _fmt_inr(total_value), border=0, fill=True, new_x="RIGHT")
     gain_color = GREEN if total_gain >= 0 else RED
     pdf.set_text_color(*gain_color)
     pdf.cell(col_w, 7, _fmt_inr(total_gain), border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
@@ -1137,165 +1218,148 @@ def generate_capital_gain_pdf(
     # Section header
     pdf.set_font('Main', 'B', 11)
     pdf.set_text_color(*BLUE)
-    pdf.cell(PAGE_W, 6, 'Realized Gain Details', new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 6, 'Scheme Summary', new_x="LMARGIN", new_y="NEXT")
     pdf.ln(2)
 
-    # ═══════════════════════════════════════════════════════════
-    # FIX: Properly calculated column widths that fit within PAGE_W
-    # ═══════════════════════════════════════════════════════════
-    headers = ['Scheme', 'Folio', 'Buy Date', 'Buy Units', 'Buy Value', 
-               'Sale Date', 'Sell Units', 'Sell Value', 'Gain/Loss']
-    
-    # Fixed widths that sum to <= PAGE_W (186mm)
-    # Scheme needs most space; dates/units/values are compact
-    widths = [40, 18, 17, 16, 20, 17, 16, 20, 22]
-    # Verify: 40+18+17+16+20+17+16+20 = 164mm
-    # Last col: 186 - 164 = 22mm ✓
-    widths[-1] = PAGE_W - sum(widths[:-1])  # Ensures exact fit
+    # Summary table
+    if show_investor:
+        s_headers = ['Investor', 'Scheme', 'Folio', 'Invested', 'Value', 'Gain/Loss', 'Return %']
+        s_widths  = [35, 45, 20, 26, 26, 26, 18]
+    else:
+        s_headers = ['Scheme', 'Folio', 'Invested', 'Value', 'Gain/Loss', 'Return %']
+        s_widths  = [70, 25, 30, 30, 30, 20]  # sum ≈ 205 ≈ PAGE_W
+    # Adjust last col to fill
+    s_widths[-1] = PAGE_W - sum(s_widths[:-1])
 
-    row_h = 6  # Slightly increased for readability
-    pdf.set_font('Main', 'B', 6)
+    row_h = 6
+    pdf.set_font('Main', 'B', 7)
     pdf.set_fill_color(*BLUE)
     pdf.set_text_color(*WHITE)
-    for h, w in zip(headers, widths):
+    for h, w in zip(s_headers, s_widths):
         pdf.cell(w, row_h, h, border=1, align='C', fill=True)
     pdf.ln()
 
-    pdf.set_font('Main', '', 6)
+    pdf.set_font('Main', '', 7)
     pdf.set_text_color(*DARK)
-    aligns = ['L', 'C', 'C', 'R', 'R', 'C', 'R', 'R', 'R']
-    
-    for i, row in enumerate(detail_rows):
+    aligns = ['L', 'L', 'C', 'R', 'R', 'R', 'R'] if show_investor else ['L', 'C', 'R', 'R', 'R', 'R']
+
+    for i, row in enumerate(summary_rows):
         if i % 2 == 1:
             pdf.set_fill_color(*LIGHT)
             fill = True
         else:
             fill = False
 
-        # Truncate scheme name to fit column
-        scheme_name = str(row.get('Scheme', ''))
-        # Approximate chars that fit: column_width_mm / (font_size_mm * 0.5)
-        # For 40mm at 6pt font, roughly 28 chars safe
-        if len(scheme_name) > 28:
-            scheme_name = scheme_name[:26] + ".."
-
-        vals = [
-            scheme_name,
-            str(row.get('Folio', '')),
-            _fmt_date(row.get('Buy Date')),
-            _fmt_units(row.get('Buy Units')),
-            _fmt_inr(row.get('Buy Value')),
-            _fmt_date(row.get('Sale Date')),
-            _fmt_units(row.get('Sell Units')),
-            _fmt_inr(row.get('Sell Value')),
+        if show_investor:
+            vals = [str(row.get('Investor', '')), row.get('Scheme', ''), str(row.get('Folio', ''))]
+        else:
+            vals = [row.get('Scheme', ''), str(row.get('Folio', ''))]
+        vals += [
+            _fmt_inr(row.get('Invested')),
+            _fmt_inr(row.get('Value')),
             _fmt_inr(row.get('Gain/Loss')),
+            _fmt_pct(
+                (row.get('Gain/Loss', 0) / row.get('Invested', 1) * 100)
+                if row.get('Gain/Loss') is not None and row.get('Invested', 0) > 0
+                else None
+            ),
         ]
-        for v, w, a in zip(vals, widths, aligns):
+        for v, w, a in zip(vals, s_widths, aligns):
             pdf.cell(w, row_h, v, border=1, align=a, fill=fill)
         pdf.ln()
 
-    # Footer
+    # Total row
+    pdf.set_font('Main', 'B', 7)
+    pdf.set_fill_color(200, 200, 200)
+    n_folios = len(set(r.get('Folio', '') for r in summary_rows))
+    if show_investor:
+        total_vals = ['', 'TOTAL', f'{n_folios} folios']
+    else:
+        total_vals = ['TOTAL', f'{n_folios} folios']
+    total_vals += [
+        _fmt_inr(total_invested),
+        _fmt_inr(total_value),
+        _fmt_inr(total_gain),
+        _fmt_pct(total_gain / total_invested * 100) if total_invested > 0 else 'N/A',
+    ]
+    for v, w, a in zip(total_vals, s_widths, aligns):
+        pdf.cell(w, row_h, v, border=1, align=a, fill=True)
+    pdf.ln(8)
+
+    # ════════════════════════════════════════
+    # TRANSACTIONS — PER RTA
+    # ════════════════════════════════════════
+    t_headers = ['Date', 'Type', 'Units', 'Price', 'Amount', 'Balance']
+    t_widths  = [22, 22, 22, 22, 28, 22]
+    t_widths[-1] = PAGE_W - sum(t_widths[:-1])
+    t_aligns  = ['C', 'L', 'R', 'R', 'R', 'R']
+
+    all_entries = rta_txns.get('CAMS', []) + rta_txns.get('KFinTech', [])
+    all_entries.sort(key=lambda e: e['label'])
+
+    for entry in all_entries:
+            label   = entry['label']
+            opening = entry['opening']
+            tdf     = entry['df']
+
+            pdf.set_font('Main', 'B', 8)
+            pdf.set_text_color(*DARK)
+            pdf.cell(PAGE_W, 5,
+                     f'{label}  —  Opening: {opening:.4f} units',
+                     new_x="LMARGIN", new_y="NEXT")
+
+            if tdf.empty:
+                pdf.set_font('Main', '', 7)
+                pdf.set_text_color(*GREY)
+                pdf.cell(PAGE_W, 5, '(no transactions during this period)',
+                         new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(3)
+                continue
+
+            # Table header
+            pdf.set_font('Main', 'B', 6.5)
+            pdf.set_fill_color(*BLUE)
+            pdf.set_text_color(*WHITE)
+            for h, w in zip(t_headers, t_widths):
+                pdf.cell(w, 5, h, border=1, align='C', fill=True)
+            pdf.ln()
+
+            # Rows
+            pdf.set_font('Main', '', 6.5)
+            pdf.set_text_color(*DARK)
+            for r_idx, (_, row) in enumerate(tdf.iterrows()):
+                if r_idx % 2 == 1:
+                    pdf.set_fill_color(*LIGHT)
+                    fill = True
+                else:
+                    fill = False
+
+                date_str = row['_date'].strftime('%Y-%m-%d') if pd.notna(row['_date']) else ''
+                price = row.get('purprice', row.get('td_pop', None))
+                amount = row.get('amount', 0)
+
+                vals = [
+                    date_str,
+                    str(row.get('trxntype', '')),
+                    _fmt_units(row.get('signed_units', 0)),
+                    _fmt_units(price) if pd.notna(price) else '',
+                    _fmt_inr(amount),
+                    _fmt_units(row.get('Balance', 0)),
+                ]
+                for v, w, a in zip(vals, t_widths, t_aligns):
+                    pdf.cell(w, 4.5, v, border=1, align=a, fill=fill)
+                pdf.ln()
+
+            pdf.ln(4)
+
+    # ── Footer ──
     pdf.set_font('Main', '', 7)
     pdf.set_text_color(*GREY)
-    pdf.cell(PAGE_W, 4, 
-             f'Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}', 
+    pdf.cell(PAGE_W, 4,
+             f'Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}',
              align='C', new_x="LMARGIN", new_y="NEXT")
 
     return bytes(pdf.output())
-
-def generate_capital_gain_html(
-    client_name: str,
-    pan: str,
-    client_code: str,
-    fy_str: str,
-    detail_rows: list[dict],
-    total_buy: float,
-    total_sale: float,
-    total_gain: float,
-) -> str:
-    """Generate a self-contained HTML capital gain report (print → Save as PDF)."""
-    def fi(v):
-        try:
-            return f"₹{float(v):,.2f}"
-        except:
-            return "N/A"
-    def fu(v):
-        try:
-            return f"{float(v):.4f}"
-        except:
-            return "N/A"
-    def fd(v):
-        if v is None:
-            return ""
-        if isinstance(v, (datetime, pd.Timestamp, date_cls)):
-            return v.strftime("%d-%m-%Y")
-        return str(v)
-
-    gain_cls = "positive" if total_gain >= 0 else "negative"
-
-    rows_html = ""
-    for r in detail_rows:
-        gl = r.get('Gain/Loss', 0)
-        gl_cls = "positive" if gl and gl >= 0 else "negative"
-        rows_html += f"""<tr>
-<td class="left">{r.get('Scheme','')}</td>
-<td class="center">{r.get('Folio','')}</td>
-<td class="center">{fd(r.get('Buy Date'))}</td>
-<td class="right">{fu(r.get('Buy Units'))}</td>
-<td class="right">{fi(r.get('Buy Value'))}</td>
-<td class="center">{fd(r.get('Sale Date'))}</td>
-<td class="right">{fu(r.get('Sell Units'))}</td>
-<td class="right">{fi(r.get('Sell Value'))}</td>
-<td class="right {gl_cls}">{fi(gl)}</td></tr>"""
-
-    html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Capital Gain Report - {client_name}</title>
-<style>
-  @page {{ size: A4; margin: 12mm; }}
-  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #2c3e50; margin: 0; padding: 15px; }}
-  h1 {{ font-size: 17px; text-align: center; margin: 0 0 3px 0; }}
-  .meta {{ text-align: center; color: #7f8c8d; font-size: 9px; margin-bottom: 12px; }}
-  .metrics {{ display: flex; gap: 10px; margin-bottom: 14px; }}
-  .metric-box {{ flex: 1; background: #ecf0f1; padding: 8px; border-radius: 4px; text-align: center; }}
-  .metric-box .label {{ font-size: 8px; color: #7f8c8d; text-transform: uppercase; }}
-  .metric-box .value {{ font-size: 14px; font-weight: bold; margin-top: 2px; }}
-  .positive {{ color: #27ae60; }}
-  .negative {{ color: #c0392b; }}
-  h2 {{ font-size: 12px; color: #2980b9; border-bottom: 2px solid #2980b9; padding-bottom: 3px; margin: 16px 0 6px 0; }}
-  table {{ border-collapse: collapse; width: 100%; margin-bottom: 10px; font-size: 9px; }}
-  th {{ background: #2980b9; color: white; padding: 4px 5px; text-align: center; font-weight: bold; }}
-  td {{ padding: 3px 5px; border: 1px solid #dcdcdc; }}
-  tr:nth-child(even) {{ background: #f7fafc; }}
-  .total-row {{ font-weight: bold; background: #e0e0e0 !important; }}
-  .right {{ text-align: right; }}
-  .left {{ text-align: left; }}
-  .center {{ text-align: center; }}
-  .footer {{ text-align: center; color: #aaa; font-size: 8px; margin-top: 20px; border-top: 1px solid #eee; padding-top: 6px; }}
-  @media print {{ body {{ padding: 5px; }} .no-print {{ display: none; }} }}
-</style></head><body>
-<h1>Capital Gain Report</h1>
-<div class="meta">
-  {client_name} &nbsp;|&nbsp; PAN: {pan or "N/A"} &nbsp;|&nbsp; Code: {client_code} &nbsp;|&nbsp; FY: {fy_str}
-</div>
-<div class="metrics">
-  <div class="metric-box"><div class="label">Total Buy</div><div class="value">{fi(total_buy)}</div></div>
-  <div class="metric-box"><div class="label">Total Sale</div><div class="value">{fi(total_sale)}</div></div>
-  <div class="metric-box"><div class="label">Gain / Loss</div><div class="value {gain_cls}">{fi(total_gain)}</div></div>
-</div>
-
-<h2>Realized Gain Details</h2>
-<table>
-<tr><th class="left">Scheme</th><th class="center">Folio</th><th class="center">Buy Date</th><th class="right">Buy Units</th><th class="right">Buy Value</th><th class="center">Sale Date</th><th class="right">Sell Units</th><th class="right">Sell Value</th><th class="right">Gain/Loss</th></tr>
-{rows_html}
-<tr class="total-row">
-<td class="left">TOTAL</td><td class="center"></td><td class="center"></td><td class="center"></td>
-<td class="right">{fi(total_buy)}</td><td class="center"></td><td class="center"></td>
-<td class="right">{fi(total_sale)}</td><td class="right {gain_cls}">{fi(total_gain)}</td></tr>
-</table>
-
-<div class="footer">Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}</div>
-</body></html>"""
-    return html
 
 # ==================== Cams, Karvy and Manual entir Brokerage Data HELPERS ====================
 def _resolve_amc_via_isin(get_conn, scheme_code_col_sql: str, table: str, scheme_code_value_alias: str):
@@ -5165,7 +5229,19 @@ elif mode == "📊 Reports":
         client_name = selected_client['name']
         pan = selected_client['pan']
         mobile = selected_client.get('mobile')
-        
+
+        # ── Family scope option ──
+        family = get_family_for_client(client_code)
+        report_scope = "individual"
+        if family is not None:
+            scope_choice = st.radio(
+                "Report Scope",
+                [f"👤 Individual — {client_name}", f"👨‍👩‍👧‍👦 Family — {family['family_name']}"],
+                horizontal=True,
+                key="val_report_scope"
+            )
+            report_scope = "family" if scope_choice.startswith("👨‍👩‍👧‍👦") else "individual"
+
         # ── FY Year selector ──
         today = date_cls.today()
         if today.month >= 4:
@@ -5202,31 +5278,50 @@ elif mode == "📊 Reports":
         val_ts   = pd.Timestamp(val_date)
         from_ts  = pd.Timestamp(period_from)
 
-        is_minor = pd.isna(pan) or str(pan).strip() == ""
-        match_pan = selected_client.get('guardian_pan') if is_minor else pan
-        name_clean = client_name.strip().upper() if client_name else ""
+        if report_scope == "family":
+            cams_folio_list, kfin_folio_list = get_family_folios_by_rta(family["family_id"])
+            cams_f = pd.DataFrame({"foliochk": cams_folio_list})
+            kfin_f = pd.DataFrame({"folio": kfin_folio_list})
+            report_display_name = family["family_name"]
+            report_pan = None
+            report_mobile = None
+            report_email_lookup_code = family["head_client_code"]
+            member_count = len(get_family_members(family["family_id"]))
+            st.caption(f"Family report — {member_count} member(s), "
+                       f"{len(cams_folio_list)} CAMS + {len(kfin_folio_list)} KFinTech folios")
+        else:
+            is_minor = pd.isna(pan) or str(pan).strip() == ""
+            match_pan = selected_client.get('guardian_pan') if is_minor else pan
+            name_clean = client_name.strip().upper() if client_name else ""
 
-        # ── Fetch folios ──
-        with get_conn() as conn:
-            if is_minor:
-                cams_f = pd.read_sql(
-                    "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
-                    conn, params=(name_clean,))
-                kfin_f = pd.read_sql(
-                    "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
-                    conn, params=(name_clean,))
-            else:
-                cams_f = pd.read_sql(
-                    "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
-                    conn, params=(match_pan, client_name))
-                kfin_f = pd.read_sql(
-                    "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
-                    conn, params=(match_pan, client_name))
+            with get_conn() as conn:
+                if is_minor:
+                    cams_f = pd.read_sql(
+                        "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                        conn, params=(name_clean,))
+                    kfin_f = pd.read_sql(
+                        "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                        conn, params=(name_clean,))
+                else:
+                    cams_f = pd.read_sql(
+                        "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+                        conn, params=(match_pan, client_name))
+                    kfin_f = pd.read_sql(
+                        "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
+                        conn, params=(match_pan, client_name))
+
+            report_display_name = client_name
+            report_pan = pan
+            report_mobile = mobile
+            report_email_lookup_code = client_code
 
         all_folios = set(cams_f['foliochk'].tolist() + kfin_f['folio'].tolist())
+        investor_map = get_investor_names_for_folios(
+        cams_f['foliochk'].tolist(), kfin_f['folio'].tolist()
+        )
 
         if not all_folios:
-            st.info("No folios found for this client.")
+            st.info("No folios found for this scope.")
             st.stop()
 
         # ── Folio → RTA map ──
@@ -5303,10 +5398,13 @@ elif mode == "📊 Reports":
                 gain  = (value - invested) if value is not None else None
                 sname = name_lk.get(pc, pc)
 
+                investor_name = investor_map.get(folio_no, '')
+
                 all_scheme_rows.append({
                     'Scheme':    sname,
                     'Folio':     folio_no,
                     'RTA':       rta,
+                    'Investor':  investor_name,
                     'Invested':  invested,
                     'Value':     value,
                     'Gain/Loss': gain,
@@ -5322,8 +5420,9 @@ elif mode == "📊 Reports":
                     pt['Balance'] = opening + pt['signed_units'].cumsum()
 
                 rta_key = rta if rta in rta_scheme_txns else 'CAMS'
+                label = f"{investor_name} — {sname} ({folio_no})" if report_scope == "family" else f"{sname} ({folio_no})"
                 rta_scheme_txns[rta_key].append({
-                    'label':   f"{sname} ({folio_no})",
+                    'label':   label,
                     'opening': opening,
                     'df':      pt,
                 })
@@ -5336,14 +5435,17 @@ elif mode == "📊 Reports":
         st.divider()
         hc1, hc2, hc3 = st.columns(3)
         with hc1:
-            st.markdown(f"**{client_name}**")
-            st.caption(f"PAN: `{pan or 'Minor'}`  |  Code: `{client_code}`")
+            st.markdown(f"**{report_display_name}**")
+            if report_scope == "family":
+                st.caption("Family Portfolio")
+            else:
+                st.caption(f"PAN: `{report_pan or 'Minor'}`  |  Code: `{client_code}`")
         with hc2:
             st.markdown(f"**FY {selected_fy}**")
             st.caption(f"{from_iso} → {val_iso}")
         with hc3:
-            if mobile:
-                st.caption(f"📱 {mobile}")
+            if report_mobile:
+                st.caption(f"📱 {report_mobile}")
         st.divider()
 
         if not all_scheme_rows:
@@ -5354,9 +5456,7 @@ elif mode == "📊 Reports":
         #  SCHEME SUMMARY
         # ═══════════════════════════════════════════════
         sm_df = pd.DataFrame(all_scheme_rows)
-        rta_order = {'CAMS': 0, 'KFinTech': 1}
-        sm_df['_sort'] = sm_df['RTA'].map(rta_order).fillna(9)
-        sm_df = sm_df.sort_values(['_sort', 'Scheme']).drop(columns=['_sort'])
+        sm_df = sm_df.sort_values('Invested', ascending=False, na_position='last').reset_index(drop=True)
 
         t_inv  = sm_df['Invested'].sum()
         t_val  = sm_df['Value'].sum()
@@ -5383,14 +5483,16 @@ elif mode == "📊 Reports":
             axis=1,
         )
 
-        display_sm = sm_df[[
-            'Scheme', 'Folio', 'RTA', 'Invested', 'Value', 'Gain/Loss', 'Return %'
-        ]].copy()
+        summary_cols = []
+        if report_scope == "family":
+            summary_cols.append('Investor')
+        summary_cols += ['Scheme', 'Folio', 'Invested', 'Value', 'Gain/Loss', 'Return %']
 
-        total_row = pd.DataFrame([{
+        display_sm = sm_df[summary_cols].copy()
+
+        total_row_dict = {
             'Scheme':    'TOTAL',
             'Folio':     f"{sm_df['Folio'].nunique()} folios",
-            'RTA':       '',
             'Invested':  t_inv,
             'Value':     t_val,
             'Gain/Loss': t_gain,
@@ -5398,7 +5500,10 @@ elif mode == "📊 Reports":
                 f"{(t_gain / t_inv * 100):.2f}%"
                 if t_gain is not None and t_inv > 0 else "N/A"
             ),
-        }])
+        }
+        if report_scope == "family":
+            total_row_dict['Investor'] = f"{len(get_family_members(family['family_id']))} members"
+        total_row = pd.DataFrame([total_row_dict])[summary_cols]
         display_sm = pd.concat([display_sm, total_row], ignore_index=True)
 
         st.dataframe(
@@ -5420,19 +5525,16 @@ elif mode == "📊 Reports":
         st.markdown("### 📑 Transactions")
         st.caption(f"Period: {from_iso} → {val_iso}  |  Opening balance as on {from_iso}")
 
-        for rta_key in ['CAMS', 'KFinTech']:
-            entries = rta_scheme_txns.get(rta_key, [])
-            if not entries:
-                continue
+        all_entries = rta_scheme_txns.get('CAMS', []) + rta_scheme_txns.get('KFinTech', [])
+        all_entries.sort(key=lambda e: e['label'])
 
-            entries.sort(key=lambda e: e['label'])
-
+        if all_entries:
             with st.expander(
-                f"▶ {rta_key}  ({len(entries)} scheme"
-                f"{'s' if len(entries) != 1 else ''})",
+                f"▶ All Schemes ({len(all_entries)} scheme"
+                f"{'s' if len(all_entries) != 1 else ''})",
                 expanded=True,
             ):
-                for entry in entries:
+                for entry in all_entries:
                     label   = entry['label']
                     opening = entry['opening']
                     tdf     = entry['df']
@@ -5477,23 +5579,25 @@ elif mode == "📊 Reports":
         st.markdown("### 📥 Download Report")
 
         html_content = generate_valuation_html(
-            client_name, pan, client_code, mobile,
+            report_display_name, report_pan, client_code, report_mobile,
             val_iso, from_iso,
             all_scheme_rows, rta_scheme_txns,
             t_inv, t_val, t_gain if t_gain is not None else 0,
+            show_investor=(report_scope == "family"),
         )
         pdf_bytes = generate_valuation_pdf(
-            client_name, pan, client_code, mobile,
+            report_display_name, report_pan, client_code, report_mobile,
             val_iso, from_iso,
             all_scheme_rows, rta_scheme_txns,
             t_inv, t_val, t_gain if t_gain is not None else 0,
+            show_investor=(report_scope == "family"),
         )
 
         if pdf_bytes:
             st.download_button(
                 label="📑 Download PDF",
                 data=pdf_bytes,
-                file_name=f"Valuation_{client_name.replace(' ', '_')}_{selected_fy}.pdf",
+                file_name=f"Valuation_{report_display_name.replace(' ', '_')}_{selected_fy}.pdf",
                 mime="application/pdf",
                 use_container_width=True,
             )
@@ -5501,8 +5605,8 @@ elif mode == "📊 Reports":
             st.warning("PDF generation unavailable (fpdf2/font missing).")
 
         render_email_report_button(
-            client_code=client_code,
-            client_name=client_name,
+            client_code=report_email_lookup_code,
+            client_name=report_display_name,
             report_type="Valuation",
             html_content=html_content,
             pdf_content=pdf_bytes,
