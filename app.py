@@ -1569,29 +1569,30 @@ def render_email_report_button(
         col1, col2 = st.columns([3, 1])
         
         with col1:
-            recipient_email = st.text_input(
+                recipient_email = st.text_input(
                 "Recipient Email",
                 value=client_email or "",
                 placeholder="client@example.com",
-                key=f"{key_prefix}_recipient"
+                key=f"{key_prefix}_recipient_{client_code}"
             )
-        
         with col2:
             st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
             send_btn = st.button(
                 "📤 Send",
                 type="primary",
                 use_container_width=True,
-                key=f"{key_prefix}_send_btn",
+                key=f"{key_prefix}_send_btn_{client_code}",
                 disabled=not recipient_email or not html_content
             )
-        
+
         # Optional CC
         cc_input = st.text_input(
             "CC (optional, comma-separated)",
             placeholder="advisor@example.com, partner@example.com",
-            key=f"{key_prefix}_cc"
+            key=f"{key_prefix}_cc_{client_code}"
         )
+
+    
         cc_list = [e.strip() for e in cc_input.split(",") if e.strip()] if cc_input else None
         
         # Status display
@@ -5176,13 +5177,30 @@ elif mode == "📊 Reports":
         selected_fy = st.selectbox("Financial Year", fy_options, key="val_fy_select")
         
         # ── Derive dates from FY ──
+                # ── Derive dates from FY ──
         fy_start_year = int(selected_fy.split("-")[0])
         period_from = date_cls(fy_start_year, 4, 1)
-        val_date    = date_cls(fy_start_year + 1, 3, 31)
-        val_iso     = val_date.strftime("%Y-%m-%d")
-        from_iso    = period_from.strftime("%Y-%m-%d")
-        val_ts      = pd.Timestamp(val_date)
-        from_ts     = pd.Timestamp(period_from)
+        fy_end = date_cls(fy_start_year + 1, 3, 31)
+        today = date_cls.today()
+
+        # Default to FY-end, or today if the FY is still in progress
+        default_val_date = min(fy_end, today)
+        max_pickable = min(fy_end, today)  # never let user pick a future date
+
+        val_date = st.date_input(
+            "Valuation As-Of Date",
+            value=default_val_date,
+            min_value=period_from,
+            max_value=max_pickable,
+            key=f"val_asof_date_{selected_fy}",
+            help="Defaults to FY-end, or today if this FY hasn't ended yet. "
+                 "Pick any earlier date within the FY for a point-in-time valuation."
+        )
+
+        val_iso  = val_date.strftime("%Y-%m-%d")
+        from_iso = period_from.strftime("%Y-%m-%d")
+        val_ts   = pd.Timestamp(val_date)
+        from_ts  = pd.Timestamp(period_from)
 
         is_minor = pd.isna(pan) or str(pan).strip() == ""
         match_pan = selected_client.get('guardian_pan') if is_minor else pan
@@ -5232,9 +5250,15 @@ elif mode == "📊 Reports":
         isin_lk = dict(zip(pc_info['pc'], pc_info['isin']))
         name_lk = dict(zip(pc_info['pc'], pc_info['scheme_name']))
 
-        # ── Historical NAV ──
+    
+        # ── NAV: use today's live NAV if valuing as of today, else historical ──
         with st.spinner(f"Loading NAV for {val_iso}…"):
-            nav_map = get_or_fetch_nav_for_date(val_iso)
+            if val_date >= date_cls.today():
+                download_and_save_nav_if_needed()
+                raw_nav_map = _amfi.load()
+                nav_map = {k: v[0] for k, v in raw_nav_map.items() if v[0] > 0}
+            else:
+                nav_map = get_or_fetch_nav_for_date(val_iso)
 
         if not nav_map:
             st.warning(
