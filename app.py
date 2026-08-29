@@ -3831,7 +3831,7 @@ elif mode == "👥 Clients":
                     st.info("No holdings found for this member.")
 
             with st.expander("⚙️ Manage Family Members"):
-                all_clients_df = load_clients_search(data_version())
+                all_clients_df = load_all_clients_with_display(data_version())
                 all_clients_df["display"] = all_clients_df.apply(
                     lambda r: f"{r['name']} | PAN: {r['pan'] or 'Minor'} | {r['client_code']}",
                     axis=1,
