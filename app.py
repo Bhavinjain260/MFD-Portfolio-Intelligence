@@ -1595,6 +1595,7 @@ def render_email_report_button(
         cc_list = [e.strip() for e in cc_input.split(",") if e.strip()] if cc_input else None
         
         # Status display
+    
         email_status = mail_sync.get_email_status()
         if email_status["sending"]:
             st.info("⏳ Sending email...")
@@ -1605,7 +1606,6 @@ def render_email_report_button(
                 st.error(email_status["msg"])
         
         if send_btn and recipient_email and html_content:
-            # Build filename
             safe_name = client_name.replace(" ", "_").replace("/", "-")[:30]
             if report_type == "Capital Gain" and fy_str:
                 filename = f"Capital_Gain_{safe_name}_FY{fy_str}.pdf"
@@ -1613,16 +1613,21 @@ def render_email_report_button(
             else:
                 filename = f"Valuation_{safe_name}_{datetime.now().strftime('%Y%m%d')}.pdf"
                 subject = f"Portfolio Valuation Report - {client_name} - {datetime.now().strftime('%d/%m/%Y')}"
-            
-            mail_sync.send_report_email_background(
-                to_email=recipient_email,
-                subject=subject,
-                html_body=html_content,
-                pdf_bytes=pdf_content,
-                pdf_filename=filename,
-                cc_emails=cc_list,
-            )
-            st.rerun()
+
+            with st.spinner("Sending email..."):
+                success, msg = mail_sync.send_report_email(
+                    to_email=recipient_email,
+                    subject=subject,
+                    html_body=html_content,
+                    pdf_bytes=pdf_content,
+                    pdf_filename=filename,
+                    cc_emails=cc_list,
+                )
+
+            if success:
+                st.success(msg)
+            else:
+                st.error(msg)
             return True
     
     return False
@@ -5447,52 +5452,38 @@ elif mode == "📊 Reports":
         st.divider()
         st.markdown("### 📥 Download Report")
 
-        dl1, dl2 = st.columns(2)
+        html_content = generate_valuation_html(
+            client_name, pan, client_code, mobile,
+            val_iso, from_iso,
+            all_scheme_rows, rta_scheme_txns,
+            t_inv, t_val, t_gain if t_gain is not None else 0,
+        )
+        pdf_bytes = generate_valuation_pdf(
+            client_name, pan, client_code, mobile,
+            val_iso, from_iso,
+            all_scheme_rows, rta_scheme_txns,
+            t_inv, t_val, t_gain if t_gain is not None else 0,
+        )
 
-        # ── HTML download (always works) ──
-        with dl1:
-            html_content = generate_valuation_html(
-                client_name, pan, client_code, mobile,
-                val_iso, from_iso,
-                all_scheme_rows, rta_scheme_txns,
-                t_inv, t_val, t_gain if t_gain is not None else 0,
-            )
+        if pdf_bytes:
             st.download_button(
-                label="📄 Download HTML (Print → Save as PDF)",
-                data=html_content.encode('utf-8'),
-                file_name=f"Valuation_{client_name.replace(' ', '_')}_{selected_fy}.html",
-                mime="text/html",
+                label="📑 Download PDF",
+                data=pdf_bytes,
+                file_name=f"Valuation_{client_name.replace(' ', '_')}_{selected_fy}.pdf",
+                mime="application/pdf",
                 use_container_width=True,
             )
+        else:
+            st.warning("PDF generation unavailable (fpdf2/font missing).")
 
-        # ── PDF download (requires fpdf2 + font) ──
-        with dl2:
-            pdf_bytes = generate_valuation_pdf(
-                client_name, pan, client_code, mobile,
-                val_iso, from_iso,
-                all_scheme_rows, rta_scheme_txns,
-                t_inv, t_val, t_gain if t_gain is not None else 0,
-            )
-            if pdf_bytes:
-                st.download_button(
-                    label="📑 Download PDF",
-                    data=pdf_bytes,
-                    file_name=f"Valuation_{client_name.replace(' ', '_')}_{selected_fy}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                )
-            else:
-                st.button(
-                    "📑 Download PDF",
-                    disabled=True,
-                    help=(
-                        "PDF requires fpdf2 (`pip install fpdf2`) "
-                        "and a Unicode font (DejaVu Sans / Liberation Sans / Arial). "
-                        "Use the HTML download as an alternative — open in browser "
-                        "and press Ctrl+P → Save as PDF."
-                    ),
-                    use_container_width=True,
-                )
+        render_email_report_button(
+            client_code=client_code,
+            client_name=client_name,
+            report_type="Valuation",
+            html_content=html_content,
+            pdf_content=pdf_bytes,
+            key_prefix="val_email",
+        )
 
 
     # ═══════════════════════════════════════════════════════════
@@ -5675,9 +5666,8 @@ elif mode == "📊 Reports":
         st.divider()
         st.markdown("### 📥 Download Report")
 
-        dl1, dl2, dl3 = st.columns(3)
+        dl1, dl2 = st.columns(2)
 
-        # ── CSV (Excel-compatible) ──
         with dl1:
             csv = detail_df[cols].to_csv(index=False).encode("utf-8")
             st.download_button(
@@ -5688,26 +5678,16 @@ elif mode == "📊 Reports":
                 use_container_width=True,
             )
 
-        # ── HTML (Print → Save as PDF) ──
-        with dl2:
-            html_content = generate_capital_gain_html(
-                client_name, pan, client_code, cgr_fy,
-                detail_rows, d_buy, d_sale, d_gain
-            )
-            st.download_button(
-                label="📄 Download HTML (Print → PDF)",
-                data=html_content.encode('utf-8'),
-                file_name=f"CapitalGain_{client_name.replace(' ', '_')}_{cgr_fy}.html",
-                mime="text/html",
-                use_container_width=True,
-            )
+        html_content = generate_capital_gain_html(
+            client_name, pan, client_code, cgr_fy,
+            detail_rows, d_buy, d_sale, d_gain
+        )
+        pdf_bytes = generate_capital_gain_pdf(
+            client_name, pan, client_code, cgr_fy,
+            detail_rows, d_buy, d_sale, d_gain
+        )
 
-        # ── PDF ──
-        with dl3:
-            pdf_bytes = generate_capital_gain_pdf(
-                client_name, pan, client_code, cgr_fy,
-                detail_rows, d_buy, d_sale, d_gain
-            )
+        with dl2:
             if pdf_bytes:
                 st.download_button(
                     label="📑 Download PDF",
@@ -5717,80 +5697,17 @@ elif mode == "📊 Reports":
                     use_container_width=True,
                 )
             else:
-                st.button(
-                    "📑 Download PDF",
-                    disabled=True,
-                    help="PDF requires fpdf2 (`pip install fpdf2`) and a Unicode font. Use HTML download as alternative.",
-                    use_container_width=True,
-                )
-        # ═══════════════════════════════════════════════
-        #  EMAIL REPORT
-        # ═══════════════════════════════════════════════
-        st.markdown("<div style='height: 8px'></div>", unsafe_allow_html=True)
-        
-        # Get client email
-        client_email = cams_mailback_sync.get_client_email(client_code)
-        default_cc = cams_mailback_sync.get_default_cc()
-        creds_configured = cams_mailback_sync.credentials_configured()
-        
-        if not creds_configured:
-            st.caption("📧 *Gmail not configured — set up in Admin > Mailback Sync to enable emailing*")
-        else:
-            with st.expander("📧 Email This Report", expanded=False):
-                email_col1, email_col2 = st.columns([3, 1])
-                
-                with email_col1:
-                    recipient_email = st.text_input(
-                        "To",
-                        value=client_email or "",
-                        placeholder="client@example.com",
-                        key="cg_email_recipient"
-                    )
-                
-                with email_col2:
-                    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-                    send_btn = st.button(
-                        "📤 Send",
-                        type="primary",
-                        use_container_width=True,
-                        key="cg_email_send_btn",
-                        disabled=not recipient_email or not html_content
-                    )
-                
-                # CC with default value
-                cc_input = st.text_input(
-                    "CC (optional)",
-                    value=default_cc or "",
-                    placeholder="advisor@example.com",
-                    key="cg_email_cc"
-                )
-                cc_list = [e.strip() for e in cc_input.split(",") if e.strip()] if cc_input else None
-                
-                # Status display
-                email_status = cams_mailback_sync.get_email_status()
-                if email_status["sending"]:
-                    st.info("⏳ Sending email...")
-                elif email_status["done"]:
-                    if email_status["ok"]:
-                        st.success(email_status["msg"])
-                    else:
-                        st.error(email_status["msg"])
-                
-                if send_btn and recipient_email and html_content:
-                    # Build filename and subject
-                    safe_name = client_name.replace(" ", "_").replace("/", "-")[:30]
-                    filename = f"Capital_Gain_{safe_name}_FY{cgr_fy}.pdf"
-                    subject = f"Capital Gain Report - FY {cgr_fy} - {client_name}"
-                    
-                    cams_mailback_sync.send_report_email_background(
-                        to_email=recipient_email,
-                        subject=subject,
-                        html_body=html_content,
-                        pdf_bytes=pdf_bytes,
-                        pdf_filename=filename,
-                        cc_emails=cc_list,
-                    )
-                    st.rerun()
+                st.warning("PDF generation unavailable (fpdf2/font missing).")
+
+        render_email_report_button(
+            client_code=client_code,
+            client_name=client_name,
+            report_type="Capital Gain",
+            fy_str=cgr_fy,
+            html_content=html_content,
+            pdf_content=pdf_bytes,
+            key_prefix="cg_email",
+        )
 
 
 # ==================== 🧮 CAPITAL GAINS ====================
