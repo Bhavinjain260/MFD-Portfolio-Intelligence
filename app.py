@@ -24,6 +24,7 @@ import xirr
 from init_db import init_db, get_conn
 from theme_patch import THEME_WATCHER_JS, render_theme
 import cams_mailback_sync
+import cams_mailback_sync as mail_sync
 
 from xirr import compute_xirr_debug
 
@@ -1618,7 +1619,7 @@ def render_email_report_button(
     Returns:
         True if email was triggered, False otherwise
     """
-    import cams_mailback_sync as mail_sync
+    
     
     # Get client email
     client_email = mail_sync.get_client_email(client_code)

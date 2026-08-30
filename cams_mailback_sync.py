@@ -468,104 +468,102 @@ def sync_once() -> dict:
         "checked": 0,
         "no_data": [],
         "errors": [],
+        "fetch_skipped": [],
         "downloaded": [],  # [{rta, report, subject, files: [...]}]
         "parsed": [],
         "parse_failed": [],
     }
 
-    imap = imaplib.IMAP4_SSL(IMAP_HOST)
-    imap.login(creds["imap_user"], creds["imap_app_password"])
-    imap.select("INBOX")
+    with imaplib.IMAP4_SSL(IMAP_HOST) as imap:
+        imap.login(creds["imap_user"], creds["imap_app_password"])
+        imap.select("INBOX")
 
-    # ── Loop through each RTA ──
-    for rta, config in RTA_CONFIG.items():
-        zip_password = creds.get(f"{rta.lower()}_zip_password")
-        if not zip_password:
-            log.info("[%s] Password not configured, skipping", rta)
-            continue
+        # ── Loop through each RTA ──
+        for rta, config in RTA_CONFIG.items():
+            zip_password = creds.get(f"{rta.lower()}_zip_password")
+            if not zip_password:
+                log.info("[%s] Password not configured, skipping", rta)
+                continue
 
-        sender = config["sender"]
-        status, data = imap.search(None, f'(UNSEEN FROM "{sender}")')
-        if status != "OK":
-            results["errors"].append(f"{rta}: IMAP search failed")
-            continue
-
-        msg_ids = data[0].split()
-        log.info("[%s] Found %d unread mailback emails", rta, len(msg_ids))
-
-        for mid in msg_ids:
-            results["checked"] += 1
-            status, msg_data = imap.fetch(mid, "(BODY.PEEK[])")
+            sender = config["sender"]
+            status, data = imap.search(None, f'(UNSEEN FROM "{sender}")')
             if status != "OK":
-                results["errors"].append(f"{rta}-{mid.decode()}: fetch failed")
+                results["errors"].append(f"{rta}: IMAP search failed")
                 continue
 
-            msg = email.message_from_bytes(msg_data[0][1])
-            subject = _decode_subject(msg.get("Subject"))
-            body = _get_body_text(msg)
+            msg_ids = data[0].split()
+            log.info("[%s] Found %d unread mailback emails", rta, len(msg_ids))
 
-            # ── TRACE: log what we see ──
-            log.info("[%s] Processing email: %s", rta, subject[:100])
+            for mid in msg_ids:
+                results["checked"] += 1
+                status, msg_data = imap.fetch(mid, "(BODY.PEEK[])")
+                if status != "OK":
+                    results["errors"].append(f"{rta}-{mid.decode()}: fetch failed")
+                    continue
 
-            report_code = _extract_report_code(subject, body, rta)
-            if not report_code:
-                log.warning("[%s] No report code found in subject/body for: %s", rta, subject[:80])
-                continue
+                msg = email.message_from_bytes(msg_data[0][1])
+                subject = _decode_subject(msg.get("Subject"))
+                body = _get_body_text(msg)
 
-            report_code = _resolve_report_code(rta, report_code)
-            log.info("[%s-%s] Report code resolved", rta, report_code)
+                # ── TRACE: log what we see ──
+                log.info("[%s] Processing email: %s", rta, subject[:100])
 
-            if _is_no_data(body):
-                log.info("[%s-%s] No data — marking read, skipping", rta, report_code)
-                results["no_data"].append(f"{rta}: {subject}")
+                report_code = _extract_report_code(subject, body, rta)
+                if not report_code:
+                    log.warning("[%s] No report code found in subject/body for: %s", rta, subject[:80])
+                    continue
+
+                report_code = _resolve_report_code(rta, report_code)
+                log.info("[%s-%s] Report code resolved", rta, report_code)
+
+                if _is_no_data(body):
+                    log.info("[%s-%s] No data — marking read, skipping", rta, report_code)
+                    results["no_data"].append(f"{rta}: {subject}")
+                    imap.store(mid, "+FLAGS", "\\Seen")
+                    continue
+
+                url = _extract_download_url(body)
+                if not url:
+                    log.error("[%s-%s] No download URL found in body", rta, report_code)
+                    log.debug("[%s-%s] Body snippet: %s", rta, report_code, body[:500].replace('\n', ' '))
+                    results["errors"].append(f"{rta}: {subject} — no URL found")
+                    # Mark read so broken emails don't poll forever
+                    imap.store(mid, "+FLAGS", "\\Seen")
+                    continue
+
+                log.info("[%s-%s] Download URL found: %s", rta, report_code, url[:120])
+
+                try:
+                    saved = _download_and_extract(url, rta, report_code, zip_password)
+                except Exception as e:
+                    results["errors"].append(f"{rta}: {subject} — {e}")
+                    log.exception("[%s-%s] Download/extract failed", rta, report_code)
+                    continue
+
+                results["downloaded"].append({
+                    "rta": rta,
+                    "report": report_code,
+                    "subject": subject,
+                    "files": saved
+                })
                 imap.store(mid, "+FLAGS", "\\Seen")
-                continue
 
-            url = _extract_download_url(body)
-            if not url:
-                log.error("[%s-%s] No download URL found in body", rta, report_code)
-                log.debug("[%s-%s] Body snippet: %s", rta, report_code, body[:500].replace('\n', ' '))
-                results["errors"].append(f"{rta}: {subject} — no URL found")
-                # Mark read so broken emails don't poll forever
-                imap.store(mid, "+FLAGS", "\\Seen")
-                continue
+                # ── Auto-parse + auto-move immediately after download ──
+                for path_str in saved:
+                    res = _parse_and_move(path_str, rta, report_code)
+                    res["rta"] = rta
+                    res["report"] = report_code
+                    res["file"] = Path(path_str).name
+                    (results["parsed"] if res["ok"] else results["parse_failed"]).append(res)
 
-            log.info("[%s-%s] Download URL found: %s", rta, report_code, url[:120])
-
-            try:
-                saved = _download_and_extract(url, rta, report_code, zip_password)
-            except Exception as e:
-                results["errors"].append(f"{rta}: {subject} — {e}")
-                log.exception("[%s-%s] Download/extract failed", rta, report_code)
-                continue
-
-            results["downloaded"].append({
-                "rta": rta,
-                "report": report_code,
-                "subject": subject,
-                "files": saved
-            })
-            imap.store(mid, "+FLAGS", "\\Seen")
-
-            # ── Auto-parse + auto-move immediately after download ──
-            for path_str in saved:
-                res = _parse_and_move(path_str, rta, report_code)
-                res["rta"] = rta
-                res["report"] = report_code
-                res["file"] = Path(path_str).name
-                (results["parsed"] if res["ok"] else results["parse_failed"]).append(res)
-
-    imap.logout()
-
-    # ── Sweep any pending files from previous runs (retry) ──
-    leftover = parse_pending_files()
-    results["parsed"].extend(leftover["parsed"])
-    results["parse_failed"].extend(leftover["failed"])
+        # ── Sweep any pending files from previous runs (retry) ──
+        leftover = parse_pending_files()
+        results["parsed"].extend(leftover["parsed"])
+        results["parse_failed"].extend(leftover["failed"])
 
     dm.set_credential("mailback_last_sync_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     return results
-
-
+    
 # ══════════════════════════════════════════════════════════════
 # BACKGROUND WORKER
 # ══════════════════════════════════════════════════════════════
