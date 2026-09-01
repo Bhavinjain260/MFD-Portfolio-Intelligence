@@ -25,6 +25,7 @@ from init_db import init_db, get_conn
 from theme_patch import THEME_WATCHER_JS, render_theme
 import cams_mailback_sync
 import cams_mailback_sync as mail_sync
+import email_tempate
 
 from xirr import compute_xirr_debug
 
@@ -731,6 +732,272 @@ def _find_font_path() -> tuple:
     return (None, None)
 
 
+
+def _shorten_scheme_for_summary(name: str) -> str:
+    """
+    Truncate scheme name at the word 'FUND' (case-insensitive).
+    'BANDHAN SMALL CAP FUND REGULAR PLAN-GROWTH' → 'BANDHAN SMALL CAP FUND'
+    'SBI SILVER ETF FUND OF FUND - REGULAR PLAN - GROWTH' → 'SBI SILVER ETF FUND OF FUND'
+    If 'FUND' is not present, returns the original name unchanged.
+    """
+    if not name:
+        return ""
+    # Find the last occurrence of the whole word FUND
+    m = re.search(r'\bFUND\b', name, flags=re.IGNORECASE)
+    if m:
+        return name[:m.end()].strip()
+    return name.strip()
+
+def generate_capital_gain_pdf(
+    client_name: str,
+    pan: str,
+    client_code: str,
+    fy_str: str,
+    detail_rows: list[dict],
+    total_buy: float,
+    total_sale: float,
+    total_gain: float,
+) -> bytes | None:
+    """PDF version of the capital gain report (FIFO realized gains, CAMS). Landscape — 11 columns."""
+    try:
+        from fpdf import FPDF
+    except ImportError:
+        return None
+
+    reg_path, bold_path = _find_font_path()
+    if not reg_path:
+        return None
+
+    pdf = FPDF(orientation='L', unit='mm', format='A4')
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_font('Main', '', reg_path, uni=True)
+    pdf.add_font('Main', 'B', bold_path, uni=True)
+    pdf.set_margins(12, 12, 12)
+
+    BLUE   = (41, 128, 185)
+    DARK   = (44, 62, 80)
+    GREY   = (127, 140, 141)
+    LIGHT  = (236, 240, 241)
+    WHITE  = (255, 255, 255)
+    GREEN  = (39, 174, 96)
+    RED    = (192, 57, 43)
+    PAGE_W = 297 - 24  # A4 landscape width minus margins = 273
+
+    def _fmt_inr(val) -> str:
+        try:
+            return f"\u20b9{float(val):,.2f}"
+        except (TypeError, ValueError):
+            return "N/A"
+
+    def _fmt_units(val) -> str:
+        try:
+            return f"{float(val):.4f}"
+        except (TypeError, ValueError):
+            return "N/A"
+
+    def _fmt_date(val) -> str:
+        if val is None:
+            return ""
+        try:
+            return val.strftime("%Y-%m-%d")
+        except AttributeError:
+            return str(val)
+
+    pdf.add_page()
+
+    pdf.set_font('Main', 'B', 16)
+    pdf.set_text_color(*DARK)
+    pdf.cell(PAGE_W, 10, 'Capital Gain Report', align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+
+    pdf.set_font('Main', '', 9)
+    pdf.set_text_color(*GREY)
+    pdf.cell(PAGE_W, 5, f'Client: {client_name}', new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 5, f'PAN: {pan or "N/A"}   |   Code: {client_code}   |   FY: {fy_str}',
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+
+    pdf.set_fill_color(*LIGHT)
+    col_w = PAGE_W / 3
+    pdf.set_font('Main', 'B', 8)
+    pdf.set_text_color(*GREY)
+    pdf.cell(col_w, 5, 'Total Buy', border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Total Sale', border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Total Gain / Loss', border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_font('Main', 'B', 11)
+    pdf.set_text_color(*DARK)
+    pdf.cell(col_w, 7, _fmt_inr(total_buy), border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 7, _fmt_inr(total_sale), border=0, fill=True, new_x="RIGHT")
+    gain_color = GREEN if total_gain >= 0 else RED
+    pdf.set_text_color(*gain_color)
+    pdf.cell(col_w, 7, _fmt_inr(total_gain), border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(*DARK)
+    pdf.ln(6)
+
+    pdf.set_font('Main', 'B', 11)
+    pdf.set_text_color(*BLUE)
+    pdf.cell(PAGE_W, 6, 'Realized Gains — Transaction Detail', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+
+    headers = ['Scheme', 'Folio', 'Buy Date', 'Buy Units', 'Buy NAV', 'Buy Value',
+               'Sale Date', 'Sell Units', 'Sell NAV', 'Sell Value', 'Gain/Loss']
+    widths  = [55, 28, 20, 18, 18, 22, 20, 18, 18, 22, 0]
+    widths[-1] = PAGE_W - sum(widths[:-1])
+    aligns  = ['L', 'C', 'C', 'R', 'R', 'R', 'C', 'R', 'R', 'R', 'R']
+
+    row_h = 6
+    pdf.set_font('Main', 'B', 7)
+    pdf.set_fill_color(*BLUE)
+    pdf.set_text_color(*WHITE)
+    for h, w in zip(headers, widths):
+        pdf.cell(w, row_h, h, border=1, align='C', fill=True)
+    pdf.ln()
+
+    rows_sorted = sorted(
+        detail_rows,
+        key=lambda r: (r.get("Sale Date") or date_cls.min),
+        reverse=True,
+    )
+
+    pdf.set_font('Main', '', 7)
+    pdf.set_text_color(*DARK)
+    for i, row in enumerate(rows_sorted):
+        fill = (i % 2 == 1)
+        if fill:
+            pdf.set_fill_color(*LIGHT)
+
+        gl = row.get('Gain/Loss')
+        vals = [
+            str(row.get('Scheme', ''))[:40],
+            str(row.get('Folio', '')),
+            _fmt_date(row.get('Buy Date')),
+            _fmt_units(row.get('Buy Units')),
+            _fmt_units(row.get('Buy NAV')),
+            _fmt_inr(row.get('Buy Value')),
+            _fmt_date(row.get('Sale Date')),
+            _fmt_units(row.get('Sell Units')),
+            _fmt_units(row.get('Sell NAV')),
+            _fmt_inr(row.get('Sell Value')),
+            _fmt_inr(gl),
+        ]
+        for v, w, a in zip(vals, widths, aligns):
+            pdf.cell(w, row_h, v, border=1, align=a, fill=fill)
+        pdf.ln()
+
+    pdf.set_font('Main', 'B', 7)
+    pdf.set_fill_color(200, 200, 200)
+    total_vals = ['TOTAL', '', '', '', '', _fmt_inr(total_buy), '', '', '', _fmt_inr(total_sale), _fmt_inr(total_gain)]
+    for v, w, a in zip(total_vals, widths, aligns):
+        pdf.cell(w, row_h, v, border=1, align=a, fill=True)
+    pdf.ln(8)
+
+    pdf.set_font('Main', '', 7)
+    pdf.set_text_color(*GREY)
+    pdf.cell(PAGE_W, 4, f'Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}',
+             align='C', new_x="LMARGIN", new_y="NEXT")
+
+    return bytes(pdf.output())
+
+def generate_capital_gain_html(
+    client_name: str,
+    pan: str,
+    client_code: str,
+    fy_str: str,
+    detail_rows: list[dict],
+    total_buy: float,
+    total_sale: float,
+    total_gain: float,
+) -> str:
+    """Generate self-contained HTML for Capital Gain Report (email-friendly)."""
+    def fi(v):
+        try:
+            return f"₹{float(v):,.2f}"
+        except:
+            return "N/A"
+
+    gain_cls = "positive" if total_gain >= 0 else "negative"
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Capital Gain Report - {client_name}</title>
+<style>
+  @page {{ size: A4; margin: 12mm; }}
+  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #2c3e50; margin: 0; padding: 15px; }}
+  h1 {{ font-size: 17px; text-align: center; margin: 0 0 3px 0; }}
+  .meta {{ text-align: center; color: #7f8c8d; font-size: 9px; margin-bottom: 12px; }}
+  .metrics {{ display: flex; gap: 10px; margin-bottom: 14px; }}
+  .metric-box {{ flex: 1; background: #ecf0f1; padding: 8px; border-radius: 4px; text-align: center; }}
+  .metric-box .label {{ font-size: 8px; color: #7f8c8d; text-transform: uppercase; }}
+  .metric-box .value {{ font-size: 14px; font-weight: bold; margin-top: 2px; }}
+  .positive {{ color: #27ae60; }}
+  .negative {{ color: #c0392b; }}
+  table {{ border-collapse: collapse; width: 100%; margin-bottom: 10px; font-size: 9px; }}
+  th {{ background: #2980b9; color: white; padding: 4px 5px; text-align: center; font-weight: bold; }}
+  td {{ padding: 3px 5px; border: 1px solid #dcdcdc; }}
+  tr:nth-child(even) {{ background: #f7fafc; }}
+  .total-row {{ font-weight: bold; background: #e0e0e0 !important; }}
+  .right {{ text-align: right; }}
+  .center {{ text-align: center; }}
+  .footer {{ text-align: center; color: #aaa; font-size: 8px; margin-top: 20px; border-top: 1px solid #eee; padding-top: 6px; }}
+</style></head><body>
+<h1>Capital Gain Report</h1>
+<div class="meta">
+  {client_name} &nbsp;|&nbsp; PAN: {pan or "N/A"} &nbsp;|&nbsp; Code: {client_code} &nbsp;|&nbsp; FY: {fy_str}
+</div>
+<div class="metrics">
+  <div class="metric-box"><div class="label">Total Buy</div><div class="value">{fi(total_buy)}</div></div>
+  <div class="metric-box"><div class="label">Total Sale</div><div class="value">{fi(total_sale)}</div></div>
+  <div class="metric-box"><div class="label">Gain / Loss</div><div class="value {gain_cls}">{fi(total_gain)}</div></div>
+</div>
+<table>
+<tr>
+  <th class="left">Scheme</th>
+  <th class="center">Folio</th>
+  <th class="center">Buy Date</th>
+  <th class="right">Buy Units</th>
+  <th class="right">Buy NAV</th>
+  <th class="right">Buy Value</th>
+  <th class="center">Sale Date</th>
+  <th class="right">Sell Units</th>
+  <th class="right">Sell NAV</th>
+  <th class="right">Sell Value</th>
+  <th class="right">Gain/Loss</th>
+</tr>
+"""
+
+    for r in sorted(detail_rows, key=lambda x: x.get('Sale Date') or '', reverse=True):
+        gl = r.get('Gain/Loss')
+        gl_cls = "positive" if gl and gl >= 0 else ("negative" if gl and gl < 0 else "")
+        
+        buy_date = r['Buy Date'].strftime('%Y-%m-%d') if r.get('Buy Date') else ''
+        sale_date = r['Sale Date'].strftime('%Y-%m-%d') if r.get('Sale Date') else ''
+        
+        html += f"""<tr>
+  <td>{r.get('Scheme', '')}</td>
+  <td class="center">{r.get('Folio', '')}</td>
+  <td class="center">{buy_date}</td>
+  <td class="right">{r.get('Buy Units', 0):.4f}</td>
+  <td class="right">{r.get('Buy NAV', 0):.4f}</td>
+  <td class="right">{fi(r.get('Buy Value'))}</td>
+  <td class="center">{sale_date}</td>
+  <td class="right">{r.get('Sell Units', 0):.4f}</td>
+  <td class="right">{r.get('Sell NAV', 0):.4f}</td>
+  <td class="right">{fi(r.get('Sell Value'))}</td>
+  <td class="right {gl_cls}">{fi(gl)}</td>
+</tr>"""
+
+    html += f"""<tr class="total-row">
+  <td colspan="5" style="text-align: left;">TOTAL</td>
+  <td class="right">{fi(total_buy)}</td>
+  <td colspan="3"></td>
+  <td class="right">{fi(total_sale)}</td>
+  <td class="right {gain_cls}">{fi(total_gain)}</td>
+</tr>
+</table>
+<div class="footer">Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}</div>
+</body></html>"""
+    return html
+
 def generate_valuation_pdf(
     client_name: str,
     pan: str,
@@ -1022,9 +1289,9 @@ def generate_valuation_html(
   h3 {{ font-size: 11px; color: #2980b9; margin: 14px 0 4px 0; }}
   .scheme-hdr {{ font-size: 9.5px; font-weight: bold; margin: 8px 0 3px 0; color: #2c3e50; }}
   .no-txn {{ font-size: 9px; color: #aaa; font-style: italic; margin-bottom: 6px; }}
-  table {{ border-collapse: collapse; width: 100%; margin-bottom: 10px; font-size: 9px; }}
+  table {{ border-collapse: collapse; width: 100%; margin-bottom: 10px; font-size: 9px; table-layout: fixed; }}
   th {{ background: #2980b9; color: white; padding: 4px 5px; text-align: center; font-weight: bold; }}
-  td {{ padding: 3px 5px; border: 1px solid #dcdcdc; }}
+  td {{ padding: 3px 5px; border: 1px solid #dcdcdc; word-wrap: break-word; overflow-wrap: break-word; white-space: normal; }}
   tr:nth-child(even) {{ background: #f7fafc; }}
   .total-row {{ font-weight: bold; background: #e0e0e0 !important; }}
   .right {{ text-align: right; }}
@@ -1045,10 +1312,12 @@ def generate_valuation_html(
 </div>
 """
 
-    investor_th = '<th class="left">Investor</th>' if show_investor else ''
+    investor_th = '<th class="left" style="width:18%">Investor</th>' if show_investor else ''
+    investor_w  = '18%' if show_investor else '0%'
+    scheme_w    = '32%' if show_investor else '38%'
     html += f"""<h2>Scheme Summary</h2>
 <table>
-<tr>{investor_th}<th class="left">Scheme</th><th class="center">Folio</th><th class="right">Invested</th><th class="right">Value</th><th class="right">Gain/Loss</th><th class="right">Return %</th></tr>"""
+<tr>{investor_th}<th class="left" style="width:{scheme_w}">Scheme</th><th class="center" style="width:12%">Folio</th><th class="right" style="width:14%">Invested</th><th class="right" style="width:14%">Value</th><th class="right" style="width:14%">Gain/Loss</th><th class="right" style="width:14%">Return %</th></tr>"""
 
     for r in summary_rows:
         gl = r.get('Gain/Loss')
@@ -1058,9 +1327,10 @@ def generate_valuation_html(
             if gl is not None and r.get('Invested', 0) > 0 else "N/A"
         )
         investor_td = f'<td class="left">{r.get("Investor","")}</td>' if show_investor else ''
+        scheme_display = _shorten_scheme_for_summary(r.get('Scheme', ''))
         html += f"""<tr>
 {investor_td}
-<td class="left">{r.get('Scheme','')}</td>
+<td class="left">{scheme_display}</td>
 <td class="center">{r.get('Folio','')}</td>
 <td class="right">{fi(r.get('Invested'))}</td>
 <td class="right">{fi(r.get('Value'))}</td>
@@ -1174,6 +1444,16 @@ def generate_valuation_pdf(
         except (TypeError, ValueError):
             return "N/A"
 
+    def _truncate_for_cell(text: str, col_width_mm: float, font_size_pt: float = 7) -> str:
+        """Truncate text with ellipsis so it never exceeds the cell width in fpdf2."""
+        if not text:
+            return ""
+        # Approx chars per mm at 7pt (~0.55 mm/char for typical TTF fonts)
+        max_chars = int(col_width_mm / 0.55)
+        if len(text) > max_chars:
+            return text[: max_chars - 1].strip() + "…"
+        return text
+
     # ════════════════════════════════════════
     # PAGE 1 — HEADER + SUMMARY TABLE
     # ════════════════════════════════════════
@@ -1225,11 +1505,13 @@ def generate_valuation_pdf(
     # Summary table
     if show_investor:
         s_headers = ['Investor', 'Scheme', 'Folio', 'Invested', 'Value', 'Gain/Loss', 'Return %']
-        s_widths  = [35, 45, 20, 26, 26, 26, 18]
+        s_widths  = [30, 40, 16, 24, 24, 24, 28]  # sums to 186 = PAGE_W
+        scheme_col_idx = 1
     else:
         s_headers = ['Scheme', 'Folio', 'Invested', 'Value', 'Gain/Loss', 'Return %']
-        s_widths  = [70, 25, 30, 30, 30, 20]  # sum ≈ 205 ≈ PAGE_W
-    # Adjust last col to fill
+        s_widths  = [55, 20, 28, 28, 28, 27]  # sums to 186 = PAGE_W
+        scheme_col_idx = 0
+    # Adjust last col to fill (kept for safety if PAGE_W/headers change later)
     s_widths[-1] = PAGE_W - sum(s_widths[:-1])
 
     row_h = 6
@@ -1251,10 +1533,13 @@ def generate_valuation_pdf(
         else:
             fill = False
 
+        short_scheme = _shorten_scheme_for_summary(str(row.get('Scheme', '')))
         if show_investor:
-            vals = [str(row.get('Investor', '')), row.get('Scheme', ''), str(row.get('Folio', ''))]
+            scheme_text = _truncate_for_cell(short_scheme, s_widths[scheme_col_idx], 7)
+            vals = [str(row.get('Investor', '')), scheme_text, str(row.get('Folio', ''))]
         else:
-            vals = [row.get('Scheme', ''), str(row.get('Folio', ''))]
+            scheme_text = _truncate_for_cell(short_scheme, s_widths[scheme_col_idx], 7)
+            vals = [scheme_text, str(row.get('Folio', ''))]
         vals += [
             _fmt_inr(row.get('Invested')),
             _fmt_inr(row.get('Value')),
@@ -1361,6 +1646,204 @@ def generate_valuation_pdf(
              align='C', new_x="LMARGIN", new_y="NEXT")
 
     return bytes(pdf.output())
+
+
+
+def generate_email_body(client_name: str, report_type: str) -> str:
+    """Professional HTML email wrapper — used for both Capital Gain & Valuation emails."""
+    greeting = f"Dear {client_name},"
+    
+    if report_type == "Capital Gain":
+        intro = f"""
+<p>We are pleased to share your <strong>Capital Gain Report</strong> for review. This report details all realized 
+capital gains/losses from your mutual fund investments, calculated using the FIFO (First In First Out) method.</p>
+
+<p><strong>Report Highlights:</strong></p>
+<ul>
+    <li>Summary of all buy and sell transactions</li>
+    <li>Cost basis and realized gains/losses per transaction</li>
+    <li>Useful for income tax filing and investment tracking</li>
+</ul>
+"""
+    else:  # Valuation
+        intro = f"""
+<p>We are pleased to share your <strong>Portfolio Valuation Report</strong> for review. This report provides a 
+comprehensive snapshot of your mutual fund holdings, current valuations, and investment performance as of the 
+valuation date mentioned in the report.</p>
+
+<p><strong>Report Highlights:</strong></p>
+<ul>
+    <li>Scheme-wise investment summary and current NAV-based valuations</li>
+    <li>Gain/Loss analysis across all holdings</li>
+    <li>Detailed transaction history for each holding</li>
+</ul>
+"""
+    
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }}
+        .email-container {{
+            max-width: 700px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }}
+        .header {{
+            border-bottom: 3px solid #2980b9;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }}
+        .header h2 {{
+            color: #2980b9;
+            margin: 0;
+            font-size: 24px;
+        }}
+        .greeting {{
+            font-size: 16px;
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }}
+        .intro-section {{
+            background: #ecf0f1;
+            padding: 15px;
+            border-left: 4px solid #2980b9;
+            margin: 20px 0;
+            border-radius: 4px;
+        }}
+        .intro-section p {{
+            margin: 10px 0;
+            color: #2c3e50;
+            font-size: 14px;
+        }}
+        .intro-section ul {{
+            margin: 10px 0;
+            padding-left: 20px;
+            color: #2c3e50;
+            font-size: 14px;
+        }}
+        .intro-section li {{
+            margin: 8px 0;
+        }}
+        .attachment-note {{
+            background: #d5f4e6;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }}
+        .attachment-note strong {{
+            color: #27ae60;
+        }}
+        .feedback-section {{
+            background: #fff3cd;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }}
+        .feedback-section h3 {{
+            color: #e67e22;
+            margin-top: 0;
+            font-size: 16px;
+        }}
+        .feedback-section p {{
+            margin: 8px 0;
+            color: #7d6608;
+            font-size: 14px;
+        }}
+        .footer {{
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+            margin-top: 30px;
+            color: #7f8c8d;
+            font-size: 12px;
+        }}
+        .signature {{
+            margin-top: 20px;
+            color: #2c3e50;
+        }}
+        .report-attached {{
+            color: #27ae60;
+            font-weight: bold;
+        }}
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <h2>📊 {report_type} Report</h2>
+        </div>
+        
+        <div class="greeting">
+            {greeting}
+        </div>
+        
+        <div class="intro-section">
+            {intro}
+        </div>
+        
+        <div class="attachment-note">
+            <strong>✓ Report Attached</strong><br>
+            Your <strong>{report_type} Report</strong> is attached below as a PDF file. 
+            You can download, print, or save it for your records.
+        </div>
+        
+        <div class="feedback-section">
+            <h3>⏰ Action Required</h3>
+            <p>
+                Please review the attached report carefully. If you notice any discrepancies, 
+                errors in transaction details, or have any questions, <strong>please revert within 24-48 hours</strong>.
+            </p>
+            <p>
+                This will help us ensure accuracy in your portfolio records and make any necessary corrections 
+                at the earliest.
+            </p>
+        </div>
+        
+        <p style="color: #2c3e50; margin: 20px 0;">
+            <strong>What to Look For:</strong>
+        </p>
+        <ul style="color: #2c3e50; margin: 10px 0;">
+            <li>Verify all folio numbers and scheme names</li>
+            <li>Check transaction dates and amounts</li>
+            <li>Confirm NAV values and current holdings</li>
+            <li>Review valuation dates and calculation methods</li>
+        </ul>
+        
+        <div class="footer">
+            <p>
+                <strong>Contact Information:</strong><br>
+                If you have any questions or need clarification on any aspect of this report, 
+                please don't hesitate to reach out to us.
+            </p>
+            <p>
+                <strong>Report Generated:</strong> {datetime.now().strftime("%d %B %Y at %I:%M %p")}<br>
+                This is an automated report. For support, contact our team.
+            </p>
+            <p style="margin-top: 20px; color: #34495e;">
+                Thank you for your trust in our services.
+            </p>
+            <div class="signature">
+                <strong>Best Regards,</strong><br>
+                Portfolio Intelligence Team<br>
+                <em>Your Investment Partner</em>
+            </div>
+        </div>
+    </div>
+</body>
+</html>"""
 
 # ==================== Cams, Karvy and Manual entir Brokerage Data HELPERS ====================
 def _resolve_amc_via_isin(get_conn, scheme_code_col_sql: str, table: str, scheme_code_value_alias: str):
@@ -1603,7 +2086,6 @@ def load_dedup_sip_counts(_v: int) -> dict:
 # ══════════════════════════════════════════════════════════════
 # EMAIL REPORT BUTTON UI COMPONENT
 # ══════════════════════════════════════════════════════════════
-
 def render_email_report_button(
     client_code: str,
     client_name: str,
@@ -1619,7 +2101,6 @@ def render_email_report_button(
     Returns:
         True if email was triggered, False otherwise
     """
-    
     
     # Get client email
     client_email = mail_sync.get_client_email(client_code)
@@ -1647,7 +2128,7 @@ def render_email_report_button(
                 type="primary",
                 use_container_width=True,
                 key=f"{key_prefix}_send_btn_{client_code}",
-                disabled=not recipient_email or not html_content
+                disabled=not recipient_email or not pdf_content
             )
 
         # Optional CC
@@ -1671,7 +2152,7 @@ def render_email_report_button(
             else:
                 st.error(email_status["msg"])
         
-        if send_btn and recipient_email and html_content:
+        if send_btn and recipient_email and pdf_content:
             safe_name = client_name.replace(" ", "_").replace("/", "-")[:30]
             if report_type == "Capital Gain" and fy_str:
                 filename = f"Capital_Gain_{safe_name}_FY{fy_str}.pdf"
@@ -1684,7 +2165,7 @@ def render_email_report_button(
                 success, msg = mail_sync.send_report_email(
                     to_email=recipient_email,
                     subject=subject,
-                    html_body=html_content,
+                    html_body=generate_email_body(client_name, report_type),
                     pdf_bytes=pdf_content,
                     pdf_filename=filename,
                     cc_emails=cc_list,
