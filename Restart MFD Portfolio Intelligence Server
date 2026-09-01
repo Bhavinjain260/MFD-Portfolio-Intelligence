@@ -33,8 +33,7 @@ Access at: `http://100.94.7.23:8501`
 
 To run in background instead:
 ```
-nohup streamlit run app.py --server.port 8501 --server.address 0.0.0.0 > ~/streamlit.log 2>&1 &
-disown
+nohup streamlit srun app.py --server.port 8501 --server.address 0.0.0.0 > ~/streamlit.log 2>&1 & disown
 ```
 
 ## Notes

@@ -4506,11 +4506,19 @@ elif mode == "👥 Clients":
                 folio_rta_map[f] = 'KFinTech'
 
             # ── Filters ──
+            folio_scheme_map = {}
+            cams_sch = get_client_cams_schemes(cams_f['foliochk'].tolist(), data_version())
+            for _, r in cams_sch.iterrows():
+                folio_scheme_map.setdefault(r['folio_no'], r['scheme'])
+            kfin_sch = get_client_kfin_schemes(kfin_f['folio'].tolist(), data_version())
+            for _, r in kfin_sch.iterrows():
+                folio_scheme_map.setdefault(r['folio_no'], r['scheme'])
+
             fc1, fc2 = st.columns([1, 1])
             with fc1:
                 sorted_folios = sorted(all_folios)
                 folio_options = ["All Folios"] + [
-                    f"{f} ({folio_rta_map.get(f, '?')})" for f in sorted_folios
+                    f"{folio_scheme_map.get(f, '?')} ({f})" for f in sorted_folios
                 ]
                 folio_choice = st.selectbox(
                     "Select Folio", folio_options, index=0,
@@ -4526,7 +4534,7 @@ elif mode == "👥 Clients":
             if folio_choice == "All Folios":
                 folios_to_fetch = sorted_folios
             else:
-                sel_folio = folio_choice.split(" (")[0]
+                sel_folio = folio_choice.rsplit("(", 1)[-1].rstrip(")")
                 folios_to_fetch = [sel_folio]
 
             # ── Separate by RTA ──
