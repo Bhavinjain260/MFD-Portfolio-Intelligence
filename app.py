@@ -2128,7 +2128,7 @@ def render_email_report_button(
             send_btn = st.button(
                 "📤 Send",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
                 key=f"{key_prefix}_send_btn_{client_code}",
                 disabled=not recipient_email or not pdf_content
             )
@@ -4016,7 +4016,7 @@ if mode == "📊 Dashboard":
                             "folio_id": "Folio", "scheme_name": "Scheme", "current_nav": "Current NAV",
                             "prev_nav_1w": "1W Ago", "units": "Units", "diff_1w_value": "Gain (₹)", "rta": "RTA"
                         })
-                        st.dataframe(display_gainers_1w, use_container_width=True, hide_index=True,
+                        st.dataframe(display_gainers_1w, width="stretch", hide_index=True,
                             column_config={"Current NAV": st.column_config.NumberColumn(format="₹ %.4f"),
                                         "1W Ago": st.column_config.NumberColumn(format="₹ %.4f"),
                                         "Gain (₹)": st.column_config.NumberColumn(format="₹ %.2f")})
@@ -4030,7 +4030,7 @@ if mode == "📊 Dashboard":
                             "folio_id": "Folio", "scheme_name": "Scheme", "current_nav": "Current NAV",
                             "prev_nav_1w": "1W Ago", "units": "Units", "diff_1w_value": "Loss (₹)", "rta": "RTA"
                         })
-                        st.dataframe(display_losers_1w, use_container_width=True, hide_index=True,
+                        st.dataframe(display_losers_1w, width="stretch", hide_index=True,
                             column_config={"Current NAV": st.column_config.NumberColumn(format="₹ %.4f"),
                                         "1W Ago": st.column_config.NumberColumn(format="₹ %.4f"),
                                         "Loss (₹)": st.column_config.NumberColumn(format="₹ %.2f")})
@@ -4383,7 +4383,7 @@ if mode == "📊 Dashboard":
                         fig_client = theme_plotly(fig_client, dark)
                         fig_client.update_traces(textposition='inside', textinfo='percent+label', pull=[0.02] * len(client_df))
                         fig_client.update_layout(showlegend=True, margin=dict(t=40, b=20, l=20, r=20))
-                        st.plotly_chart(fig_client, use_container_width=True)
+                        st.plotly_chart(fig_client, width="stretch")
 
                     if sel_client and len(sel_client["selection"]["rows"]) > 0:
                         idx = sel_client["selection"]["rows"][0]
@@ -4466,7 +4466,7 @@ if mode == "📊 Dashboard":
                         fig_scheme = theme_plotly(fig_scheme, dark)
                         fig_scheme.update_traces(textposition='inside', textinfo='percent+label')
                         fig_scheme.update_layout(showlegend=True, margin=dict(t=40, b=20, l=20, r=20))
-                        st.plotly_chart(fig_scheme, use_container_width=True)
+                        st.plotly_chart(fig_scheme, width="stretch")
                     
                     # RTA breakdown for this client
                     st.markdown("#### 🏢 RTA-wise Summary")
@@ -4612,7 +4612,7 @@ elif mode == "👥 Clients":
                     "scheme_name": "Scheme", "installments_amt": "Amount",
                     "frequency_type": "Frequency", "status": "Status", "start_date": "Start Date"
                 }),
-                use_container_width=True, hide_index=True
+                width="stretch", hide_index=True
             )
         else:
             st.info("No folios found.")
@@ -4808,7 +4808,7 @@ elif mode == "👥 Clients":
                         "scheme_name": "Scheme", "installments_amt": "Amount",
                         "frequency_type": "Frequency", "status": "Status", "start_date": "Start Date"
                     }),
-                    use_container_width=True, hide_index=True
+                    width="stretch", hide_index=True
                 )
             else:
                 st.info("No holdings found.")
@@ -5718,7 +5718,7 @@ elif mode == "👥 Clients":
                             color_discrete_sequence=["#6366f1"],
                         )
                         fig = theme_plotly(fig, dark)
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width="stretch")
                     else:
                         st.info("No monthly brokerage data to display.")
 
@@ -6524,7 +6524,7 @@ elif mode == "📊 Reports":
                 data=pdf_bytes,
                 file_name=f"Valuation_{report_display_name.replace(' ', '_')}_{selected_fy}.pdf",
                 mime="application/pdf",
-                use_container_width=True,
+                width="stretch",
             )
         else:
             st.warning("PDF generation unavailable (fpdf2/font missing).")
@@ -6728,7 +6728,7 @@ elif mode == "📊 Reports":
                 data=csv,
                 file_name=f"CapitalGain_{client_name.replace(' ', '_')}_{cgr_fy}.csv",
                 mime="text/csv",
-                use_container_width=True,
+                width="stretch",
             )
 
         html_content = generate_capital_gain_html(
@@ -6747,7 +6747,7 @@ elif mode == "📊 Reports":
                     data=pdf_bytes,
                     file_name=f"CapitalGain_{client_name.replace(' ', '_')}_{cgr_fy}.pdf",
                     mime="application/pdf",
-                    use_container_width=True,
+                    width="stretch",
                 )
             else:
                 st.warning("PDF generation unavailable (fpdf2/font missing).")
