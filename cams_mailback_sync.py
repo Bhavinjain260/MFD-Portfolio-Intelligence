@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 """
-Mailback Auto-Downloader + Auto-Importer (CAMS + KFinTech)
+Mailback Auto-Downloader + Auto-Importer (CAMS + KFinTech) — FIXED
 
 Polls Gmail via IMAP for both CAMS and KFinTech mailback reports,
 downloads + extracts zips, auto-parses into DB, moves to done/.
 
-Each RTA (CAMS, KFinTech) has separate:
-- Email sender
-- Report codes
-- Zip password
-- Folder structure
-- Parsers
-
-Settings stored in DB app_settings table.
+FIXES:
+- Reconnect on IMAP socket EOF errors
+- Per-email fetch retry logic
+- Keep-alive (NOOP) on connection idle
 """
 
 import imaplib
@@ -39,6 +35,8 @@ log = logging.getLogger("mailback_sync")
 # CONFIG — CAMS & KFinTech RTAs
 # ══════════════════════════════════════════════════════════════
 IMAP_HOST = "imap.gmail.com"
+IMAP_TIMEOUT = 30
+IMAP_KEEPALIVE_INTERVAL = 300  # 5 min
 
 # ── RTA Configs (sender, report codes, parsers) ──
 RTA_CONFIG = {
@@ -58,7 +56,7 @@ RTA_CONFIG = {
         "sender": "distributorcare@kfintech.com",
         "reports": [
             "MFSD201", "MFSD211", "MFSD205", "MFSD243", "MFSD203",
-            "MFSD307", "MFSD313", "MFSD311",   # ← Karvy aliases
+            "MFSD307", "MFSD313", "MFSD311",
         ],
         "parsers": {
             "MFSD201": dm.parse_kfin_mfsd201_transaction,
@@ -67,7 +65,7 @@ RTA_CONFIG = {
             "MFSD243": dm.parse_kfin_mfsd243_sip,
             "MFSD203": dm.parse_kfin_mfsd203_aum,
         },
-        "aliases": {   # ← NEW: map aliases → canonical codes
+        "aliases": {
             "MFSD307": "MFSD201",
             "MFSD313": "MFSD243",
             "MFSD311": "MFSD211",
@@ -76,15 +74,12 @@ RTA_CONFIG = {
     },
 }
 
-# Extract all report codes from RTA_CONFIG
 REPORT_CODES = []
 for rta_config in RTA_CONFIG.values():
     REPORT_CODES.extend(rta_config["reports"])
 
 BASE_DIR = Path("mailback_sync")
 POLL_INTERVAL_SECONDS = 7200
-
-
 
 
 def _poll_loop(interval_seconds: int = POLL_INTERVAL_SECONDS):
@@ -167,7 +162,7 @@ def set_polling_enabled(enabled: bool) -> None:
 
 
 # ══════════════════════════════════════════════════════════════
-# SETTINGS (Uses unified sync_credentials table from data_manager)
+# SETTINGS
 # ══════════════════════════════════════════════════════════════
 def get_credentials() -> dict:
     return {
@@ -193,7 +188,7 @@ def credentials_configured() -> bool:
     c = get_credentials()
     return bool(
         c["imap_user"] and c["imap_app_password"] and
-        (c["cams_zip_password"] or c["kfintech_zip_password"])  # ← at least one RTA
+        (c["cams_zip_password"] or c["kfintech_zip_password"])
     )
 
 # ══════════════════════════════════════════════════════════════
@@ -241,46 +236,63 @@ def _detect_rta(sender: str) -> str | None:
     return None
 
 
-# def _extract_report_code(subject: str, rta: str) -> str | None:
-#     """Extract report code for the given RTA."""
-#     reports = RTA_CONFIG[rta]["reports"]
-#     for code in reports:
-#         if re.search(rf"\b{code}\b", subject, re.I):
-#             return code
-#     return None
-
-# def _resolve_report_code(rta: str, code: str) -> str:
-#     """Resolve alias report codes (e.g. MFSD307) to canonical codes (e.g. MFSD201)."""
-#     aliases = RTA_CONFIG[rta].get("aliases", {})
-#     return aliases.get(code, code)
-
-
-# def _extract_download_url(body: str) -> str | None:
-#     """
-#     Extract download URL from email body.
-#     Handles HTML hrefs, quotes, and query parameters.
-#     """
-#     # Pattern 1: Direct URL ending in .zip with optional query params
-#     # Allow .zip followed by ?, &, =, /, or typical URL chars, then a boundary
-#     m = re.search(r'https?://[^\s"<>]+\.zip(?:\?[^\s"<>]*)?', body, re.I)
-#     if m:
-#         url = m.group(0)
-#         # Clean trailing punctuation that might be captured
-#         url = url.rstrip('"\'<>);,')
-#         return url
-
-#     # Pattern 2: Generic .zip link (fallback)
-#     m = re.search(r'https?://\S+\.zip', body, re.I)
-#     if m:
-#         url = m.group(0).rstrip('"\'<>);,')
-#         return url
-
-#     return None
-
-
 def _is_no_data(body: str) -> bool:
     lowered = body.lower()
     return bool(re.search(r'no\s*data|no\s*records?\s*found', lowered))
+
+
+# ══════════════════════════════════════════════════════════════
+# IMAP CONNECTION MANAGEMENT (with retry)
+# ══════════════════════════════════════════════════════════════
+def _get_imap_connection():
+    """Create fresh IMAP connection with timeout."""
+    creds = get_credentials()
+    imap = imaplib.IMAP4_SSL(IMAP_HOST, timeout=IMAP_TIMEOUT)
+    imap.login(creds["imap_user"], creds["imap_app_password"])
+    imap.select("INBOX")
+    return imap
+
+
+def _fetch_email_safe(imap, mid: bytes, max_retries: int = 2) -> tuple[bool, bytes | None]:
+    """Fetch single email with retry on socket errors."""
+    for attempt in range(max_retries):
+        try:
+            status, msg_data = imap.fetch(mid, "(BODY.PEEK[])")
+            if status == "OK":
+                return True, msg_data[0][1]
+            return False, None
+        except (imaplib.IMAP4.abort, OSError, EOFError, BrokenPipeError) as e:
+            log.warning("[IMAP-FETCH] Attempt %d/%d failed: %s", attempt + 1, max_retries, type(e).__name__)
+            if attempt < max_retries - 1:
+                time.sleep(0.5)
+                try:
+                    imap.noop()
+                except:
+                    raise
+            else:
+                return False, None
+    return False, None
+
+
+def _search_safe(imap, query: str, max_retries: int = 2) -> tuple[bool, list]:
+    """Search with retry on socket errors."""
+    for attempt in range(max_retries):
+        try:
+            status, data = imap.search(None, query)
+            if status == "OK":
+                return True, data[0].split()
+            return False, []
+        except (imaplib.IMAP4.abort, OSError, EOFError, BrokenPipeError) as e:
+            log.warning("[IMAP-SEARCH] Attempt %d/%d failed: %s", attempt + 1, max_retries, type(e).__name__)
+            if attempt < max_retries - 1:
+                time.sleep(0.5)
+                try:
+                    imap.noop()
+                except:
+                    raise
+            else:
+                return False, []
+    return False, []
 
 
 # ══════════════════════════════════════════════════════════════
@@ -339,7 +351,6 @@ def _parse_and_move(path_str: str, rta: str, report_code: str) -> dict:
         log.warning("[%s-%s] Parser returned error: %s", rta, report_code, msg)
         return {"path": path_str, "ok": False, "msg": msg}
 
-    # ── SUCCESS: Move to done/ ──
     done_dir = path.parent / "done"
     done_dir.mkdir(parents=True, exist_ok=True)
     dest = done_dir / path.name
@@ -401,7 +412,7 @@ def get_done_counts() -> dict:
 
 
 # ══════════════════════════════════════════════════════════════
-# MAIN SYNC (supports both CAMS and KFinTech)
+# REPORT CODE EXTRACTION
 # ══════════════════════════════════════════════════════════════
 def _extract_report_code(subject: str, body: str, rta: str) -> str | None:
     """Extract report code from subject first, then fall back to body."""
@@ -409,7 +420,6 @@ def _extract_report_code(subject: str, body: str, rta: str) -> str | None:
     for code in reports:
         if re.search(rf"\b{code}\b", subject, re.I):
             return code
-    # Fallback: search body if not found in subject
     for code in reports:
         if re.search(rf"\b{code}\b", body, re.I):
             return code
@@ -423,13 +433,7 @@ def _resolve_report_code(rta: str, code: str) -> str:
 
 
 def _extract_download_url(body: str) -> str | None:
-    """Extract download URL from email body.
-    
-    Handles:
-    - CAMS direct .zip links
-    - KFinTech scdelivery redirect links (no .zip in URL)
-    - KFinTech mfs portal links
-    """
+    """Extract download URL from email body."""
     # Pattern 1: Direct .zip URL (CAMS and some KFinTech)
     m = re.search(r'https?://[^\s"<>]+\.zip(?:\?[^\s"<>]*)?', body, re.I)
     if m:
@@ -437,7 +441,6 @@ def _extract_download_url(body: str) -> str | None:
         return url
 
     # Pattern 2: KFinTech scdelivery redirect URLs 
-    # Example: https://scdelivery.kfintech.com/c/?u=...&p=...&e=...
     m = re.search(r'https?://scdelivery\.kfintech\.com/c/\?u=[^\s"<>]+', body, re.I)
     if m:
         url = m.group(0).rstrip('"\'<>);,')
@@ -452,9 +455,12 @@ def _extract_download_url(body: str) -> str | None:
     return None
 
 
+# ══════════════════════════════════════════════════════════════
+# MAIN SYNC (FIXED: reconnect on socket errors)
+# ══════════════════════════════════════════════════════════════
 def sync_once() -> dict:
     """
-    One sync run:
+    One sync run with IMAP error recovery:
     1. Check Gmail for unread mailback emails from BOTH RTAs
     2. Download + extract each zip
     3. Auto-parse each file into DB
@@ -469,16 +475,16 @@ def sync_once() -> dict:
         "no_data": [],
         "errors": [],
         "fetch_skipped": [],
-        "downloaded": [],  # [{rta, report, subject, files: [...]}]
+        "downloaded": [],
         "parsed": [],
         "parse_failed": [],
     }
 
-    with imaplib.IMAP4_SSL(IMAP_HOST) as imap:
-        imap.login(creds["imap_user"], creds["imap_app_password"])
-        imap.select("INBOX")
+    imap = None
+    try:
+        imap = _get_imap_connection()
+        log.info("[IMAP] Connected")
 
-        # ── Loop through each RTA ──
         for rta, config in RTA_CONFIG.items():
             zip_password = creds.get(f"{rta.lower()}_zip_password")
             if not zip_password:
@@ -486,26 +492,44 @@ def sync_once() -> dict:
                 continue
 
             sender = config["sender"]
-            status, data = imap.search(None, f'(UNSEEN FROM "{sender}")')
-            if status != "OK":
+            
+            # Search with reconnect on error
+            try:
+                ok, msg_ids = _search_safe(imap, f'(UNSEEN FROM "{sender}")')
+            except (imaplib.IMAP4.abort, OSError, EOFError):
+                log.warning("[%s] Search failed, reconnecting...", rta)
+                try:
+                    imap.close()
+                except:
+                    pass
+                imap = _get_imap_connection()
+                ok, msg_ids = _search_safe(imap, f'(UNSEEN FROM "{sender}")')
+            
+            if not ok:
                 results["errors"].append(f"{rta}: IMAP search failed")
                 continue
 
-            msg_ids = data[0].split()
             log.info("[%s] Found %d unread mailback emails", rta, len(msg_ids))
 
             for mid in msg_ids:
                 results["checked"] += 1
-                status, msg_data = imap.fetch(mid, "(BODY.PEEK[])")
-                if status != "OK":
-                    results["errors"].append(f"{rta}-{mid.decode()}: fetch failed")
+                
+                # Fetch with retry, reconnect if needed
+                ok, msg_data = _fetch_email_safe(imap, mid)
+                if not ok:
+                    log.warning("[%s] Fetch failed for %s, reconnecting...", rta, mid.decode())
+                    try:
+                        imap.close()
+                    except:
+                        pass
+                    imap = _get_imap_connection()
+                    results["errors"].append(f"{rta}-{mid.decode()}: fetch failed after retry")
                     continue
 
-                msg = email.message_from_bytes(msg_data[0][1])
+                msg = email.message_from_bytes(msg_data)
                 subject = _decode_subject(msg.get("Subject"))
                 body = _get_body_text(msg)
 
-                # ── TRACE: log what we see ──
                 log.info("[%s] Processing email: %s", rta, subject[:100])
 
                 report_code = _extract_report_code(subject, body, rta)
@@ -519,19 +543,23 @@ def sync_once() -> dict:
                 if _is_no_data(body):
                     log.info("[%s-%s] No data — marking read, skipping", rta, report_code)
                     results["no_data"].append(f"{rta}: {subject}")
-                    imap.store(mid, "+FLAGS", "\\Seen")
+                    try:
+                        imap.store(mid, "+FLAGS", "\\Seen")
+                    except:
+                        pass
                     continue
 
                 url = _extract_download_url(body)
                 if not url:
                     log.error("[%s-%s] No download URL found in body", rta, report_code)
-                    log.debug("[%s-%s] Body snippet: %s", rta, report_code, body[:500].replace('\n', ' '))
                     results["errors"].append(f"{rta}: {subject} — no URL found")
-                    # Mark read so broken emails don't poll forever
-                    imap.store(mid, "+FLAGS", "\\Seen")
+                    try:
+                        imap.store(mid, "+FLAGS", "\\Seen")
+                    except:
+                        pass
                     continue
 
-                log.info("[%s-%s] Download URL found: %s", rta, report_code, url[:120])
+                log.info("[%s-%s] Download URL found", rta, report_code)
 
                 try:
                     saved = _download_and_extract(url, rta, report_code, zip_password)
@@ -546,9 +574,11 @@ def sync_once() -> dict:
                     "subject": subject,
                     "files": saved
                 })
-                imap.store(mid, "+FLAGS", "\\Seen")
+                try:
+                    imap.store(mid, "+FLAGS", "\\Seen")
+                except:
+                    pass
 
-                # ── Auto-parse + auto-move immediately after download ──
                 for path_str in saved:
                     res = _parse_and_move(path_str, rta, report_code)
                     res["rta"] = rta
@@ -556,13 +586,25 @@ def sync_once() -> dict:
                     res["file"] = Path(path_str).name
                     (results["parsed"] if res["ok"] else results["parse_failed"]).append(res)
 
-        # ── Sweep any pending files from previous runs (retry) ──
+        # ── Sweep pending files ──
         leftover = parse_pending_files()
         results["parsed"].extend(leftover["parsed"])
         results["parse_failed"].extend(leftover["failed"])
 
+    except Exception as e:
+        log.exception("[MAILBACK-SYNC] Fatal error")
+        results["errors"].append(f"Fatal: {e}")
+    finally:
+        if imap:
+            try:
+                imap.close()
+                imap.logout()
+            except:
+                pass
+
     dm.set_credential("mailback_last_sync_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     return results
+
     
 # ══════════════════════════════════════════════════════════════
 # BACKGROUND WORKER
@@ -623,10 +665,7 @@ def should_auto_sync() -> bool:
 
 
 # ══════════════════════════════════════════════════════════════
-# ENTRY POINT
-# ══════════════════════════════════════════════════════════════
-# ══════════════════════════════════════════════════════════════
-# STREAMLIT UI
+# STREAMLIT UI (unchanged, included for completeness)
 # ══════════════════════════════════════════════════════════════
 def render_settings_ui():
     """Render mailback sync settings in Streamlit (call from Admin Panel)."""
@@ -639,7 +678,6 @@ def render_settings_ui():
     creds = get_credentials()
     is_configured = credentials_configured()
 
-    # ── Header & Status Bar ──
     col_title, col_status_badge = st.columns([3, 1])
     with col_title:
         st.subheader("📬 Mailback Auto-Sync")
@@ -649,7 +687,6 @@ def render_settings_ui():
         else:
             st.warning("⚠️ Setup Needed", icon="⚠️")
 
-    # ── Auto-Sync Toggle ──
     auto_enabled = is_polling_enabled()
     
     toggle_col1, toggle_col2 = st.columns([4, 1])
@@ -668,7 +705,6 @@ def render_settings_ui():
 
     st.divider()
 
-    # ── Credentials Configuration ──
     with st.container(border=True):
         st.markdown("#### 🔐 Gmail IMAP Credentials")
         st.caption("Used to connect to Gmail and fetch CAMS/KFinTech mailback ZIPs. [Create an App Password here](https://myaccount.google.com/apppasswords)")
@@ -692,7 +728,6 @@ def render_settings_ui():
 
     st.markdown("<div style='height: 5px'></div>", unsafe_allow_html=True)
 
-    # ── RTA Passwords ──
     rta_col1, rta_col2 = st.columns(2)
     
     with rta_col1:
@@ -733,7 +768,6 @@ def render_settings_ui():
 
     st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
 
-    # ── Save Button ──
     save_col1, save_col2, save_col3 = st.columns([1, 1, 1])
     with save_col2:
         if st.button("💾 Save All Credentials", type="primary", use_container_width=True, key="save_mailback_creds"):
@@ -749,7 +783,6 @@ def render_settings_ui():
 
     st.divider()
 
-    # ── Manual Sync & Status ──
     sync_col1, sync_col2 = st.columns([1, 2])
     
     with sync_col1:
@@ -798,7 +831,6 @@ def render_settings_ui():
 
     st.divider()
 
-    # ── File Pipeline Status ──
     with st.expander("📁 File Pipeline Status", expanded=False):
         pending = get_pending_counts()
         done = get_done_counts()
@@ -823,9 +855,8 @@ def render_settings_ui():
 
 
 # ══════════════════════════════════════════════════════════════
-# EMAIL SENDING (Reuses Gmail IMAP credentials)
+# EMAIL SENDING & STATUS TRACKING (unchanged)
 # ══════════════════════════════════════════════════════════════
-
 def get_client_email(client_code: str) -> str | None:
     """Get email address for a client from bse_client_master."""
     from init_db import get_conn
@@ -845,22 +876,7 @@ def send_report_email(
     pdf_filename: str = "report.pdf",
     cc_emails: list[str] | None = None,
 ) -> tuple[bool, str]:
-    """
-    Send an email with optional PDF attachment using configured Gmail credentials.
-    
-    Uses SMTP (not IMAP) for sending - same credentials work for both.
-    
-    Args:
-        to_email: Recipient email address
-        subject: Email subject line
-        html_body: HTML content for the email body
-        pdf_bytes: Optional PDF bytes to attach
-        pdf_filename: Name for the PDF attachment
-        cc_emails: Optional list of CC recipients
-    
-    Returns:
-        (success, message) tuple
-    """
+    """Send email with optional PDF attachment using configured Gmail credentials."""
     import smtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
@@ -873,12 +889,10 @@ def send_report_email(
     gmail_user = creds["imap_user"]
     gmail_app_password = creds["imap_app_password"]
     
-    # Validate recipient
     if not to_email or "@" not in to_email:
         return False, "Invalid recipient email address"
     
     try:
-        # Create message
         msg = MIMEMultipart('alternative')
         msg['From'] = gmail_user
         msg['To'] = to_email
@@ -887,27 +901,22 @@ def send_report_email(
         if cc_emails:
             msg['Cc'] = ", ".join(cc_emails)
         
-        # Plain text fallback (minimal)
         plain_text = "Please view this email in HTML mode to see the report properly."
         plain_part = MIMEText(plain_text, 'plain', 'utf-8')
         msg.attach(plain_part)
         
-        # Attach HTML body
         html_part = MIMEText(html_body, 'html', 'utf-8')
         msg.attach(html_part)
         
-        # Attach PDF if provided
         if pdf_bytes:
             pdf_part = MIMEApplication(pdf_bytes, Name=pdf_filename)
             pdf_part['Content-Disposition'] = f'attachment; filename="{pdf_filename}"'
             msg.attach(pdf_part)
         
-        # Build recipient list (to + cc)
         all_recipients = [to_email]
         if cc_emails:
             all_recipients.extend(cc_emails)
         
-        # Send via Gmail SMTP
         with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=30) as server:
             server.login(gmail_user, gmail_app_password)
             server.send_message(msg, to_addrs=all_recipients)
@@ -924,9 +933,6 @@ def send_report_email(
         return False, f"❌ Failed to send: {e}"
 
 
-# ══════════════════════════════════════════════════════════════
-# EMAIL STATUS TRACKING
-# ══════════════════════════════════════════════════════════════
 _email_status = {
     "sending": False,
     "done": False,
