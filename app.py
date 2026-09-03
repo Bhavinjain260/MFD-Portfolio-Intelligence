@@ -3668,7 +3668,7 @@ with st.sidebar:
     st.markdown("## 📊 MFD Portfolio")
     st.divider()
 
-    nav_options = ["📊 Dashboard", "👥 Clients", "💰 Brokerage Report",  "📊 Reports", "🧮 Capital Gains", "⚙️ Admin Panel"]
+    nav_options = ["📊 Dashboard", "👥 Clients", "📋 Transactions", "💰 Brokerage Report", "📊 Reports", "🧮 Capital Gains", "⚙️ Admin Panel"]
 
     if "nav_mode" not in st.session_state or st.session_state["nav_mode"] not in nav_options:
         st.session_state["nav_mode"] = "📊 Dashboard"
@@ -5805,9 +5805,523 @@ elif mode == "👥 Clients":
                         key=f"client_brok_dl_{client_code}",
                     )
 
+# ==================== 📋 TRANSACTIONS ====================
+elif mode == "📋 Transactions":
+    st.header("📋 All Transactions Explorer")
+    st.caption("Track all mutual fund transactions across RTAs, AMCs, schemes, clients, and dates.")
 
+    # ── Load all transactions ──
+    @st.cache_data(show_spinner=False)
+    def load_all_transactions(_v: int) -> pd.DataFrame:
+        with get_conn() as conn:
+            # CAMS transactions
+            cams_txn = pd.read_sql("""
+                SELECT 
+                    'CAMS' AS rta,
+                    folio_no AS folio,
+                    inv_name AS client_name,
+                    prodcode AS product_code,
+                    traddate AS txn_date,
+                    trxntype AS txn_type,
+                    trxnmode AS txn_mode,
+                    trxnstat AS txn_status,
+                    units,
+                    purprice AS price,
+                    amount,
+                    brokcode AS broker_code,
+                    subbrok AS sub_broker,
+                    remarks,
+                    trxnno AS txn_no
+                FROM cams_wbr2_transaction
+            """, conn)
 
+            # KFinTech transactions (with JOIN to get investor name)
+            kfin_txn = pd.read_sql("""
+                SELECT 
+                    'KFinTech' AS rta,
+                    kt.td_acno AS folio,
+                    kf.investor_name AS client_name,
+                    UPPER(TRIM(kt.fmcode)) AS product_code,
+                    kt.td_trdt AS txn_date,
+                    kt.td_purred AS txn_type,
+                    kt.trnmode AS txn_mode,
+                    kt.trnstat AS txn_status,
+                    kt.td_units AS units,
+                    kt.td_pop AS price,
+                    kt.td_amt AS amount,
+                    kt.td_broker AS broker_code,
+                    '' AS sub_broker,
+                    kt.trdesc AS remarks,
+                    kt.td_trno AS txn_no
+                FROM kfin_mfsd201_transaction kt
+                LEFT JOIN kfin_mfsd211_folio kf ON kt.td_acno = kf.Folio
+            """, conn)
 
+            # Combine
+            all_txn = pd.concat([cams_txn, kfin_txn], ignore_index=True)
+            
+            if all_txn.empty:
+                return pd.DataFrame()
+
+            # Parse dates
+            all_txn["txn_date"] = pd.to_datetime(all_txn["txn_date"], errors="coerce")
+            all_txn = all_txn.dropna(subset=["txn_date"])
+
+            # Resolve scheme names via BSE master
+            if not all_txn["product_code"].dropna().empty:
+                scheme_map_df = pd.read_sql("""
+                    SELECT UPPER(TRIM(Channel_Partner_Code)) AS product_code,
+                           MAX(Scheme_Name) AS scheme_name,
+                           MAX(ISIN) AS isin
+                    FROM bse_scheme_master
+                    WHERE Channel_Partner_Code IS NOT NULL
+                    GROUP BY UPPER(TRIM(Channel_Partner_Code))
+                """, conn)
+                scheme_map = dict(zip(scheme_map_df["product_code"], scheme_map_df["scheme_name"]))
+                isin_map = dict(zip(scheme_map_df["product_code"], scheme_map_df["isin"]))
+            else:
+                scheme_map = {}
+                isin_map = {}
+
+            all_txn["product_code_norm"] = all_txn["product_code"].astype(str).str.strip().str.upper()
+            all_txn["scheme_name"] = all_txn["product_code_norm"].map(scheme_map).fillna(all_txn["product_code"])
+            all_txn["isin"] = all_txn["product_code_norm"].map(isin_map)
+
+            # Resolve AMC via ISIN
+            folio_nav_df_amc = st.session_state.get("folio_nav_df")
+            if folio_nav_df_amc is not None and not folio_nav_df_amc.empty:
+                amc_map = dict(zip(
+                    folio_nav_df_amc["isin"].astype(str).str.strip().str.upper(),
+                    folio_nav_df_amc["amc_name"]
+                ))
+                all_txn["amc_name"] = all_txn["isin"].astype(str).str.strip().str.upper().map(amc_map)
+            else:
+                all_txn["amc_name"] = None
+
+            all_txn["amc_name"] = all_txn["amc_name"].fillna("⚠️ Unresolved")
+
+            return all_txn
+
+    all_txn_df = load_all_transactions(data_version())
+
+    if all_txn_df.empty:
+        st.info("No transactions found in database.")
+        st.stop()
+
+    # ═══════════════════════════════════════════════════════════
+    # SECTION 1: FILTER PANEL
+    # ═══════════════════════════════════════════════════════════
+    st.subheader("🔍 Filters")
+
+    f1, f2, f3, f4, f5 = st.columns(5)
+
+    with f1:
+        rta_filter = st.multiselect(
+            "RTA",
+            options=sorted(all_txn_df["rta"].unique()),
+            default=sorted(all_txn_df["rta"].unique()),
+            key="txn_rta_filter"
+        )
+
+    with f2:
+        amc_options = sorted([a for a in all_txn_df["amc_name"].unique() if a])
+        amc_filter = st.multiselect(
+            "AMC",
+            options=amc_options,
+            default=amc_options[:5] if len(amc_options) > 5 else amc_options,
+            key="txn_amc_filter"
+        )
+
+    with f3:
+        scheme_options = sorted([s for s in all_txn_df["scheme_name"].unique() if s])
+        scheme_filter = st.multiselect(
+            "Scheme",
+            options=scheme_options,
+            default=None,
+            key="txn_scheme_filter"
+        )
+
+    with f4:
+        txn_type_options = sorted([t for t in all_txn_df["txn_type"].unique() if pd.notna(t)])
+        txn_type_filter = st.multiselect(
+            "Txn Type",
+            options=txn_type_options,
+            default=txn_type_options,
+            key="txn_type_filter"
+        )
+
+    with f5:
+        date_range = st.date_input(
+            "Date Range",
+            value=(all_txn_df["txn_date"].min().date(), all_txn_df["txn_date"].max().date()),
+            key="txn_date_range"
+        )
+
+    # Client search (separate row)
+    search_col1, search_col2 = st.columns([3, 2])
+    with search_col1:
+        client_search = st.text_input(
+            "🔍 Search Client / Folio",
+            placeholder="Type client name or folio number...",
+            key="txn_client_search"
+        )
+
+    with search_col2:
+        st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+        clear_filters = st.button("🔄 Clear Filters", key="txn_clear_btn", use_container_width=True)
+
+    # Apply filters
+    if clear_filters:
+        st.rerun()
+
+    filtered_df = all_txn_df[
+        (all_txn_df["rta"].isin(rta_filter)) &
+        (all_txn_df["amc_name"].isin(amc_filter)) &
+        (all_txn_df["txn_type"].isin(txn_type_filter))
+    ]
+
+    if scheme_filter:
+        filtered_df = filtered_df[filtered_df["scheme_name"].isin(scheme_filter)]
+
+    if len(date_range) == 2:
+        filtered_df = filtered_df[
+            (filtered_df["txn_date"].dt.date >= date_range[0]) &
+            (filtered_df["txn_date"].dt.date <= date_range[1])
+        ]
+
+    if client_search.strip():
+        mask = (
+            filtered_df["client_name"].astype(str).str.contains(client_search, case=False, na=False) |
+            filtered_df["folio"].astype(str).str.contains(client_search, case=False, na=False)
+        )
+        filtered_df = filtered_df[mask]
+
+    # ═══════════════════════════════════════════════════════════
+    # SECTION 2: SUMMARY METRICS
+    # ═══════════════════════════════════════════════════════════
+    st.divider()
+    st.subheader("📊 Summary")
+
+    if filtered_df.empty:
+        st.info("No transactions match the selected filters.")
+        st.stop()
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Total Transactions", f"{len(filtered_df):,}")
+    m2.metric("Total Amount", format_aum(filtered_df["amount"].sum()))
+    m3.metric("Total Units", f"{filtered_df['units'].sum():.2f}")
+    m4.metric("Unique Clients", filtered_df["client_name"].nunique())
+    m5.metric("Unique Folios", filtered_df["folio"].nunique())
+
+    st.divider()
+
+    # ═══════════════════════════════════════════════════════════
+    # SECTION 3: BREAKDOWN TABS
+    # ═══════════════════════════════════════════════════════════
+    tab_detail, tab_amc, tab_scheme, tab_client, tab_rta = st.tabs(
+        ["📋 Detailed View", "🏢 AMC-wise", "📈 Scheme-wise", "👥 Client-wise", "🔵 RTA-wise"]
+    )
+
+    # ── TAB 1: Detailed View ──
+    with tab_detail:
+        st.subheader("📋 All Transactions")
+
+        display_cols = [
+            "txn_date", "rta", "client_name", "folio", "amc_name", "scheme_name",
+            "txn_type", "units", "price", "amount", "txn_status"
+        ]
+        display_cols = [c for c in display_cols if c in filtered_df.columns]
+
+        display_df = filtered_df[display_cols].rename(columns={
+            "txn_date": "Date",
+            "rta": "RTA",
+            "client_name": "Client",
+            "folio": "Folio",
+            "amc_name": "AMC",
+            "scheme_name": "Scheme",
+            "txn_type": "Type",
+            "units": "Units",
+            "price": "Price",
+            "amount": "Amount",
+            "txn_status": "Status"
+        })
+
+        display_df = display_df.sort_values("Date", ascending=False)
+
+        try:
+            from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+            gb = GridOptionsBuilder.from_dataframe(display_df)
+            gb.configure_default_column(filter=True, sortable=True, resizable=True, flex=1)
+            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=25)
+            grid_opts = gb.build()
+            AgGrid(
+                display_df,
+                gridOptions=grid_opts,
+                height=600,
+                update_mode=GridUpdateMode.NO_UPDATE,
+                fit_columns_on_grid_load=True,
+                theme="alpine-dark" if dark else "alpine",
+                key="txn_detail_grid"
+            )
+        except ImportError:
+            st.dataframe(
+                display_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Units": st.column_config.NumberColumn(format="%.4f"),
+                    "Price": st.column_config.NumberColumn(format="₹ %.4f"),
+                    "Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                }
+            )
+
+        csv = display_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "⬇️ Download Detailed Transactions (CSV)",
+            csv,
+            "transactions_detail.csv",
+            "text/csv",
+            key="txn_detail_download"
+        )
+
+    # ── TAB 2: AMC-wise ──
+    with tab_amc:
+        st.subheader("🏢 AMC-wise Breakdown")
+
+        amc_summary = (
+            filtered_df.groupby("amc_name")
+            .agg(
+                transactions=("txn_no", "count"),
+                total_units=("units", "sum"),
+                total_amount=("amount", "sum"),
+                avg_price=("price", "mean"),
+                unique_clients=("client_name", "nunique"),
+                unique_schemes=("scheme_name", "nunique"),
+            )
+            .reset_index()
+            .sort_values("total_amount", ascending=False)
+        )
+
+        amc_display = amc_summary.rename(columns={
+            "amc_name": "AMC",
+            "transactions": "Count",
+            "total_units": "Total Units",
+            "total_amount": "Total Amount",
+            "avg_price": "Avg Price",
+            "unique_clients": "Clients",
+            "unique_schemes": "Schemes",
+        })
+
+        st.dataframe(
+            amc_display,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Total Units": st.column_config.NumberColumn(format="%.2f"),
+                "Total Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Avg Price": st.column_config.NumberColumn(format="₹ %.4f"),
+            }
+        )
+
+        if not amc_summary.empty:
+            fig_amc = px.bar(
+                amc_summary,
+                x="amc_name",
+                y="total_amount",
+                title="Transaction Amount by AMC",
+                labels={"amc_name": "AMC", "total_amount": "Amount (₹)"},
+                color_discrete_sequence=["#6366f1"]
+            )
+            fig_amc = theme_plotly(fig_amc, dark)
+            fig_amc.update_xaxes(tickangle=-45)
+            st.plotly_chart(fig_amc, width="stretch")
+
+    # ── TAB 3: Scheme-wise ──
+    with tab_scheme:
+        st.subheader("📈 Scheme-wise Breakdown")
+
+        scheme_summary = (
+            filtered_df.groupby(["scheme_name", "amc_name"])
+            .agg(
+                transactions=("txn_no", "count"),
+                total_units=("units", "sum"),
+                total_amount=("amount", "sum"),
+                avg_price=("price", "mean"),
+            )
+            .reset_index()
+            .sort_values("total_amount", ascending=False)
+        )
+
+        scheme_display = scheme_summary.rename(columns={
+            "scheme_name": "Scheme",
+            "amc_name": "AMC",
+            "transactions": "Count",
+            "total_units": "Total Units",
+            "total_amount": "Total Amount",
+            "avg_price": "Avg Price",
+        })
+
+        st.dataframe(
+            scheme_display,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Total Units": st.column_config.NumberColumn(format="%.2f"),
+                "Total Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Avg Price": st.column_config.NumberColumn(format="₹ %.4f"),
+            }
+        )
+
+        if not scheme_summary.empty and len(scheme_summary) <= 15:
+            fig_scheme = px.bar(
+                scheme_summary,
+                x="scheme_name",
+                y="total_amount",
+                color="amc_name",
+                title="Transaction Amount by Scheme",
+                labels={"scheme_name": "Scheme", "total_amount": "Amount (₹)", "amc_name": "AMC"},
+            )
+            fig_scheme = theme_plotly(fig_scheme, dark)
+            fig_scheme.update_xaxes(tickangle=-45)
+            st.plotly_chart(fig_scheme, width="stretch")
+
+    # ── TAB 4: Client-wise ──
+    with tab_client:
+        st.subheader("👥 Client-wise Breakdown")
+
+        client_summary = (
+            filtered_df.groupby("client_name")
+            .agg(
+                transactions=("txn_no", "count"),
+                total_units=("units", "sum"),
+                total_amount=("amount", "sum"),
+                unique_folios=("folio", "nunique"),
+                unique_schemes=("scheme_name", "nunique"),
+                unique_amcs=("amc_name", "nunique"),
+            )
+            .reset_index()
+            .sort_values("total_amount", ascending=False)
+            .head(50)
+        )
+
+        client_display = client_summary.rename(columns={
+            "client_name": "Client",
+            "transactions": "Count",
+            "total_units": "Total Units",
+            "total_amount": "Total Amount",
+            "unique_folios": "Folios",
+            "unique_schemes": "Schemes",
+            "unique_amcs": "AMCs",
+        })
+
+        st.dataframe(
+            client_display,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Total Units": st.column_config.NumberColumn(format="%.2f"),
+                "Total Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+            }
+        )
+
+        if not client_summary.empty and len(client_summary) <= 15:
+            fig_client = px.bar(
+                client_summary,
+                x="client_name",
+                y="total_amount",
+                title="Top Clients by Transaction Amount (Top 50)",
+                labels={"client_name": "Client", "total_amount": "Amount (₹)"},
+                color_discrete_sequence=["#10b981"]
+            )
+            fig_client = theme_plotly(fig_client, dark)
+            fig_client.update_xaxes(tickangle=-45)
+            st.plotly_chart(fig_client, width="stretch")
+
+    # ── TAB 5: RTA-wise ──
+    with tab_rta:
+        st.subheader("🔵 RTA-wise Breakdown")
+
+        rta_summary = (
+            filtered_df.groupby("rta")
+            .agg(
+                transactions=("txn_no", "count"),
+                total_units=("units", "sum"),
+                total_amount=("amount", "sum"),
+                avg_price=("price", "mean"),
+                unique_clients=("client_name", "nunique"),
+                unique_folios=("folio", "nunique"),
+                unique_schemes=("scheme_name", "nunique"),
+                unique_amcs=("amc_name", "nunique"),
+            )
+            .reset_index()
+            .sort_values("total_amount", ascending=False)
+        )
+
+        rta_display = rta_summary.rename(columns={
+            "rta": "RTA",
+            "transactions": "Count",
+            "total_units": "Total Units",
+            "total_amount": "Total Amount",
+            "avg_price": "Avg Price",
+            "unique_clients": "Clients",
+            "unique_folios": "Folios",
+            "unique_schemes": "Schemes",
+            "unique_amcs": "AMCs",
+        })
+
+        st.dataframe(
+            rta_display,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Total Units": st.column_config.NumberColumn(format="%.2f"),
+                "Total Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Avg Price": st.column_config.NumberColumn(format="₹ %.4f"),
+            }
+        )
+
+        if not rta_summary.empty:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                fig_rta_amount = px.pie(
+                    rta_summary,
+                    values="total_amount",
+                    names="rta",
+                    title="Transaction Amount by RTA",
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.qualitative.Bold
+                )
+                fig_rta_amount = theme_plotly(fig_rta_amount, dark)
+                st.plotly_chart(fig_rta_amount, width="stretch")
+
+            with col2:
+                fig_rta_count = px.pie(
+                    rta_summary,
+                    values="transactions",
+                    names="rta",
+                    title="Transaction Count by RTA",
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.qualitative.Bold
+                )
+                fig_rta_count = theme_plotly(fig_rta_count, dark)
+                st.plotly_chart(fig_rta_count, width="stretch")
+
+    # ═══════════════════════════════════════════════════════════
+    # SECTION 4: DOWNLOAD ALL
+    # ═══════════════════════════════════════════════════════════
+    st.divider()
+    st.subheader("📥 Download")
+
+    csv_all = filtered_df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "⬇️ Download All Filtered Transactions (CSV)",
+        csv_all,
+        f"transactions_all_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        "text/csv",
+        key="txn_all_download"
+    )
 
 # ==================== 💰 BROKERAGE REPORT ====================
 elif mode == "💰 Brokerage Report":
