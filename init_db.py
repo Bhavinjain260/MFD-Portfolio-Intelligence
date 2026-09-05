@@ -1034,6 +1034,43 @@ def init_db() -> None:
         upload_batch            TEXT,
         UNIQUE(transaction_number, account_number)
     );
+
+    -- =====================================================================
+    -- NAV STORAGE SCHEMA (3-table normalized design)
+    -- =====================================================================
+    
+    -- 1. SCHEMES - Core scheme info (no duplication)
+    CREATE TABLE IF NOT EXISTS nav_schemes (
+        scheme_code         INTEGER PRIMARY KEY,
+        isin_growth         TEXT,
+        scheme_name         TEXT NOT NULL,
+        fund_house          TEXT NOT NULL,
+        created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(scheme_code)
+    );
+    
+    -- 2. NAV OPTIONS - Plan + Option combinations per scheme
+    CREATE TABLE IF NOT EXISTS nav_options (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        scheme_code         INTEGER NOT NULL,
+        plan                TEXT NOT NULL,          -- "Direct Plan" or "Regular Plan"
+        option_name         TEXT NOT NULL,          -- "Growth Option", "IDCW Option", etc
+        isin_payout         TEXT,
+        isin_reinvest       TEXT,
+        FOREIGN KEY (scheme_code) REFERENCES nav_schemes(scheme_code) ON DELETE CASCADE,
+        UNIQUE(scheme_code, plan, option_name)
+    );
+    
+    -- 3. NAV HISTORY - Time-series NAV values
+    CREATE TABLE IF NOT EXISTS nav_history (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        nav_option_id       INTEGER NOT NULL,
+        nav_value           REAL NOT NULL,
+        nav_date            DATE NOT NULL,
+        imported_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (nav_option_id) REFERENCES nav_options(id) ON DELETE CASCADE,
+        UNIQUE(nav_option_id, nav_date)
+    );
     
     -- =====================================================================
     -- MANUAL / CONFIG TABLES
@@ -1089,6 +1126,13 @@ def init_db() -> None:
     CREATE INDEX IF NOT EXISTS idx_kfin_txn_pan         ON kfin_mfsd201_transaction(pan1);
     CREATE INDEX IF NOT EXISTS idx_kfin_sip_folio       ON kfin_mfsd243_sip(folio);
     CREATE INDEX IF NOT EXISTS idx_kfin_brk_proc        ON kfin_mfsd205_brokerage(process_date);
+
+    CREATE INDEX IF NOT EXISTS idx_nav_schemes_name      ON nav_schemes(scheme_name);
+    CREATE INDEX IF NOT EXISTS idx_nav_schemes_house     ON nav_schemes(fund_house);
+    CREATE INDEX IF NOT EXISTS idx_nav_options_scheme    ON nav_options(scheme_code);
+    CREATE INDEX IF NOT EXISTS idx_nav_options_plan      ON nav_options(plan);
+    CREATE INDEX IF NOT EXISTS idx_nav_history_date      ON nav_history(nav_date);
+    CREATE INDEX IF NOT EXISTS idx_nav_history_option    ON nav_history(nav_option_id);
     
     
     
