@@ -9,6 +9,7 @@ No .upper(), .lower(), or date reformatting is applied.
 import logging
 import os
 import re
+import io 
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -1697,6 +1698,177 @@ KFIN_CONFLICT_COLS = {
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# AMFI NAV PARSER (Regular Plans Only)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def parse_nav_file(file, replace: bool) -> tuple[bool, str, dict]:
+    """
+    Parses AMFI NAV text file uploaded via Streamlit.
+    Filters for 'Regular Plan' only. Dynamically detects Fund House.
+    """
+    try:
+        # Decode Streamlit UploadedFile bytes to string
+        content = file.getvalue().decode('utf-8-sig')
+        string_file = io.StringIO(content)
+        
+        rows = _parse_nav_text(string_file)
+        if not rows:
+            return False, "No valid Regular Plan rows found", {}
+            
+        result = _insert_nav_rows(rows)
+        
+        msg = f"Imported {result['inserted']} NAV records | Skipped: {result['skipped']}"
+        return True, msg, {"rows": result['inserted'], "skipped": result['skipped'], "fund_houses": len(result['fund_houses'])}
+        
+    except Exception as e:
+        return False, f"File read error: {e}", {}
+
+
+def parse_nav_filepath(filepath: str) -> dict:
+    """
+    Wrapper for auto-fetch scheduler to pass a file path instead of a Streamlit object.
+    """
+    try:
+        with open(filepath, 'r', encoding='utf-8-sig') as f:
+            rows = _parse_nav_text(f)
+            if not rows:
+                return {'ok': False, 'reason': 'No valid Regular Plan rows found'}
+            
+            result = _insert_nav_rows(rows)
+            return {
+                'ok': True,
+                'inserted': result['inserted'],
+                'skipped': result['skipped'],
+                'nav_date': result['nav_date'],
+                'fund_houses': result['fund_houses'],
+                'reason': f"Inserted {result['inserted']} Regular NAV records"
+            }
+    except Exception as e:
+        return {'ok': False, 'reason': f"Ingestion failed: {e}"}
+
+
+def _parse_nav_text(file_obj) -> list[dict]:
+    """Reads NAV text file (io.StringIO or standard file object). Dynamically detects Fund House."""
+    rows = []
+    current_fund_house = "Unknown"
+    
+    for line in file_obj:
+        line = line.strip()
+        if not line:
+            continue
+        
+        # If line has no semicolons, it's either a section header or the Fund House name
+        if ';' not in line:
+            if 'Open Ended' in line or 'Close Ended' in line or 'Interval' in line:
+                continue
+            # It's the Fund House name (e.g., "Axis Mutual Fund")
+            current_fund_house = line.replace(" Mutual Fund", "").strip()
+            continue
+            
+        parts = line.split(';')
+        if len(parts) < 8:
+            continue
+            
+        try:
+            scheme_code = int(parts[0].strip())
+            isin_payout = parts[1].strip() or None
+            isin_reinvest = parts[2].strip() or None
+            scheme_name = parts[3].strip()
+            plan = parts[4].strip()
+            option = parts[5].strip()
+            nav_value = float(parts[6].strip())
+            date_str = parts[7].strip()
+            
+            # Skip invalid NAV
+            if nav_value <= 0:
+                continue
+            
+            # STRICT FILTER: Regular Plan only
+            if plan.lower() != "regular plan":
+                continue
+                
+            nav_date = datetime.strptime(date_str, "%d-%b-%Y").date()
+            
+            rows.append({
+                'scheme_code': scheme_code,
+                'isin_payout': isin_payout,
+                'isin_reinvest': isin_reinvest,
+                'scheme_name': scheme_name,
+                'fund_house': current_fund_house,
+                'plan': plan,
+                'option': option,
+                'nav_value': nav_value,
+                'nav_date': nav_date
+            })
+        except (ValueError, IndexError):
+            continue
+            
+    return rows
+
+
+def _insert_nav_rows(rows: list[dict]) -> dict:
+    """Inserts parsed NAV rows into the 3-table normalized schema."""
+    inserted = 0
+    skipped = 0
+    fund_houses = set()
+    nav_date = None
+    
+    with get_conn() as conn:
+        c = conn.cursor()
+        for row in rows:
+            try:
+                nav_date = row['nav_date']
+                fund_houses.add(row['fund_house'])
+                
+                # 1. Insert scheme
+                c.execute("""
+                    INSERT OR IGNORE INTO nav_schemes 
+                    (scheme_code, scheme_name, fund_house)
+                    VALUES (?, ?, ?)
+                """, (row['scheme_code'], row['scheme_name'], row['fund_house']))
+                
+                # 2. Insert option
+                c.execute("""
+                    INSERT OR IGNORE INTO nav_options
+                    (scheme_code, plan, option_name, isin_payout, isin_reinvest)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (row['scheme_code'], row['plan'], row['option'], row['isin_payout'], row['isin_reinvest']))
+                
+                # 3. Get nav_option_id
+                c.execute("""
+                    SELECT id FROM nav_options 
+                    WHERE scheme_code = ? AND plan = ? AND option_name = ?
+                """, (row['scheme_code'], row['plan'], row['option']))
+                result = c.fetchone()
+                
+                if not result:
+                    skipped += 1
+                    continue
+                    
+                nav_option_id = result[0]
+                
+                # 4. Upsert history
+                c.execute("""
+                    INSERT OR REPLACE INTO nav_history
+                    (nav_option_id, nav_value, nav_date)
+                    VALUES (?, ?, ?)
+                """, (nav_option_id, row['nav_value'], row['nav_date']))
+                
+                inserted += 1
+            except Exception:
+                skipped += 1
+                continue
+                
+        conn.commit()
+        
+    return {
+        'inserted': inserted,
+        'skipped': skipped,
+        'nav_date': nav_date,
+        'fund_houses': fund_houses
+    }
+
+# ══════════════════════════════════════════════════════════════════════════════
 # STREAMLIT UI
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -2006,3 +2178,25 @@ def render_data_manager():
                               delta_color="inverse" if pending.get(code, 0) else "off")
         else:
             st.info("No report codes configured")
+
+
+
+
+        # ───────────────────────────── AMFI NAV ─────────────────────────────
+    with st.expander("📈 AMFI NAV Uploads", expanded=False):
+        st.caption("Upload the daily AMFI NAV text file. Only 'Regular Plan' schemes will be imported.")
+        st.divider()
+
+        st.subheader("AMFI Daily NAV File")
+        with st.container(border=True):
+            f_nav = st.file_uploader("Upload NAV Text/CSV", type=["txt", "csv"], key="up_amfi_nav")
+            c_nav = st.checkbox("Replace all existing data for this date?", key="chk_amfi_nav", value=False)
+            if st.button("Process NAV File", type="primary", key="btn_amfi_nav") and f_nav:
+                with st.spinner("Processing NAV File..."):
+                    ok, msg, p = parse_nav_file(f_nav, c_nav)
+                    if ok:
+                        st.success(msg)
+                        if p.get('fund_houses'):
+                            st.caption(f"Detected {p['fund_houses']} unique Fund Houses.")
+                    else:
+                        st.error(msg)

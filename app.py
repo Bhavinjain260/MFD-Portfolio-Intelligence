@@ -2251,6 +2251,44 @@ def _last_passed_cutoff_today(now: datetime) -> Optional[time_cls]:
     return max(passed) if passed else None
 
 
+# def download_and_save_nav_if_needed(force: bool = False) -> dict:
+#     """
+#     Re-fetches if:
+#       - no file exists for today, OR
+#       - today's file was saved BEFORE the most recent cutoff time that has
+#         already passed (e.g. file saved at 9 AM, now it's 4 PM → 3 PM cutoff
+#         already passed and file predates it → stale, refetch).
+#     Otherwise skip — avoids hammering AMFI on every page load.
+#     """
+#     now = datetime.now()
+#     today = now.strftime("%Y-%m-%d")
+#     today_path = _snapshot_path(today)
+
+#     if not force and os.path.exists(today_path):
+#         cutoff = _last_passed_cutoff_today(now)
+#         if cutoff is None:
+#             size = os.path.getsize(today_path)
+#             log.info("[AMFI] Before first cutoff — keeping existing file for %s", today)
+#             return {"ran": False, "ok": True, "reason": "before first cutoff, file is current", "bytes": size}
+
+#         file_mtime = datetime.fromtimestamp(os.path.getmtime(today_path))
+#         cutoff_dt = datetime.combine(now.date(), cutoff)
+#         if file_mtime >= cutoff_dt:
+#             size = os.path.getsize(today_path)
+#             log.info("[AMFI] File already fresh for cutoff %s (saved %s)", cutoff, file_mtime.time())
+#             return {"ran": False, "ok": True, "reason": f"already fresh past {cutoff} cutoff", "bytes": size}
+
+#         log.info("[AMFI] File saved at %s predates %s cutoff — redownloading", file_mtime.time(), cutoff)
+
+#     try:
+#         result = download_and_save_nav()
+#         return {"ran": True, "ok": True, "reason": "downloaded", "bytes": result["bytes"]}
+#     except Exception as e:
+#         log.exception("[AMFI] Download failed")
+#         return {"ran": True, "ok": False, "reason": f"download failed: {e}", "bytes": None}
+
+
+
 def download_and_save_nav_if_needed(force: bool = False) -> dict:
     """
     Re-fetches if:
@@ -2264,11 +2302,13 @@ def download_and_save_nav_if_needed(force: bool = False) -> dict:
     today = now.strftime("%Y-%m-%d")
     today_path = _snapshot_path(today)
 
+    # 1. Check if we need to skip downloading
     if not force and os.path.exists(today_path):
         cutoff = _last_passed_cutoff_today(now)
         if cutoff is None:
             size = os.path.getsize(today_path)
             log.info("[AMFI] Before first cutoff — keeping existing file for %s", today)
+            # File is already there, no need to ingest again
             return {"ran": False, "ok": True, "reason": "before first cutoff, file is current", "bytes": size}
 
         file_mtime = datetime.fromtimestamp(os.path.getmtime(today_path))
@@ -2276,13 +2316,31 @@ def download_and_save_nav_if_needed(force: bool = False) -> dict:
         if file_mtime >= cutoff_dt:
             size = os.path.getsize(today_path)
             log.info("[AMFI] File already fresh for cutoff %s (saved %s)", cutoff, file_mtime.time())
+            # File is already there, no need to ingest again
             return {"ran": False, "ok": True, "reason": f"already fresh past {cutoff} cutoff", "bytes": size}
 
         log.info("[AMFI] File saved at %s predates %s cutoff — redownloading", file_mtime.time(), cutoff)
 
+    # 2. Download the file
     try:
         result = download_and_save_nav()
-        return {"ran": True, "ok": True, "reason": "downloaded", "bytes": result["bytes"]}
+        
+        # 3. ▼▼▼ TRIGGER DATABASE INGESTION ▼▼▼
+        if os.path.exists(today_path):
+            log.info("[NAV-DB] File ready. Starting database ingestion for %s...", today_path)
+            try:
+                ingest_result = data_manager.parse_nav_filepath(today_path)
+                if ingest_result.get('ok'):
+                    log.info("[NAV-DB] Success: %s", ingest_result.get('reason'))
+                else:
+                    log.error("[NAV-DB] Failed: %s", ingest_result.get('reason'))
+            except Exception as e:
+                log.exception("[NAV-DB] Ingestion error: %s", e)
+        else:
+            log.error("[NAV-DB] File path %s does not exist after download. Skipping ingestion.", today_path)
+            
+        return {"ran": True, "ok": True, "reason": "downloaded and ingested", "bytes": result.get("bytes")}
+        
     except Exception as e:
         log.exception("[AMFI] Download failed")
         return {"ran": True, "ok": False, "reason": f"download failed: {e}", "bytes": None}

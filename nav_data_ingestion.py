@@ -1,7 +1,7 @@
 """
 NAV DB Ingestion - Plugs into download_and_save_nav() flow
-Automatically imports ALL plans (not filtered) to DB after file is downloaded
-Filtering by Regular plan happens at query time via nav_queries.py
+Automatically imports ONLY Regular plans to DB after file is downloaded.
+Dynamically detects Fund House names from the file structure.
 """
 
 import logging
@@ -13,7 +13,7 @@ log = logging.getLogger("nav_db")
 
 def ingest_nav_file_to_db(filepath: str) -> dict:
     """
-    Read downloaded NAV file and insert Regular plans only
+    Read downloaded NAV file and insert Regular plans only.
     
     Args:
         filepath: Full path to nav_YYYY-MM-DD.txt file
@@ -41,7 +41,7 @@ def ingest_nav_file_to_db(filepath: str) -> dict:
             'skipped': result['skipped'],
             'nav_date': result['nav_date'],
             'fund_houses': result['fund_houses'],
-            'reason': f"Inserted {result['inserted']} NAV records"
+            'reason': f"Inserted {result['inserted']} Regular NAV records"
         }
     except Exception as e:
         log.exception("[NAV-DB] Ingestion failed")
@@ -57,20 +57,33 @@ def ingest_nav_file_to_db(filepath: str) -> dict:
 
 def _parse_nav_file(filepath: str) -> list[dict]:
     """
-    Parse AMFI text file (ALL plans - filtering done at query time)
-    Format (8-col, Aug 2026+):
-        Code;ISIN1;ISIN2;Name;Plan;Option;NAV;Date
+    Parse AMFI text file dynamically. 
+    Reads the AMC name from the file structure, skipping hardcoded keyword matching.
+    Filters out everything except 'Regular Plan'.
     """
     rows = []
+    current_fund_house = "Unknown"
+    
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        # utf-8-sig handles BOM characters if present in AMFI file
+        with open(filepath, 'r', encoding='utf-8-sig') as f:
             for line_no, raw_line in enumerate(f, 1):
                 line = raw_line.strip()
                 
-                # Skip empty/header rows
-                if not line or len(line.split(';')) < 8:
+                # Skip empty lines
+                if not line:
                     continue
-                if line.startswith('Scheme Code') or line.startswith('Open Ended'):
+                
+                # Check if it's a standalone text line (no semicolons)
+                if ';' not in line:
+                    # Ignore category section headers
+                    if 'Open Ended' in line or 'Close Ended' in line or 'Interval' in line:
+                        continue
+                    
+                    # If it doesn't have semicolons and isn't a section header, 
+                    # it MUST be the Fund House name!
+                    # We strip " Mutual Fund" to keep the name clean (e.g., "Axis Mutual Fund" -> "Axis")
+                    current_fund_house = line.replace(" Mutual Fund", "").strip()
                     continue
                 
                 parts = line.split(';')
@@ -87,27 +100,31 @@ def _parse_nav_file(filepath: str) -> list[dict]:
                     nav_value = float(parts[6].strip())
                     date_str = parts[7].strip()
                     
-                    # Parse date (04-Sep-2026)
+                    # Parse date (e.g., 04-Sep-2026)
                     nav_date = datetime.strptime(date_str, "%d-%b-%Y").date()
                     
-                    # Skip invalid NAV only
+                    # Skip invalid NAV
                     if nav_value <= 0:
                         continue
                     
-                    # Store ALL plans (Regular, Direct, Institutional, etc)
-                    # Filtering by plan type happens at query time in nav_queries.py
+                    # ▼▼▼ REGULAR PLAN FILTER ▼▼▼
+                    # Strictly insert only Regular Plans. 
+                    # Direct plans, Institutional plans, and blank plans are skipped.
+                    if plan.lower() != "regular plan":
+                        continue
+
                     rows.append({
                         'scheme_code': scheme_code,
                         'isin_payout': isin_payout,
                         'isin_reinvest': isin_reinvest,
                         'scheme_name': scheme_name,
-                        'fund_house': _extract_fund_house(scheme_name),
+                        'fund_house': current_fund_house,  # Dynamically captured!
                         'plan': plan,
                         'option': option,
                         'nav_value': nav_value,
                         'nav_date': nav_date
                     })
-                except (ValueError, IndexError) as e:
+                except (ValueError, IndexError):
                     # Skip malformed rows silently
                     continue
     
@@ -118,43 +135,9 @@ def _parse_nav_file(filepath: str) -> list[dict]:
     return rows
 
 
-def _extract_fund_house(scheme_name: str) -> str:
-    """Extract AMC name from scheme name"""
-    keywords = {
-        'axis': 'Axis',
-        'hdfc': 'HDFC',
-        'icici': 'ICICI',
-        'sbi': 'SBI',
-        'franklin': 'Franklin',
-        'l&t': 'L&T',
-        'dsp': 'DSP',
-        'kotak': 'Kotak',
-        'uti': 'UTI',
-        'aditya birla': 'Aditya Birla',
-        'birla': 'Aditya Birla',
-        'motilal': 'Motilal',
-        'edelweiss': 'Edelweiss',
-        'nippon': 'Nippon',
-        'idbi': 'IDBI',
-        'canara': 'Canara',
-        'bandhan': 'Bandhan',
-        'baroda': 'Baroda BNP',
-        'tata': 'Tata',
-        'pgim': 'PGIM',
-        'invesco': 'Invesco',
-        'itnf': 'ITI'
-    }
-    
-    lower = scheme_name.lower()
-    for kw, amc in keywords.items():
-        if kw in lower:
-            return amc
-    return 'Unknown'
-
-
 def _insert_nav_rows(rows: list[dict]) -> dict:
     """
-    Insert parsed rows into nav_* tables
+    Insert parsed rows into nav_* tables.
     Returns: {'inserted': int, 'skipped': int, 'nav_date': date, 'fund_houses': set}
     """
     inserted = 0
@@ -171,13 +154,13 @@ def _insert_nav_rows(rows: list[dict]) -> dict:
                 fund_houses.add(row['fund_house'])
                 
                 # 1. Insert scheme (INSERT OR IGNORE)
+                # Note: isin_growth is intentionally omitted as it belongs in nav_options
                 c.execute("""
                     INSERT OR IGNORE INTO nav_schemes 
-                    (scheme_code, isin_growth, scheme_name, fund_house)
-                    VALUES (?, ?, ?, ?)
+                    (scheme_code, scheme_name, fund_house)
+                    VALUES (?, ?, ?)
                 """, (
                     row['scheme_code'],
-                    row['isin_reinvest'],
                     row['scheme_name'],
                     row['fund_house']
                 ))
