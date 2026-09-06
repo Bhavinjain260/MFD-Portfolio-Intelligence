@@ -21,6 +21,7 @@ import streamlit as st
 
 import data_manager
 from init_db import get_conn
+import nav_data_ingestion 
 
 print(data_manager.__file__)
 
@@ -1703,26 +1704,37 @@ KFIN_CONFLICT_COLS = {
 
 def parse_nav_file(file, replace: bool) -> tuple[bool, str, dict]:
     """
-    Parses AMFI NAV text file uploaded via Streamlit.
-    Filters for 'Regular Plan' only. Dynamically detects Fund House.
+    Parses AMFI NAV text file uploaded via Streamlit UI.
+    Saves to a temporary file and delegates to nav_data_ingestion 
+    to ensure both 6-col and 8-col formats are handled identically.
     """
+    import tempfile
+    import os
+    
     try:
-        # Decode Streamlit UploadedFile bytes to string
-        content = file.getvalue().decode('utf-8-sig')
-        string_file = io.StringIO(content)
-        
-        rows = _parse_nav_text(string_file)
-        if not rows:
-            return False, "No valid Regular Plan rows found", {}
+        # Save the Streamlit UploadedFile to a temporary file path
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".txt", mode='wb') as tmp:
+            tmp.write(file.getvalue())
+            tmp_path = tmp.name
             
-        result = _insert_nav_rows(rows)
+        # Use the unified ingestion module
+        result = nav_data_ingestion.ingest_nav_file_to_db(tmp_path)
         
-        msg = f"Imported {result['inserted']} NAV records | Skipped: {result['skipped']}"
-        return True, msg, {"rows": result['inserted'], "skipped": result['skipped'], "fund_houses": len(result['fund_houses'])}
+        # Clean up the temp file
+        os.remove(tmp_path)
         
+        if result.get('ok'):
+            msg = f"Imported {result['inserted']} NAV records | Skipped: {result['skipped']}"
+            return True, msg, {
+                "rows": result['inserted'], 
+                "skipped": result['skipped'], 
+                "fund_houses": len(result.get('fund_houses', set()))
+            }
+        else:
+            return False, result.get('reason', 'Unknown error'), {}
+            
     except Exception as e:
         return False, f"File read error: {e}", {}
-
 
 def parse_nav_filepath(filepath: str) -> dict:
     """

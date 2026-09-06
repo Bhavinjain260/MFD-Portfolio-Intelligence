@@ -1208,10 +1208,6 @@ HDFC Mutual Fund
 151804;INF179KC1GO3;;HDFC Consumption Fund - Growth Option - Direct Plan;14.521;28-Aug-2026
 151802;INF179KC1GS4;INF179KC1GT2;HDFC Consumption Fund - IDCW Option;13.984;28-Aug-2026
 151805;INF179KC1GP0;INF179KC1GQ8;HDFC Consumption Fund - IDCW Option - Direct Plan;14.521;28-Aug-2026
-151751;INF179KC1GL9;;HDFC Defence Fund - Growth Option;30.533;28-Aug-2026
-151750;INF179KC1GI5;;HDFC Defence Fund - Growth Option - Direct Plan;31.647;28-Aug-2026
-151748;INF179KC1GM7;INF179KC1GN5;HDFC Defence Fund - IDCW Option;30.533;28-Aug-2026
-151749;INF179KC1GJ3;INF179KC1GK1;HDFC Defence Fund - IDCW Option - Direct Plan;31.647;28-Aug-2026
 141923;INF179KC1AX7;;HDFC Housing Opportunities Fund  - Growth Option;21.588;28-Aug-2026
 141924;INF179KC1AU3;;HDFC Housing Opportunities Fund  - Growth Option - Direct Plan;23.579;28-Aug-2026
 141922;INF179KC1AY5;INF179KC1AZ2;HDFC Housing Opportunities Fund  - IDCW Option;15.476;28-Aug-2026
@@ -1236,10 +1232,6 @@ HDFC Mutual Fund
 152082;INF179KC1HO1;;HDFC Pharma and Healthcare Fund - Growth Option - Direct Plan;22.51;28-Aug-2026
 152083;INF179KC1HM5;INF179KC1HN3;HDFC Pharma and Healthcare Fund - IDCW Option;21.748;28-Aug-2026
 152081;INF179KC1HP8;INF179KC1HQ6;HDFC Pharma and Healthcare Fund - IDCW Option - Direct Plan;22.51;28-Aug-2026
-152058;INF179KC1HF9;;HDFC Technology Fund - Growth Option;12.023;28-Aug-2026
-152059;INF179KC1HI3;;HDFC Technology Fund - Growth Option - Direct Plan;12.456;28-Aug-2026
-152057;INF179KC1HG7;INF179KC1HH5;HDFC Technology Fund - IDCW Option;12.023;28-Aug-2026
-152060;INF179KC1HJ1;INF179KC1HK9;HDFC Technology Fund - IDCW Option - Direct Plan;12.456;28-Aug-2026
 151900;INF179KC1GX4;;HDFC Transportation and Logistics Fund - Growth Option;20.236;28-Aug-2026
 151901;INF179KC1GU0;;HDFC Transportation and Logistics Fund - Growth Option - Direct Plan;20.971;28-Aug-2026
 151902;INF179KC1GY2;INF179KC1GZ9;HDFC Transportation and Logistics Fund - IDCW Option;20.236;28-Aug-2026
@@ -1512,12 +1504,6 @@ Nippon India Mutual Fund
 108252;INF204K01745;INF204K01752;NIPPON INDIA QUANT FUND - IDCW Option;39.5385;28-Aug-2026
 108249;INF204K01760;;Nippon India Quant Fund -Growth Plan - Growth Option;74.1682;28-Aug-2026
 108258;INF204K01737;;Nippon India Quant Fund -Growth Plan -Bonus Option;74.1682;28-Aug-2026
-
-PGIM India Mutual Fund
-153039;INF663L01Z45;;PGIM India Healthcare Fund - Direct Plan - Growth Option;12.65;28-Aug-2026
-153037;INF663L01Z60;INF663L01Z78;PGIM India Healthcare Fund - Direct Plan - IDCW Option;12.65;28-Aug-2026
-153040;INF663L01Z52;;PGIM India Healthcare Fund - Regular Plan - Growth Option;12.28;28-Aug-2026
-153038;INF663L01Z86;INF663L01Z94;PGIM India Healthcare Fund - Regular Plan - IDCW Option;12.28;28-Aug-2026
 
 quant Mutual Fund
 151791;INF966L01BX0;;quant BFSI Fund - Growth Option - Direct Plan;22.0606;28-Aug-2026
@@ -1921,12 +1907,6 @@ Sundaram Mutual Fund
 149570;INF173K01HZ7;;Sundaram ELSS Tax Saver Fund Direct Plan Growth;537.5895;28-Aug-2026
 149569;INF173K01361;;Sundaram ELSS Tax Saver Fund Regular Growth;499.7806;28-Aug-2026
 149572;INF173K01NM3;;Sundaram ELSS Tax Saver Fund Regular Plan - Income Distribution CUM Capital Withdrawal Option (IDCW);384.1872;28-Aug-2026
-
-Tata Mutual Fund
-119281;INF277K01I94;;Tata ELSS Fund- Direct Plan - Payout of IDCW Option;239.6987;28-Aug-2026
-100474;INF277K01I60;;Tata ELSS Fund- Regular Plan - Payout of IDCW Option;97.9037;28-Aug-2026
-132756;INF277K01I86;;Tata ELSS Fund-Growth-Direct Plan;55.4053;28-Aug-2026
-132757;INF277K01I52;;Tata ELSS Fund-Growth-Regular Plan;47.8189;28-Aug-2026
 
 Taurus Mutual Fund
 118866;INF044D01CG6;INF044D01AA3;Taurus ELSS Tax Saver Fund - Direct Plan - Growth;203.28;28-Aug-2026
@@ -2509,14 +2489,6 @@ Union Mutual Fund
 Open Ended Schemes ( Debt Scheme - Ultra Short Duration Fund )
 
 
-Aditya Birla Sun Life Mutual Fund
-119501;INF209K01UR9;;Aditya Birla Sun Life Savings Fund - Growth - Direct Plan;601.9634;28-Aug-2026
-101317;INF209K01LZ1;;Aditya Birla Sun Life Savings Fund - Growth - Regular Plan;589.6214;28-Aug-2026
-119500;INF209K01UQ1;;Aditya Birla Sun Life Savings Fund-DIRECT - DAILY IDCW;100.0140;28-Aug-2026
-119499;INF209K01US7;;Aditya Birla Sun Life Savings Fund-DIRECT - WEEKLY IDCW;100.6579;28-Aug-2026
-105888;INF209K01LY4;;Aditya Birla Sun Life Savings Fund-Regular - DAILY IDCW;100.0126;28-Aug-2026
-105887;INF209K01MA2;;Aditya Birla Sun Life Savings Fund-Regular - weekly IDCW;100.5791;28-Aug-2026
-
 HDFC Mutual Fund
 145041;;INF179KB12R1;HDFC Ultra Short Term Fund - Daily IDCW Option;10.103;28-Aug-2026
 145039;;INF179KB16Q4;HDFC Ultra Short Term Fund - Direct Plan-Daily IDCW Option;10.092;28-Aug-2026
@@ -2565,37 +2537,8 @@ Tata Mutual Fund
 146071;INF277K019S5;;TATA Ultra Short Term Fund-Regular Plan - Weekly Payout of Income Distribution cum capital withdrawal option ;10.3818;28-Aug-2026
 146070;INF277K016S1;;Tata Ultra Short Term Fund-Regular Plan-Growth;15.1736;28-Aug-2026
 
-Open Ended Schemes ( Debt Scheme - Low Duration Fund )
-
-
-Aditya Birla Sun Life Mutual Fund
-119523;INF209K01XU7;;Aditya Birla Sun Life Low duration Fund - Growth - Direct Plan;781.5353;28-Aug-2026
-119524;INF209K01XW3;;Aditya Birla Sun Life Low Duration Fund -Direct - daily IDCW;99.9886;28-Aug-2026
-119522;;INF209K01XV5;Aditya Birla Sun Life Low Duration Fund -Direct - weekly IDCW;100.6974;28-Aug-2026
-113307;;INF209KA1LP6;Aditya Birla Sun Life Low Duration Fund -Regular - DAILY IDCW;99.9692;28-Aug-2026
-103193;;INF209KA1LQ4;Aditya Birla Sun Life Low Duration Fund -REGULAR - WEEKLY IDCW;100.5499;28-Aug-2026
-103192;INF209K01LQ0;;Aditya Birla Sun Life Low Duration Fund -Regular- Growth Plan;699.0141;28-Aug-2026
-
-Tata Mutual Fund
-119863;INF277K01OK4;;Tata Treasury Advantage Fund - Direct Plan - Growth Option;4349.3135;28-Aug-2026
-103159;INF277K01MA9;;Tata Treasury Advantage Fund - Regular Plan - Growth Option;4212.8706;28-Aug-2026
-119864;;INF277K018B3;Tata Treasury Advantage Fund Direct Plan - Daily Reinvestment of IDCW Option;1003.5316;28-Aug-2026
-119957;INF277K01OL2;INF277K01OM0;Tata Treasury Advantage Fund Direct Plan - Periodic Payout of IDCW Option;2758.7636;28-Aug-2026
-119865;INF277K019B1;INF277K010C8;Tata Treasury Advantage Fund Direct Plan - Weekly Payout of IDCW Option;1008.5081;28-Aug-2026
-103160;;INF277K01LZ8;Tata Treasury Advantage Fund Regular Plan - Daily Reinvestment of IDCW Option;1003.5288;28-Aug-2026
-115464;INF277K01MC5;INF277K01ME1;Tata Treasury Advantage Fund Regular Plan - Periodic Payout of IDCW Option;2670.2321;28-Aug-2026
-103158;INF277K01MD3;INF277K01MB7;Tata Treasury Advantage Fund Regular Plan - Weekly Payout of IDCW Option;1008.4804;28-Aug-2026
-
 Open Ended Schemes ( Debt Scheme - Money Market Fund )
 
-
-Aditya Birla Sun Life Mutual Fund
-101973;;INF209K01SZ6;Aditya Birla Sun Life Money Manager Fund - Daily IDCW;100.0200;28-Aug-2026
-119513;;INF209K01UT5;Aditya Birla Sun Life Money Manager Fund - Direct - daily IDCW;100.0200;28-Aug-2026
-119512;INF209K01UV1;INF209KA1LM3;Aditya Birla Sun Life Money Manager Fund - Direct - weekly IDCW;100.2640;28-Aug-2026
-101976;INF209K01RV7;;Aditya Birla Sun Life Money Manager Fund - Growth;398.3769;28-Aug-2026
-119511;INF209K01UU3;;Aditya Birla Sun Life Money Manager Fund - Growth - Direct Plan;404.2252;28-Aug-2026
-101974;;INF209K01SY9;Aditya Birla Sun Life Money Manager Fund - WEEKLY IDCW;100.2612;28-Aug-2026
 
 Bandhan Mutual Fund
 131389;INF194KA1TG5;INF194KA1TH3;Bandhan Money Market Fund - Regular Plan - Periodic IDCW;14.2238;28-Aug-2026
@@ -2796,14 +2739,6 @@ ICICI Prudential Mutual Fund
 101758;INF109K01654;;ICICI Prudential Short Term Fund - Growth Option;64.3626;28-Aug-2026
 101165;INF109K01WL0;INF109K01647;ICICI Prudential Short Term Fund - Monthly IDCW;12.0913;28-Aug-2026
 
-Tata Mutual Fund
-119949;INF277K01QR4;;Tata Short Term Bond Fund - Direct Plan - Growth Option;56.3836;28-Aug-2026
-101548;INF277K01972;;Tata Short Term Bond Fund -Regular Plan- Growth Option;50.4713;28-Aug-2026
-119950;INF277K01QP8;INF277K01QQ6;Tata Short Term Bond Fund Direct Plan - Monthly Payout of IDCW Option;25.6104;28-Aug-2026
-133974;INF277K01P38;INF277K01P46;Tata Short Term Bond Fund- Direct Plan - Periodic Payout of IDCW Option;29.9194;28-Aug-2026
-101547;INF277K01EI9;INF277K01964;Tata Short Term Bond Fund- Regular Plan - Monthly Payout of IDCW Option;22.7931;28-Aug-2026
-133975;INF277K01P12;INF277K01P20;Tata Short Term Bond Fund- Regular Plan - Periodic Payout of IDCW Option;26.7426;28-Aug-2026
-
 Trust Mutual Fund
 149076;INF0GCD01370;;TRUSTMF Short Duration Fund-Direct Plan-Growth;1358.5312;28-Aug-2026
 149078;INF0GCD01396;INF0GCD01404;TRUSTMF Short Duration Fund-Direct Plan-Monthly Income Distribution Cum Capital Withdrawal;1161.0449;28-Aug-2026
@@ -2816,16 +2751,6 @@ Trust Mutual Fund
 
 Open Ended Schemes ( Debt Scheme - Medium Duration Fund )
 
-
-Aditya Birla Sun Life Mutual Fund
-119540;INF209KA1KN3;;Aditya Birla Sun Life Medium Term Plan - DIRECT - HALF YEARLY IDCW;15.1138;28-Aug-2026
-119538;INF209KA1KO1;;Aditya Birla Sun Life Medium Term Plan - Direct - IDCW;18.2722;28-Aug-2026
-119541;INF209KA1KP8;;Aditya Birla Sun Life Medium Term Plan - DIRECT - Quarterly IDCW;14.5099;28-Aug-2026
-119539;INF209K01XA9;;Aditya Birla Sun Life Medium Term Plan - Growth - Direct Plan;47.9642;28-Aug-2026
-111803;INF209K01603;;Aditya Birla Sun Life Medium Term Plan - Growth - Regular Plan;43.7327;28-Aug-2026
-111811;INF209K01595;INF209K01CZ0;Aditya Birla Sun Life Medium Term Plan - REGULAR - HALFYEARLY IDCW;14.1204;28-Aug-2026
-111812;INF209K01611;INF209K01DA1;Aditya Birla Sun Life Medium Term Plan - Regular - IDCW;16.6031;28-Aug-2026
-111809;INF209K01637;INF209KB1OJ2;Aditya Birla Sun Life Medium Term Plan - REGULAR - Quarterly IDCW;13.7393;28-Aug-2026
 
 Kotak Mahindra Mutual Fund
 128079;INF174K01VS1;INF174K01VU7;Kotak Medium Term Fund - Direct - Standard Income Distribution cum capital withdrawal option;27.5349;28-Aug-2026
@@ -2850,14 +2775,6 @@ UTI Mutual Fund
 Open Ended Schemes ( Debt Scheme - Medium to Long Duration Fund )
 
 
-Aditya Birla Sun Life Mutual Fund
-133446;INF209KA1WL2;INF209KA1WM0;Aditya Birla Sun Life Income Fund - Direct - IDCW;13.1554;28-Aug-2026
-119655;INF209K01R13;INF209K01WZ8;Aditya Birla Sun Life Income Fund - Direct - Quarterly IDCW;14.1239;28-Aug-2026
-119657;INF209K01WY1;;Aditya Birla Sun Life Income Fund - Growth - Direct Plan;140.8769;28-Aug-2026
-100038;INF209K01579;;Aditya Birla Sun Life Income Fund - Growth - Regular Plan;129.9876;28-Aug-2026
-133445;INF209KA1WJ6;INF209KA1WK4;Aditya Birla Sun Life Income Fund - Regular - IDCW;12.2819;28-Aug-2026
-100037;INF209K01587;INF209K01CY3;Aditya Birla Sun Life Income Fund - Regular - Quarterly IDCW;13.0883;28-Aug-2026
-
 Bank of India Mutual Fund
 119395;INF761K01850;INF761K01843;BANK OF INDIA Conservative Hybrid  Fund-Direct Plan-Quarterly IDCW;18.7666;28-Aug-2026
 119393;INF761K01819;;BANK OF INDIA Conservative Hybrid Fund Fund-Direct Plan-Growth;38.1976;28-Aug-2026
@@ -2870,27 +2787,8 @@ Bank of India Mutual Fund
 111716;INF761K01488;INF761K01470;BANK OF INDIA Conservative Hybrid Fund-Regular Plan-Monthly IDCW;18.1883;28-Aug-2026
 111713;INF761K01504;INF761K01496;BANK OF INDIA Conservative Hybrid Fund-Regular Plan-Quarterly IDCW;18.8516;28-Aug-2026
 
-Open Ended Schemes ( Debt Scheme - Long Duration Fund )
-
-
-Aditya Birla Sun Life Mutual Fund
-150484;INF209KB17J2;;Aditya Birla Sun Life Long Duration Fund-Direct Growth;13.4418;28-Aug-2026
-150485;INF209KB18J0;INF209KB19J8;Aditya Birla Sun Life Long Duration Fund-Direct IDCW Payout;10.9743;28-Aug-2026
-150482;INF209KB14J9;;Aditya Birla Sun Life Long Duration Fund-Regular Growth;13.1044;28-Aug-2026
-150483;INF209KB15J6;INF209KB16J4;Aditya Birla Sun Life Long Duration Fund-Regular IDCW Payout;10.6939;28-Aug-2026
-
 Open Ended Schemes ( Debt Scheme - Dynamic Bond )
 
-
-Aditya Birla Sun Life Mutual Fund
-119505;INF209K01N82;;Aditya Birla Sun Life Dynamic Bond Fund - Growth - Direct Plan;52.9133;28-Aug-2026
-102767;INF209K01793;;Aditya Birla Sun Life Dynamic Bond Fund - Growth - Regular Plan;48.9930;28-Aug-2026
-132918;INF209KA1TX3;;Aditya Birla Sun Life Dynamic Bond Fund -Direct - IDCW;13.2799;28-Aug-2026
-119503;INF209K01R62;;Aditya Birla Sun Life Dynamic Bond Fund -DIRECT - MONTHLY IDCW;11.2184;28-Aug-2026
-119502;INF209K01R88;;Aditya Birla Sun Life Dynamic Bond Fund -Direct - Quarterly IDCW;11.1124;28-Aug-2026
-132917;INF209KA1TV7;;Aditya Birla Sun Life Dynamic Bond Fund -Regular - IDCW;12.1851;28-Aug-2026
-111521;INF209K01801;INF209K01DG8;Aditya Birla Sun Life Dynamic Bond Fund -REGULAR - MONTHLY IDCW;10.7041;28-Aug-2026
-102766;INF209K01819;INF209K01DH6;Aditya Birla Sun Life Dynamic Bond Fund -Regular - Quarterly IDCW;10.7847;28-Aug-2026
 
 Franklin Templeton Mutual Fund
 148308;INF090I01WD3;;Franklin India Dynamic Accrual Fund - Segregated Portfolio 3 (9.50% Yes Bank Ltd CO 23Dec21) - Direct Growth Plan;0.0000;28-Aug-2026
@@ -3173,12 +3071,6 @@ Kotak Mahindra Mutual Fund
 Open Ended Schemes ( Debt Scheme - Gilt Fund )
 
 
-Aditya Birla Sun Life Mutual Fund
-119606;INF209KA1LC4;INF209K01XR3;Aditya Birla Sun Life Govenment Securities Fund -DIRECT - Quarterly IDCW;11.6145;28-Aug-2026
-100057;INF209K01AF6;INF209K01DP9;Aditya Birla Sun Life Govenment Securities Fund -Regular - Quarterly IDCW;10.8109;28-Aug-2026
-100058;INF209K01AC3;INF209K01AD1;Aditya Birla Sun Life Government Securities Fund  - Growth - Regular Plan;81.9448;28-Aug-2026
-119605;INF209K01XP7;;Aditya Birla Sun Life Government Securities Fund - Growth - Direct Plan;88.6967;28-Aug-2026
-
 Bajaj Finserv Mutual Fund
 153206;INF0QA701AP9;;Bajaj Finserv Gilt Fund - Direct - Growth;1075.8125;28-Aug-2026
 153207;INF0QA701AQ7;INF0QA701AR5;Bajaj Finserv Gilt Fund - Direct - IDCW;1075.8125;28-Aug-2026
@@ -3226,13 +3118,13 @@ ICICI Prudential Mutual Fund
 100368;INF109K01JQ6;INF109K01JP8;ICICI Prudential Gilt Fund - IDCW;17.7571;28-Aug-2026
 
 Kotak Mahindra Mutual Fund
-100281;INF174K01FL9;;Kotak Gilt-Investment  Provident Fund and Trust-Growth;99.459;28-Aug-2026
-119757;INF174K01KM7;;Kotak Gilt-Investment  Provident Fund and Trust-Growth - Direct;114.3324;28-Aug-2026
-100280;INF174K01FM7;;Kotak Gilt-Investment  Provident Fund and Trust-Payout of Income Distribution cum capital withdrawal option;11.812;28-Aug-2026
-100265;INF174K01FI5;;Kotak Gilt-Investment Regular-Growth;97.2161;28-Aug-2026
-119759;INF174K01KE4;;Kotak Gilt-Investment Regular-Growth - Direct;111.6273;28-Aug-2026
-100264;INF174K01FK1;INF174K01FJ3;Kotak Gilt-Investment Regular-Payout of Income Distribution cum capital withdrawal option;18.9963;28-Aug-2026
-119758;INF174K01KF1;;Kotak Gilt-Investment Regular-Payout of Income Distribution cum capital withdrawal option - Direct;24.5638;28-Aug-2026
+100281;INF174K01FL9;;Kotak Gilt Fund -Investment  Provident Fund and Trust-Growth;99.459;28-Aug-2026
+119757;INF174K01KM7;;Kotak Gilt Fund -Investment  Provident Fund and Trust-Growth - Direct;114.3324;28-Aug-2026
+100280;INF174K01FM7;;Kotak Gilt Fund -Investment  Provident Fund and Trust-Payout of Income Distribution cum capital withdrawal option;11.812;28-Aug-2026
+100265;INF174K01FI5;;Kotak Gilt Fund -Investment Regular-Growth;97.2161;28-Aug-2026
+119759;INF174K01KE4;;Kotak Gilt Fund -Investment Regular-Growth - Direct;111.6273;28-Aug-2026
+100264;INF174K01FK1;INF174K01FJ3;Kotak Gilt Fund -Investment Regular-Payout of Income Distribution cum capital withdrawal option;18.9963;28-Aug-2026
+119758;INF174K01KF1;;Kotak Gilt Fund -Investment Regular-Payout of Income Distribution cum capital withdrawal option - Direct;24.5638;28-Aug-2026
 
 Nippon India Mutual Fund
 118670;INF204K01XQ6;INF204K01XR4;NIPPON INDIA GILT  FUND - Direct Plan - MONTHLY IDCW Option;11.7167;28-Aug-2026
@@ -3271,12 +3163,6 @@ SBI Mutual Fund
 101001;INF200K01982;;SBI GILT FUND - REGULAR PLAN - GROWTH;68.3289;28-Aug-2026
 100999;INF200K01990;INF200K01AA6;SBI Gilt Fund - Regular Plan - Income Distribution cum Capital Withdrawal Option (IDCW);21.0109;28-Aug-2026
 
-Tata Mutual Fund
-119954;INF277K01OV1;INF277K01OW9;Tata Gilt Securities Fund - Direct Plan - Payout of IDCW Option;25.6297;28-Aug-2026
-101049;INF277K01DN1;INF277K01535;Tata Gilt Securities Fund - Regular Plan - Payout of IDCW Option;22.2534;28-Aug-2026
-101042;INF277K01519;;Tata Gilt Securities Fund -Regular Plan- Growth Option;80.2768;28-Aug-2026
-119953;INF277K01OX7;;Tata Gilt Securities Fund- Direct Plan - Growth Option;91.0197;28-Aug-2026
-
 Union Mutual Fund
 150408;INF582M01IA6;INF582M01IB4;Union Gilt Fund - Direct Plan - Annual IDCW Option;11.7874;28-Aug-2026
 150407;INF582M01HW2;;Union Gilt Fund - Direct Plan - Growth Option;12.4793;28-Aug-2026
@@ -3285,41 +3171,8 @@ Union Mutual Fund
 150405;INF582M01ID0;;Union Gilt Fund - Regular Plan - Growth Option;12.2362;28-Aug-2026
 150457;INF582M01IE8;INF582M01IF5;Union Gilt Fund - Regular Plan - Half-yearly IDCW Option;11.8782;28-Aug-2026
 
-Open Ended Schemes ( Debt Scheme - Floater Fund )
-
-
-Aditya Birla Sun Life Mutual Fund
-122645;INF209K01UW9;;Aditya Birla Sun Life Floating Rate Fund-Direct - daily IDCW;100.0930;28-Aug-2026
-122648;INF209K01UY5;;Aditya Birla Sun Life Floating Rate Fund-Direct - weekly IDCW;100.8532;28-Aug-2026
-122646;INF209K01UX7;;Aditya Birla Sun Life Floating Rate Fund-Direct Plan-Growth;384.1691;28-Aug-2026
-122643;;INF209KA1LN1;Aditya Birla Sun Life Floating Rate Fund-Regular - DAILY IDCW;100.0997;28-Aug-2026
-122647;;INF209K01MH7;Aditya Birla Sun Life Floating Rate Fund-REGULAR - WEEKLY IDCW;100.7706;28-Aug-2026
-122644;INF209K01MG9;;Aditya Birla Sun Life Floating Rate Fund-Regular Plan-Growth;372.9507;28-Aug-2026
-
-Tata Mutual Fund
-149007;INF277KA1026;;Tata Floating Rate Fund -Direct Plan-Growth;13.9450;28-Aug-2026
-149037;;INF277KA1075;Tata Floating Rate Fund-Direct Plan-IDCW Monthly Dividend Reinvestment;13.9450;28-Aug-2026
-149000;INF277KA1042;;Tata Floating Rate Fund-Direct Plan-IDCW Monthly Payout;13.9450;28-Aug-2026
-149033;;INF277KA1067;Tata Floating Rate Fund-Direct Plan-IDCW Periodic Dividend Reinvestment;13.9450;28-Aug-2026
-149002;INF277KA1034;;Tata Floating Rate Fund-Direct Plan-IDCW Periodic Payout;13.9450;28-Aug-2026
-149034;;INF277KA1083;Tata Floating Rate Fund-Direct Plan-IDCW Quarterly Dividend Reinvestment;13.9450;28-Aug-2026
-149001;INF277KA1059;;Tata Floating Rate Fund-Direct Plan-IDCW Quarterly Payout;13.9450;28-Aug-2026
-149003;INF277KA1091;;Tata Floating Rate Fund-Regular Plan-Growth;13.6391;28-Aug-2026
-149035;;INF277KA1141;Tata Floating Rate Fund-Regular Plan-IDCW Monthly Dividend Reinvestment;13.6391;28-Aug-2026
-149004;INF277KA1117;;Tata Floating Rate Fund-Regular Plan-IDCW Monthly Payout;13.6391;28-Aug-2026
-149036;;INF277KA1133;Tata Floating Rate Fund-Regular Plan-IDCW Periodic Dividend Reinvestment;13.6391;28-Aug-2026
-149006;INF277KA1109;;Tata Floating Rate Fund-Regular Plan-IDCW Periodic Payout;13.6391;28-Aug-2026
-149038;;INF277KA1158;Tata Floating Rate Fund-Regular Plan-IDCW Quarterly Dividend Reinvestment;13.6391;28-Aug-2026
-149005;INF277KA1125;;Tata Floating Rate Fund-Regular Plan-IDCW Quarterly Payout;13.6391;28-Aug-2026
-
 Open Ended Schemes ( Hybrid Scheme - Conservative Hybrid Fund )
 
-
-Aditya Birla Sun Life Mutual Fund
-120550;INF209K01R47;INF209K01XI2;Aditya Birla Sun Life Regular Savings Fund - DIRECT - MONTHLY IDCW;27.2513;28-Aug-2026
-120705;INF209K01XH4;;Aditya Birla Sun Life Regular Savings Fund - Growth / Payment - Direct Plan;79.5864;28-Aug-2026
-101818;INF209K01751;;Aditya Birla Sun Life Regular Savings Fund - Growth / Payment - Regular Plan;70.5302;28-Aug-2026
-101816;INF209K01769;INF209K01DF0;Aditya Birla Sun Life Regular Savings Fund - REGULAR - MONTHLY IDCW;16.5250;28-Aug-2026
 
 Bandhan Mutual Fund
 112353;INF194K01RW9;;BANDHAN Conservative Hybrid Fund - Regular Plan - Growth;33.0782;28-Aug-2026
@@ -3402,12 +3255,6 @@ ICICI Prudential Mutual Fund
 
 Open Ended Schemes ( Hybrid Scheme - Aggressive Hybrid Fund )
 
-
-Aditya Birla Sun Life Mutual Fund
-120517;INF209K01ZC0;;Aditya Birla Sun Life Equity Hybrid'95 Fund - Direct Plan-Growth;1770.56;28-Aug-2026
-103155;INF209K01BT5;;Aditya Birla Sun Life Equity Hybrid'95 Fund - Regular Plan-Growth;1567.76;28-Aug-2026
-120518;INF209KA1LH3;INF209K01ZB2;Aditya Birla Sun Life Equity Hybrid'95 Fund -DIRECT - IDCW;296.02;28-Aug-2026
-103154;INF209K01BS7;INF209K01EE1;Aditya Birla Sun Life Equity Hybrid'95 Fund -Regular - IDCW;171.81;28-Aug-2026
 
 Bandhan Mutual Fund
 140382;INF194KA1U56;;Bandhan Aggressive Hybrid Fund-Direct Plan Growth;32.463;28-Aug-2026
@@ -6663,6 +6510,14 @@ WhiteOak Capital Mutual Fund
 Open Ended Schemes ( Income/Debt Oriented Schemes - Ultra Short Term Fund )
 
 
+Aditya Birla Sun Life Mutual Fund
+119501;INF209K01UR9;;Aditya Birla Sun Life Ultra Short Term Fund - Growth - Direct Plan;601.9634;28-Aug-2026
+101317;INF209K01LZ1;;Aditya Birla Sun Life Ultra Short Term Fund - Growth - Regular Plan;589.6214;28-Aug-2026
+119500;INF209K01UQ1;;Aditya Birla Sun Life Ultra Short Term Fund-DIRECT - DAILY IDCW;100.0140;28-Aug-2026
+119499;INF209K01US7;;Aditya Birla Sun Life Ultra Short Term Fund-DIRECT - WEEKLY IDCW;100.6579;28-Aug-2026
+105888;INF209K01LY4;;Aditya Birla Sun Life Ultra Short Term Fund-Regular - DAILY IDCW;100.0126;28-Aug-2026
+105887;INF209K01MA2;;Aditya Birla Sun Life Ultra Short Term Fund-Regular - weekly IDCW;100.5791;28-Aug-2026
+
 Axis Mutual Fund
 144753;;INF846K01F57;Axis Ultra Short Duration Fund - Direct Plan - Daily IDCW;10.0338;28-Aug-2026
 144755;INF846K01F99;INF846K01F81;Axis Ultra Short Duration Fund - Direct Plan - Monthly IDCW;10.0223;28-Aug-2026
@@ -6888,6 +6743,14 @@ WhiteOak Capital Mutual Fund
 
 Open Ended Schemes ( Income/Debt Oriented Schemes - Ultra Short to Short Term Fund )
 
+
+Aditya Birla Sun Life Mutual Fund
+119523;INF209K01XU7;;Aditya Birla Sun Life Ultra Short to Short Term Fund - Growth - Direct Plan;781.5353;28-Aug-2026
+119524;INF209K01XW3;;Aditya Birla Sun Life Ultra Short to Short Term Fund -Direct - daily IDCW;99.9886;28-Aug-2026
+119522;;INF209K01XV5;Aditya Birla Sun Life Ultra Short to Short Term Fund -Direct - weekly IDCW;100.6974;28-Aug-2026
+113307;;INF209KA1LP6;Aditya Birla Sun Life Ultra Short to Short Term Fund -Regular - DAILY IDCW;99.9692;28-Aug-2026
+103193;;INF209KA1LQ4;Aditya Birla Sun Life Ultra Short to Short Term Fund -REGULAR - WEEKLY IDCW;100.5499;28-Aug-2026
+103192;INF209K01LQ0;;Aditya Birla Sun Life Ultra Short to Short Term Fund -Regular- Growth Plan;699.0141;28-Aug-2026
 
 Axis Mutual Fund
 120515;;INF846K01EQ4;Axis Treasury Advantage Fund - Direct Plan - Daily IDCW;1012.4737;28-Aug-2026
@@ -7122,6 +6985,16 @@ Sundaram Mutual Fund
 149519;INF173K01DG6;;Sundaram Ultra Short to Short Term Fund Regular Plan - Growth;3681.0606;28-Aug-2026
 149521;INF173K01DJ0;INF173K01DK8;Sundaram Ultra Short to Short Term Fund Regular Plan - IDCW;1096.0365;28-Aug-2026
 
+Tata Mutual Fund
+119863;INF277K01OK4;;Tata Treasury Advantage Fund - Direct Plan - Growth Option;4349.3135;28-Aug-2026
+103159;INF277K01MA9;;Tata Treasury Advantage Fund - Regular Plan - Growth Option;4212.8706;28-Aug-2026
+119864;;INF277K018B3;Tata Treasury Advantage Fund Direct Plan - Daily Reinvestment of IDCW Option;1003.5316;28-Aug-2026
+119957;INF277K01OL2;INF277K01OM0;Tata Treasury Advantage Fund Direct Plan - Periodic Payout of IDCW Option;2758.7636;28-Aug-2026
+119865;INF277K019B1;INF277K010C8;Tata Treasury Advantage Fund Direct Plan - Weekly Payout of IDCW Option;1008.5081;28-Aug-2026
+103160;;INF277K01LZ8;Tata Treasury Advantage Fund Regular Plan - Daily Reinvestment of IDCW Option;1003.5288;28-Aug-2026
+115464;INF277K01MC5;INF277K01ME1;Tata Treasury Advantage Fund Regular Plan - Periodic Payout of IDCW Option;2670.2321;28-Aug-2026
+103158;INF277K01MD3;INF277K01MB7;Tata Treasury Advantage Fund Regular Plan - Weekly Payout of IDCW Option;1008.4804;28-Aug-2026
+
 Union Mutual Fund
 153654;INF582M01LQ6;;Union Ultra Short to Short Term Fund - Direct Plan - Growth Option;10.6595;28-Aug-2026
 153655;INF582M01LR4;INF582M01LS2;Union Ultra Short to Short Term Fund - Direct Plan - IDCW Option;10.2082;28-Aug-2026
@@ -7157,6 +7030,14 @@ UTI Mutual Fund
 
 Open Ended Schemes ( Income/Debt Oriented Schemes - Money Market Fund )
 
+
+Aditya Birla Sun Life Mutual Fund
+101973;;INF209K01SZ6;Aditya Birla Sun Life Money Market Fund - Daily IDCW;100.0200;28-Aug-2026
+119513;;INF209K01UT5;Aditya Birla Sun Life Money Market Fund - Direct - daily IDCW;100.0200;28-Aug-2026
+119512;INF209K01UV1;INF209KA1LM3;Aditya Birla Sun Life Money Market Fund - Direct - weekly IDCW;100.2640;28-Aug-2026
+101976;INF209K01RV7;;Aditya Birla Sun Life Money Market Fund - Growth;398.3769;28-Aug-2026
+119511;INF209K01UU3;;Aditya Birla Sun Life Money Market Fund - Growth - Direct Plan;404.2252;28-Aug-2026
+101974;;INF209K01SY9;Aditya Birla Sun Life Money Market Fund - WEEKLY IDCW;100.2612;28-Aug-2026
 
 Axis Mutual Fund
 147576;INF846K01Q96;INF846K01Q88;Axis Money Market Fund - Direct Plan - Annual IDCW;1319.7299;28-Aug-2026
@@ -7442,24 +7323,42 @@ Sundaram Mutual Fund
 149585;INF173K01BA3;;Sundaram Short Duration Fund (Formerly Known as Principal Short Term Debt Fund)- Growth Plan;47.0176;28-Aug-2026
 149586;INF173K01BB1;INF173K01BC9;Sundaram Short Duration Fund (Formerly Known as Principal Short Term Debt Fund)- Income Distribution CUM Capital Withdrawal Option (IDCW);13.0188;28-Aug-2026
 
+Tata Mutual Fund
+119949;INF277K01QR4;;Tata Short Term Bond Fund - Direct Plan - Growth Option;56.3836;28-Aug-2026
+101548;INF277K01972;;Tata Short Term Bond Fund -Regular Plan- Growth Option;50.4713;28-Aug-2026
+119950;INF277K01QP8;INF277K01QQ6;Tata Short Term Bond Fund Direct Plan - Monthly Payout of IDCW Option;25.6104;28-Aug-2026
+133974;INF277K01P38;INF277K01P46;Tata Short Term Bond Fund- Direct Plan - Periodic Payout of IDCW Option;29.9194;28-Aug-2026
+101547;INF277K01EI9;INF277K01964;Tata Short Term Bond Fund- Regular Plan - Monthly Payout of IDCW Option;22.7931;28-Aug-2026
+133975;INF277K01P12;INF277K01P20;Tata Short Term Bond Fund- Regular Plan - Periodic Payout of IDCW Option;26.7426;28-Aug-2026
+
 UTI Mutual Fund
 135497;INF789FA1R33;INF789FA1R41;UTI Short Term Fund - Direct Plan - Annual IDCW;13.6515;28-Aug-2026
-124962;INF789FB1T70;INF789FB1T62;UTI Short Term Fund - Direct Plan - Flexi IDCW;19.8853;28-Aug-2026
+124962;INF789FB1T70;INF789FB1T62;UTI Short Term Fund - Direct Plan - Discontinued Flexi IDCW;19.8853;28-Aug-2026
+120719;INF789FA1R66;INF789FA1R74;UTI Short Term Fund - Direct Plan - Discontinued Quarterly IDCW;20.3566;28-Aug-2026
 120718;INF789F01XY0;;UTI Short Term Fund - Direct Plan - Growth Option;36.0021;28-Aug-2026
 131425;INF789FA1R17;INF789FA1R25;UTI Short Term Fund - Direct Plan - Half Yearly Dividend Option;14.738;28-Aug-2026
 131548;INF789F01XZ7;INF789F01YA8;UTI Short Term Fund - Direct Plan - Monthly IDCW;10.6322;28-Aug-2026
-120719;INF789FA1R66;INF789FA1R74;UTI Short Term Fund - Direct Plan - Quarterly IDCW;20.3566;28-Aug-2026
 106383;INF789F01AH3;INF789F01AI1;UTI Short Term Fund - Discontinued Regular Option - Dividend Sub Option;25.0491;28-Aug-2026
 106384;INF789F01AJ9;;UTI Short Term Fund - Discontinued Regular Option -Growth Sub Option;47.3833;28-Aug-2026
 134517;INF789FA1Q91;INF789FA1R09;UTI Short Term Fund - Regular Plan - Annual IDCW;14.8858;28-Aug-2026
-125045;INF789FB1T54;INF789FB1T47;UTI Short Term Fund - Regular Plan - Flexi IDCW;19.2206;28-Aug-2026
+125045;INF789FB1T54;INF789FB1T47;UTI Short Term Fund - Regular Plan - Discontinued Flexi IDCW;19.2206;28-Aug-2026
+106980;INF789FC1GD5;INF789FA1R58;UTI Short Term Fund - Regular Plan - Discontinued Quarterly IDCW;17.4185;28-Aug-2026
 106624;INF789F01QA4;;UTI Short Term Fund - Regular Plan - Growth Option;33.6609;28-Aug-2026
 131424;INF789FA1Q75;INF789FA1Q83;UTI Short Term Fund - Regular Plan - Half-Yearly IDCW;14.4188;28-Aug-2026
 131547;INF789F01QB2;INF789F01QC0;UTI Short Term Fund - Regular Plan - Monthly IDCW;11.9538;28-Aug-2026
-106980;INF789FC1GD5;INF789FA1R58;UTI Short Term Fund - Regular Plan - Quarterly IDCW;17.4185;28-Aug-2026
 
 Open Ended Schemes ( Income/Debt Oriented Schemes - Medium Term Fund )
 
+
+Aditya Birla Sun Life Mutual Fund
+119541;INF209KA1KP8;;Aditya Birla Sun Life Medium Term Fund - DIRECT - Quarterly IDCW;14.5099;28-Aug-2026
+119539;INF209K01XA9;;Aditya Birla Sun Life Medium Term Fund - Growth - Direct Plan;47.9642;28-Aug-2026
+111812;INF209K01611;INF209K01DA1;Aditya Birla Sun Life Medium Term Fund - Regular - IDCW;16.6031;28-Aug-2026
+119540;INF209KA1KN3;;Aditya Birla Sun Life Medium Term Fund- DIRECT - HALF YEARLY IDCW;15.1138;28-Aug-2026
+119538;INF209KA1KO1;;Aditya Birla Sun Life Medium Term Fund- Direct - IDCW;18.2722;28-Aug-2026
+111803;INF209K01603;;Aditya Birla Sun Life Medium Term Fund- Growth - Regular Plan;43.7327;28-Aug-2026
+111811;INF209K01595;INF209K01CZ0;Aditya Birla Sun Life Medium Term Fund- REGULAR - HALFYEARLY IDCW;14.1204;28-Aug-2026
+111809;INF209K01637;INF209KB1OJ2;Aditya Birla Sun Life Medium Term Fund- REGULAR - Quarterly IDCW;13.7393;28-Aug-2026
 
 Axis Mutual Fund
 120475;INF846K01DT0;;Axis Strategic Bond Fund - Direct Plan - Growth Option;33.3226;28-Aug-2026
@@ -7552,18 +7451,26 @@ Sundaram Mutual Fund
 
 UTI Mutual Fund
 134505;INF789FB1KL1;INF789FB1KM9;UTI Medium Term Fund - Direct Plan - Annual IDCW;15.3877;28-Aug-2026
+134502;INF789FB1KH9;INF789FB1KI7;UTI Medium Term Fund - Direct Plan - Discontinued Quarterly IDCW;15.5446;28-Aug-2026
 134503;INF789FB1KE6;;UTI Medium Term Fund - Direct Plan - Growth Option;20.7753;28-Aug-2026
 134504;INF789FB1KJ5;INF789FB1KK3;UTI Medium Term Fund - Direct Plan - Half-Yearly IDCW;15.5611;28-Aug-2026
 134501;INF789FB1KF3;INF789FB1KG1;UTI Medium Term Fund - Direct Plan - Monthly IDCW;10.4671;28-Aug-2026
-134502;INF789FB1KH9;INF789FB1KI7;UTI Medium Term Fund - Direct Plan - Quarterly IDCW;15.5446;28-Aug-2026
 134500;INF789FB1KA4;INF789FB1KB2;UTI Medium Term Fund - Regular Plan - Annual IDCW;14.1016;28-Aug-2026
-134498;INF789FB1KC0;INF789FB1KD8;UTI Medium Term Fund - Regular Plan - Flexi IDCW;14.2037;28-Aug-2026
+134498;INF789FB1KC0;INF789FB1KD8;UTI Medium Term Fund - Regular Plan - Dicontinued Flexi IDCW;14.2037;28-Aug-2026
 134499;INF789FB1JU4;;UTI Medium Term Fund - Regular Plan - Growth Option;19.2262;28-Aug-2026
 134497;INF789FB1JY6;INF789FB1JZ3;UTI Medium Term Fund - Regular Plan - Half-Yearly IDCW;10.2258;28-Aug-2026
 134495;INF789FB1JV2;INF789FB1KP2;UTI Medium Term Fund - Regular Plan - Monthly IDCW;13.8655;28-Aug-2026
 
 Open Ended Schemes ( Income/Debt Oriented Schemes - Medium to Long Term Fund )
 
+
+Aditya Birla Sun Life Mutual Fund
+133446;INF209KA1WL2;INF209KA1WM0;Aditya Birla Sun Life Medium to Long Term Fund - Direct - IDCW;13.1554;28-Aug-2026
+119655;INF209K01R13;INF209K01WZ8;Aditya Birla Sun Life Medium to Long Term Fund - Direct - Quarterly IDCW;14.1239;28-Aug-2026
+119657;INF209K01WY1;;Aditya Birla Sun Life Medium to Long Term Fund - Growth - Direct Plan;140.8769;28-Aug-2026
+100038;INF209K01579;;Aditya Birla Sun Life Medium to Long Term Fund - Growth - Regular Plan;129.9876;28-Aug-2026
+133445;INF209KA1WJ6;INF209KA1WK4;Aditya Birla Sun Life Medium to Long Term Fund - Regular - IDCW;12.2819;28-Aug-2026
+100037;INF209K01587;INF209K01CY3;Aditya Birla Sun Life Medium to Long Term Fund - Regular - Quarterly IDCW;13.0883;28-Aug-2026
 
 Bandhan Mutual Fund
 118393;INF194K01R77;INF194K01R69;Bandhan Medium to Long Term Fund - Direct Plan - Annual IDCW;16.3771;28-Aug-2026
@@ -7664,18 +7571,24 @@ SBI Mutual Fund
 
 UTI Mutual Fund
 139339;INF789FA1T80;;UTI Medium to Long Term Fund - Direct Plan - Annual IDCW;13.3905;28-Aug-2026
-133280;INF789FA1U04;INF789FA1U12;UTI Medium to Long Term Fund - Direct Plan - Flexi IDCW;16.229;28-Aug-2026
+133280;INF789FA1U04;INF789FA1U12;UTI Medium to Long Term Fund - Direct Plan - Discontinued Flexi IDCW;16.229;28-Aug-2026
+120690;INF789F01SO1;INF789F01SP8;UTI Medium to Long Term Fund - Direct Plan - Discontinued Quarterly IDCW;26.3249;28-Aug-2026
 134998;INF789FA1T64;INF789FA1T72;UTI Medium to Long Term Fund - Direct Plan - Half-Yearly IDCW;15.619;28-Aug-2026
-120690;INF789F01SO1;INF789F01SP8;UTI Medium to Long Term Fund - Direct Plan - Quarterly IDCW;26.3249;28-Aug-2026
 133869;INF789FA1T23;INF789FA1T31;UTI Medium to Long Term Fund - Regular Plan - Annual IDCW;13.1468;28-Aug-2026
-133872;INF789FA1T49;INF789FA1T56;UTI Medium to Long Term Fund - Regular Plan - Flexi IDCW;14.8228;28-Aug-2026
+133872;INF789FA1T49;INF789FA1T56;UTI Medium to Long Term Fund - Regular Plan - Discontinued Flexi IDCW;14.8228;28-Aug-2026
+100742;INF789F01380;INF789F01398;UTI Medium to Long Term Fund - Regular Plan - Discontinued Quarterly IDCW;19.579;28-Aug-2026
 135581;INF789FA1T07;INF789FA1T15;UTI Medium to Long Term Fund - Regular Plan - Half-Yearly IDCW;15.0607;28-Aug-2026
-100742;INF789F01380;INF789F01398;UTI Medium to Long Term Fund - Regular Plan - Quarterly IDCW;19.579;28-Aug-2026
 100741;INF789F01406;;UTI Medium to Long Term Fund- Regular Plan - Growth;76.2313;28-Aug-2026
 120689;INF789F01SQ6;;UTI Medium to Long Term Fund-Growth - Direct;83.4165;28-Aug-2026
 
 Open Ended Schemes ( Income/Debt Oriented Schemes - Long Term Fund )
 
+
+Aditya Birla Sun Life Mutual Fund
+150484;INF209KB17J2;;Aditya Birla Sun Life Long Term Fund-Direct Growth;13.4418;28-Aug-2026
+150485;INF209KB18J0;INF209KB19J8;Aditya Birla Sun Life Long Term Fund-Direct IDCW Payout;10.9743;28-Aug-2026
+150482;INF209KB14J9;;Aditya Birla Sun Life Long Term Fund-Regular Growth;13.1044;28-Aug-2026
+150483;INF209KB15J6;INF209KB16J4;Aditya Birla Sun Life Long Term Fund-Regular IDCW Payout;10.6939;28-Aug-2026
 
 Axis Mutual Fund
 151205;INF846K017M4;INF846K019M0;Axis Long Duration Fund - Direct Plan - Annual IDCW;1257.8645;28-Aug-2026
@@ -7769,6 +7682,16 @@ Open Ended Schemes ( Income/Debt Oriented Schemes - Dynamic Term Fund )
 122720;INF579M01225;INF579M01258;360 ONE Dynamic Term Fund Regular Plan Half Yearly Dividend;23.3635;28-Aug-2026
 122719;INF579M01209;INF579M01233;360 ONE Dynamic Term Fund Regular Plan Monthly Dividend;13.0882;28-Aug-2026
 122712;INF579M01217;INF579M01241;360 ONE Dynamic Term Fund Regular Plan Quarterly Dividend;23.3636;28-Aug-2026
+
+Aditya Birla Sun Life Mutual Fund
+119505;INF209K01N82;;Aditya Birla Sun Life Dynamic Term Fund - Growth - Direct Plan;52.9133;28-Aug-2026
+102767;INF209K01793;;Aditya Birla Sun Life Dynamic Term Fund - Growth - Regular Plan;48.9930;28-Aug-2026
+132918;INF209KA1TX3;;Aditya Birla Sun Life Dynamic Term Fund -Direct - IDCW;13.2799;28-Aug-2026
+119503;INF209K01R62;;Aditya Birla Sun Life Dynamic Term Fund -DIRECT - MONTHLY IDCW;11.2184;28-Aug-2026
+119502;INF209K01R88;;Aditya Birla Sun Life Dynamic Term Fund -Direct - Quarterly IDCW;11.1124;28-Aug-2026
+132917;INF209KA1TV7;;Aditya Birla Sun Life Dynamic Term Fund -Regular - IDCW;12.1851;28-Aug-2026
+111521;INF209K01801;INF209K01DG8;Aditya Birla Sun Life Dynamic Term Fund -REGULAR - MONTHLY IDCW;10.7041;28-Aug-2026
+102766;INF209K01819;INF209K01DH6;Aditya Birla Sun Life Dynamic Term Fund -Regular - Quarterly IDCW;10.7847;28-Aug-2026
 
 Axis Mutual Fund
 120451;INF846K01DI3;;Axis Dynamic Bond Fund - Direct Plan - Growth Option;34.7743;28-Aug-2026
@@ -7938,15 +7861,15 @@ Union Mutual Fund
 
 UTI Mutual Fund
 135536;INF789FA1S65;INF789FA1S73;UTI Dynamic Term Fund - Direct Plan - Annual IDCW;15.0954;28-Aug-2026
-133180;INF789FA1S81;INF789FA1S99;UTI Dynamic Term Fund - Direct Plan - Flexi IDCW;17.8567;28-Aug-2026
+133180;INF789FA1S81;INF789FA1S99;UTI Dynamic Term Fund - Direct Plan - Discontinued Flexi IDCW;17.8567;28-Aug-2026
+120763;INF789F01XB8;INF789F01XC6;UTI Dynamic Term Fund - Direct Plan - Discontinued Quarterly IDCW;27.3818;28-Aug-2026
 120762;INF789F01XD4;;UTI Dynamic Term Fund - Direct Plan - Growth Option;35.5819;28-Aug-2026
 134788;INF789FA1S40;INF789FA1S57;UTI Dynamic Term Fund - Direct Plan - Half-Yearly IDCW;17.5149;28-Aug-2026
-120763;INF789F01XB8;INF789F01XC6;UTI Dynamic Term Fund - Direct Plan - Quarterly IDCW;27.3818;28-Aug-2026
 133852;INF789FA1S08;INF789FA1S16;UTI Dynamic Term Fund - Regular Plan - Annual IDCW;13.9136;28-Aug-2026
-135336;INF789FA1S24;INF789FA1S32;UTI Dynamic Term Fund - Regular Plan - Flexi IDCW;17.1876;28-Aug-2026
+135336;INF789FA1S24;INF789FA1S32;UTI Dynamic Term Fund - Regular Plan - Discontinued Flexi IDCW;17.1876;28-Aug-2026
+113078;INF789F01JO0;INF789F01JP7;UTI Dynamic Term Fund - Regular Plan - Discontinued Quarterly IDCW;17.6561;28-Aug-2026
 113077;INF789F01JQ5;;UTI Dynamic Term Fund - Regular Plan - Growth Option;32.4268;28-Aug-2026
 139181;INF789FA1R82;INF789FA1R90;UTI Dynamic Term Fund - Regular Plan - Half-Yearly IDCW;15.9791;28-Aug-2026
-113078;INF789F01JO0;INF789F01JP7;UTI Dynamic Term Fund - Regular Plan - Quarterly IDCW;17.6561;28-Aug-2026
 
 Open Ended Schemes ( Income/Debt Oriented Schemes - Corporate Bond Fund )
 
@@ -8020,15 +7943,15 @@ Mirae Asset Mutual Fund
 
 UTI Mutual Fund
 144344;INF789F1A587;INF789F1A595;UTI Corporate Bond Fund - Direct Plan - Annual IDCW;13.8856;28-Aug-2026
-144341;INF789F1A603;INF789F1A611;UTI Corporate Bond Fund - Direct Plan - Flexi IDCW;15.7263;28-Aug-2026
+144341;INF789F1A603;INF789F1A611;UTI Corporate Bond Fund - Direct Plan - Discontinued Flexi IDCW;15.7263;28-Aug-2026
+144346;INF789F1A546;INF789F1A553;UTI Corporate Bond Fund - Direct Plan - Discontinued Quarterly IDCW;15.6053;28-Aug-2026
 144339;INF789F1A538;;UTI Corporate Bond Fund - Direct Plan - Growth Option;17.8427;28-Aug-2026
 144340;INF789F1A561;INF789F1A579;UTI Corporate Bond Fund - Direct Plan - Half-Yearly IDCW;15.2461;28-Aug-2026
-144346;INF789F1A546;INF789F1A553;UTI Corporate Bond Fund - Direct Plan - Quarterly IDCW;15.6053;28-Aug-2026
 144337;INF789F1A496;INF789F1A504;UTI Corporate Bond Fund - Regular Plan - Annual IDCW;13.4915;28-Aug-2026
-144338;INF789F1A512;INF789F1A520;UTI Corporate Bond Fund - Regular Plan - Flexi IDCW;15.3218;28-Aug-2026
+144338;INF789F1A512;INF789F1A520;UTI Corporate Bond Fund - Regular Plan - Discontinued Flexi IDCW;15.3218;28-Aug-2026
+144342;INF789F1A454;INF789F1A462;UTI Corporate Bond Fund - Regular Plan - Discontinued Quarterly IDCW;15.1306;28-Aug-2026
 144345;INF789F1A447;;UTI Corporate Bond Fund - Regular Plan - Growth Option;17.4002;28-Aug-2026
 144343;INF789F1A470;INF789F1A488;UTI Corporate Bond Fund - Regular Plan - Half-Yearly IDCW;14.7019;28-Aug-2026
-144342;INF789F1A454;INF789F1A462;UTI Corporate Bond Fund - Regular Plan - Quarterly IDCW;15.1306;28-Aug-2026
 
 Open Ended Schemes ( Income/Debt Oriented Schemes - Credit Risk Fund )
 
@@ -8069,16 +7992,16 @@ Invesco Mutual Fund
 UTI Mutual Fund
 117981;INF789F01QZ1;;UTI Credit Risk Fund  - Regular Plan - Growth Option;18.2926;28-Aug-2026
 135290;INF789FB1U28;INF789FB1U36;UTI Credit Risk Fund - Direct Plan - Annual IDCW;13.2179;28-Aug-2026
-136302;INF789FB1U44;INF789FB1U51;UTI Credit Risk Fund - Direct Plan - Flexi IDCW;13.2221;28-Aug-2026
+136302;INF789FB1U44;INF789FB1U51;UTI Credit Risk Fund - Direct Plan - Discontinued Flexi IDCW;13.2221;28-Aug-2026
+120765;INF789F01YC4;INF789F01YD2;UTI Credit Risk Fund - Direct Plan - Discontinued Quarterly IDCW;14.7016;28-Aug-2026
 120764;INF789F01YB6;;UTI Credit Risk Fund - Direct Plan - Growth Option;20.834;28-Aug-2026
 135418;INF789FA1W02;INF789FA1W10;UTI Credit Risk Fund - Direct Plan - Half-Yearly IDCW;13.271;28-Aug-2026
 131419;INF789FB1U02;INF789FB1U10;UTI Credit Risk Fund - Direct Plan - Monthly IDCW;11.3342;28-Aug-2026
-120765;INF789F01YC4;INF789F01YD2;UTI Credit Risk Fund - Direct Plan - Quarterly IDCW;14.7016;28-Aug-2026
 133344;INF789FA1V60;INF789FA1V78;UTI Credit Risk Fund - Regular Plan - Annual IDCW;12.2063;28-Aug-2026
-135051;INF789FA1V86;INF789FA1V94;UTI Credit Risk Fund - Regular Plan - Flexi IDCW;11.8748;28-Aug-2026
+135051;INF789FA1V86;INF789FA1V94;UTI Credit Risk Fund - Regular Plan - Discontinued Flexi IDCW;11.8748;28-Aug-2026
+117982;INF789F01RA2;INF789F01RB0;UTI Credit Risk Fund - Regular Plan - Discontinued Quarterly IDCW;12.9936;28-Aug-2026
 135419;INF789FA1V45;INF789FA1V52;UTI Credit Risk Fund - Regular Plan - Half-Yearly IDCW;12.271;28-Aug-2026
 131418;INF789FB1T88;INF789FB1T96;UTI Credit Risk Fund - Regular Plan - Monthly IDCW;10.985;28-Aug-2026
-117982;INF789F01RA2;INF789F01RB0;UTI Credit Risk Fund - Regular Plan - Quarterly IDCW;12.9936;28-Aug-2026
 
 Open Ended Schemes ( Income/Debt Oriented Schemes - Banking and PSU Debt Fund )
 
@@ -8220,20 +8143,26 @@ Sundaram Mutual Fund
 
 UTI Mutual Fund
 140135;INF789FA1V03;INF789FA1V11;UTI Banking & PSU Debt Fund - Direct Plan - Annual IDCW;13.7108;28-Aug-2026
-133972;INF789FA1V29;INF789FA1V37;UTI Banking & PSU Debt Fund - Direct Plan - Flexi IDCW;20.6319;28-Aug-2026
+133972;INF789FA1V29;INF789FA1V37;UTI Banking & PSU Debt Fund - Direct Plan - Discontinued Flexi IDCW;20.6319;28-Aug-2026
+126942;INF789F016Z4;INF789F017Z2;UTI Banking & PSU Debt Fund - Direct Plan - Discontinued Quarterly IDCW;17.82;28-Aug-2026
 126940;INF789F015Z6;;UTI Banking & PSU Debt Fund - Direct Plan - Growth Option;23.9424;28-Aug-2026
 141375;INF789FA1U87;INF789FA1U95;UTI Banking & PSU Debt Fund - Direct Plan - Half-Yearly IDCW;15.8876;28-Aug-2026
 134026;INF789FC1HE1;INF789FC1HF8;UTI Banking & PSU Debt Fund - Direct Plan - Monthly IDCW;13.7237;28-Aug-2026
-126942;INF789F016Z4;INF789F017Z2;UTI Banking & PSU Debt Fund - Direct Plan - Quarterly IDCW;17.82;28-Aug-2026
 140116;INF789FA1U46;INF789FA1U53;UTI Banking & PSU Debt Fund - Regular Plan - Annual IDCW;13.4117;28-Aug-2026
-133971;INF789FA1U61;INF789FA1U79;UTI Banking & PSU Debt Fund - Regular Plan - Flexi IDCW;15.7409;28-Aug-2026
+133971;INF789FA1U61;INF789FA1U79;UTI Banking & PSU Debt Fund - Regular Plan - Discontinued Flexi IDCW;15.7409;28-Aug-2026
+126941;INF789F012Z3;INF789F013Z1;UTI Banking & PSU Debt Fund - Regular Plan - Discontinued Quarterly IDCW;16.108;28-Aug-2026
 139407;INF789FA1U20;INF789FA1U38;UTI Banking & PSU Debt Fund - Regular Plan - Half-Yearly IDCW;15.6749;28-Aug-2026
 136110;INF789FC1HC5;INF789FC1HD3;UTI Banking & PSU Debt Fund - Regular Plan - Monthly IDCW;13.4455;28-Aug-2026
-126941;INF789F012Z3;INF789F013Z1;UTI Banking & PSU Debt Fund - Regular Plan - Quarterly IDCW;16.108;28-Aug-2026
 126939;INF789F014Z9;;UTI Banking & PSU Debt Fund- Regular Plan - Growth Option;23.4725;28-Aug-2026
 
 Open Ended Schemes ( Income/Debt Oriented Schemes - Gilt Fund )
 
+
+Aditya Birla Sun Life Mutual Fund
+100058;INF209K01AC3;INF209K01AD1;Aditya Birla Sun Life Gilt Fund  - Growth - Regular Plan;81.9448;28-Aug-2026
+119605;INF209K01XP7;;Aditya Birla Sun Life Gilt Fund - Growth - Direct Plan;88.6967;28-Aug-2026
+119606;INF209KA1LC4;INF209K01XR3;Aditya Birla Sun Life Gilt Fund -DIRECT - Quarterly IDCW;11.6145;28-Aug-2026
+100057;INF209K01AF6;INF209K01DP9;Aditya Birla Sun Life Gilt Fund -Regular - Quarterly IDCW;10.8109;28-Aug-2026
 
 Axis Mutual Fund
 120447;INF846K01DD4;;Axis Gilt Fund - Direct Plan - Growth Option;28.5557;28-Aug-2026
@@ -8299,6 +8228,12 @@ LIC Mutual Fund
 100317;INF767K01709;;LIC MF Gilt Fund-Regular Plan-Growth;60.3534;28-Aug-2026
 100316;INF767K01683;INF767K01691;LIC MF Gilt Fund-Regular Plan-IDCW;17.3969;28-Aug-2026
 
+Tata Mutual Fund
+119954;INF277K01OV1;INF277K01OW9;Tata Gilt Securities Fund - Direct Plan - Payout of IDCW Option;25.6297;28-Aug-2026
+101049;INF277K01DN1;INF277K01535;Tata Gilt Securities Fund - Regular Plan - Payout of IDCW Option;22.2534;28-Aug-2026
+101042;INF277K01519;;Tata Gilt Securities Fund -Regular Plan- Growth Option;80.2768;28-Aug-2026
+119953;INF277K01OX7;;Tata Gilt Securities Fund- Direct Plan - Growth Option;91.0197;28-Aug-2026
+
 UTI Mutual Fund
 120792;INF789F01TL5;;UTI - GILT FUND - Direct Plan - Growth Option;68.3697;28-Aug-2026
 102512;INF789F01PT6;;UTI - GILT FUND - Discontinued PF Plan - Growth Option;48.9089;28-Aug-2026
@@ -8347,18 +8282,26 @@ SBI Mutual Fund
 
 UTI Mutual Fund
 150423;INF789F1AVW7;INF789F1AVX5;UTI 10 year Constant Maturity Gilt Fund - Direct Plan - Annual IDCW Option;11.6725;28-Aug-2026
-150424;INF789F1AVY3;INF789F1AVZ0;UTI 10 year Constant Maturity Gilt Fund - Direct Plan - Flexi IDCW Option;13.3889;28-Aug-2026
+150424;INF789F1AVY3;INF789F1AVZ0;UTI 10 year Constant Maturity Gilt Fund - Direct Plan - Discontinued Flexi IDCW Option;13.3889;28-Aug-2026
+150412;INF789F1AVS5;INF789F1AVT3;UTI 10 year Constant Maturity Gilt Fund - Direct Plan - Discontinued Quarterly IDCW Option;13.389;28-Aug-2026
 150410;INF789F1AVR7;;UTI 10 year Constant Maturity Gilt Fund - Direct Plan - Growth Option;13.3888;28-Aug-2026
 150415;INF789F1AVU1;INF789F1AVV9;UTI 10 year Constant Maturity Gilt Fund - Direct Plan - Half Yearly IDCW Option;13.2567;28-Aug-2026
-150412;INF789F1AVS5;INF789F1AVT3;UTI 10 year Constant Maturity Gilt Fund - Direct Plan - Quarterly IDCW Option;13.389;28-Aug-2026
 150419;INF789F1AVN6;INF789F1AVO4;UTI 10 year Constant Maturity Gilt Fund - Regular Plan - Annual IDCW Option;11.4281;28-Aug-2026
-150420;INF789F1AVP1;INF789F1AVQ9;UTI 10 year Constant Maturity Gilt Fund - Regular Plan - Flexi IDCW Option;13.1292;28-Aug-2026
+150420;INF789F1AVP1;INF789F1AVQ9;UTI 10 year Constant Maturity Gilt Fund - Regular Plan - Discontinued Flexi IDCW Option;13.1292;28-Aug-2026
+150411;INF789F1AVJ4;INF789F1AVK2;UTI 10 year Constant Maturity Gilt Fund - Regular Plan - Discontinued Quarterly IDCW Option;13.1298;28-Aug-2026
 150409;INF789F1AVI6;;UTI 10 year Constant Maturity Gilt Fund - Regular Plan - Growth Option;13.1297;28-Aug-2026
 150416;INF789F1AVL0;INF789F1AVM8;UTI 10 year Constant Maturity Gilt Fund - Regular Plan - Half Yearly IDCW Option;13.1294;28-Aug-2026
-150411;INF789F1AVJ4;INF789F1AVK2;UTI 10 year Constant Maturity Gilt Fund - Regular Plan - Quarterly IDCW Option;13.1298;28-Aug-2026
 
 Open Ended Schemes ( Income/Debt Oriented Schemes - Floating Interest Rates Fund )
 
+
+Aditya Birla Sun Life Mutual Fund
+122645;INF209K01UW9;;Aditya Birla Sun Life Floating Interest Rate Fund-Direct - daily IDCW;100.0930;28-Aug-2026
+122648;INF209K01UY5;;Aditya Birla Sun Life Floating Interest Rate Fund-Direct - weekly IDCW;100.8532;28-Aug-2026
+122646;INF209K01UX7;;Aditya Birla Sun Life Floating Interest Rate Fund-Direct Plan-Growth;384.1691;28-Aug-2026
+122643;;INF209KA1LN1;Aditya Birla Sun Life Floating Interest Rate Fund-Regular - DAILY IDCW;100.0997;28-Aug-2026
+122647;;INF209K01MH7;Aditya Birla Sun Life Floating Interest Rate Fund-REGULAR - WEEKLY IDCW;100.7706;28-Aug-2026
+122644;INF209K01MG9;;Aditya Birla Sun Life Floating Interest Rate Fund-Regular Plan-Growth;372.9507;28-Aug-2026
 
 Axis Mutual Fund
 149055;INF846K016A1;INF846K015A3;Axis Floater Fund - Direct Plan - Annual IDCW;1387.8076;28-Aug-2026
@@ -8447,6 +8390,22 @@ SBI Mutual Fund
 148543;INF200KA1R15;;SBI Floating Interest Rates Fund - Regular Plan - Growth;14.3153;28-Aug-2026
 148544;INF200KA1R23;INF200KA1R31;SBI Floating Interest Rates Fund - Regular Plan - Monthly Income Distribution cum Capital Withdrawal Option (IDCW);14.3191;28-Aug-2026
 148546;INF200KA1R49;INF200KA1R56;SBI Floating Interest Rates Fund - Regular Plan - Quarterly Income Distribution cum Capital Withdrawal Option (IDCW);14.3164;28-Aug-2026
+
+Tata Mutual Fund
+149007;INF277KA1026;;Tata Floating Rate Fund -Direct Plan-Growth;13.9450;28-Aug-2026
+149037;;INF277KA1075;Tata Floating Rate Fund-Direct Plan-IDCW Monthly Dividend Reinvestment;13.9450;28-Aug-2026
+149000;INF277KA1042;;Tata Floating Rate Fund-Direct Plan-IDCW Monthly Payout;13.9450;28-Aug-2026
+149033;;INF277KA1067;Tata Floating Rate Fund-Direct Plan-IDCW Periodic Dividend Reinvestment;13.9450;28-Aug-2026
+149002;INF277KA1034;;Tata Floating Rate Fund-Direct Plan-IDCW Periodic Payout;13.9450;28-Aug-2026
+149034;;INF277KA1083;Tata Floating Rate Fund-Direct Plan-IDCW Quarterly Dividend Reinvestment;13.9450;28-Aug-2026
+149001;INF277KA1059;;Tata Floating Rate Fund-Direct Plan-IDCW Quarterly Payout;13.9450;28-Aug-2026
+149003;INF277KA1091;;Tata Floating Rate Fund-Regular Plan-Growth;13.6391;28-Aug-2026
+149035;;INF277KA1141;Tata Floating Rate Fund-Regular Plan-IDCW Monthly Dividend Reinvestment;13.6391;28-Aug-2026
+149004;INF277KA1117;;Tata Floating Rate Fund-Regular Plan-IDCW Monthly Payout;13.6391;28-Aug-2026
+149036;;INF277KA1133;Tata Floating Rate Fund-Regular Plan-IDCW Periodic Dividend Reinvestment;13.6391;28-Aug-2026
+149006;INF277KA1109;;Tata Floating Rate Fund-Regular Plan-IDCW Periodic Payout;13.6391;28-Aug-2026
+149038;;INF277KA1158;Tata Floating Rate Fund-Regular Plan-IDCW Quarterly Dividend Reinvestment;13.6391;28-Aug-2026
+149005;INF277KA1125;;Tata Floating Rate Fund-Regular Plan-IDCW Quarterly Payout;13.6391;28-Aug-2026
 
 UTI Mutual Fund
 145293;INF789F1ADA1;INF789F1ADB9;UTI Floating Interest Rates Fund - Direct Plan - Annual IDCW;1537.6481;28-Aug-2026
@@ -9267,6 +9226,16 @@ DSP Mutual Fund
 147303;INF740KA1NN3;;DSP Quant Fund - Regular Plan - Growth;21.6970;28-Aug-2026
 147305;INF740KA1NO1;INF740KA1NP8;DSP Quant Fund - Regular Plan - IDCW;16.4760;28-Aug-2026
 
+HDFC Mutual Fund
+151751;INF179KC1GL9;;HDFC Defence Fund - Growth Option;30.533;28-Aug-2026
+151750;INF179KC1GI5;;HDFC Defence Fund - Growth Option - Direct Plan;31.647;28-Aug-2026
+151748;INF179KC1GM7;INF179KC1GN5;HDFC Defence Fund - IDCW Option;30.533;28-Aug-2026
+151749;INF179KC1GJ3;INF179KC1GK1;HDFC Defence Fund - IDCW Option - Direct Plan;31.647;28-Aug-2026
+152058;INF179KC1HF9;;HDFC Technology Fund - Growth Option;12.023;28-Aug-2026
+152059;INF179KC1HI3;;HDFC Technology Fund - Growth Option - Direct Plan;12.456;28-Aug-2026
+152057;INF179KC1HG7;INF179KC1HH5;HDFC Technology Fund - IDCW Option;12.023;28-Aug-2026
+152060;INF179KC1HJ1;INF179KC1HK9;HDFC Technology Fund - IDCW Option - Direct Plan;12.456;28-Aug-2026
+
 HSBC Mutual Fund
 151142;INF917K01RI2;;HSBC Business Cycles Fund - Direct Growth;49.6977;28-Aug-2026
 151145;INF917K01RK8;INF917K01RJ0;HSBC Business Cycles Fund - Direct IDCW;26.3522;28-Aug-2026
@@ -9392,6 +9361,12 @@ NJ Mutual Fund
 154454;INF0J8L01180;;NJ Momentum Fund - Direct IDCW;10.28;28-Aug-2026
 154452;INF0J8L01198;;NJ Momentum Fund - Regular Growth;10.26;28-Aug-2026
 154453;INF0J8L01206;;NJ Momentum Fund - Regular IDCW;10.26;28-Aug-2026
+
+PGIM India Mutual Fund
+153039;INF663L01Z45;;PGIM India Healthcare Fund - Direct Plan - Growth Option;12.65;28-Aug-2026
+153037;INF663L01Z60;INF663L01Z78;PGIM India Healthcare Fund - Direct Plan - IDCW Option;12.65;28-Aug-2026
+153040;INF663L01Z52;;PGIM India Healthcare Fund - Regular Plan - Growth Option;12.28;28-Aug-2026
+153038;INF663L01Z86;INF663L01Z94;PGIM India Healthcare Fund - Regular Plan - IDCW Option;12.28;28-Aug-2026
 
 UTI Mutual Fund
 120780;INF789F01VF3;;UTI India Consumer Fund - Direct Plan - Growth Option;64.6313;28-Aug-2026
@@ -9534,6 +9509,12 @@ NJ Mutual Fund
 151609;INF0J8L01099;;NJ ELSS Tax Saver Fund Regular Growth;14.28;28-Aug-2026
 151610;INF0J8L01107;;NJ ELSS Tax Saver Fund Regular IDCW;14.28;28-Aug-2026
 
+Tata Mutual Fund
+119281;INF277K01I94;;Tata ELSS Fund- Direct Plan - Payout of IDCW Option;239.6987;28-Aug-2026
+100474;INF277K01I60;;Tata ELSS Fund- Regular Plan - Payout of IDCW Option;97.9037;28-Aug-2026
+132756;INF277K01I86;;Tata ELSS Fund-Growth-Direct Plan;55.4053;28-Aug-2026
+132757;INF277K01I52;;Tata ELSS Fund-Growth-Regular Plan;47.8189;28-Aug-2026
+
 WhiteOak Capital Mutual Fund
 150587;INF03VN01621;;WhiteOak Capital ELSS Tax Saver Fund Direct Plan Growth;19.670;28-Aug-2026
 150586;INF03VN01639;;WhiteOak Capital ELSS Tax Saver Fund Direct Plan IDCW;19.670;28-Aug-2026
@@ -9542,6 +9523,12 @@ WhiteOak Capital Mutual Fund
 
 Open Ended Schemes ( Hybrid Schemes - Conservative Hybrid Fund )
 
+
+Aditya Birla Sun Life Mutual Fund
+120550;INF209K01R47;INF209K01XI2;Aditya Birla Sun Life Conservative Hybrid Fund - DIRECT - MONTHLY IDCW;27.2513;28-Aug-2026
+120705;INF209K01XH4;;Aditya Birla Sun Life Conservative Hybrid Fund - Growth / Payment - Direct Plan;79.5864;28-Aug-2026
+101818;INF209K01751;;Aditya Birla Sun Life Conservative Hybrid Fund - Growth / Payment - Regular Plan;70.5302;28-Aug-2026
+101816;INF209K01769;INF209K01DF0;Aditya Birla Sun Life Conservative Hybrid Fund - REGULAR - MONTHLY IDCW;16.5250;28-Aug-2026
 
 Axis Mutual Fund
 120477;INF846K01DY0;INF846K01DZ7;Axis Conservative Hybrid Fund - Direct Plan - Annual IDCW;16.5122;28-Aug-2026
@@ -9626,6 +9613,12 @@ WhiteOak Capital Mutual Fund
 
 Open Ended Schemes ( Hybrid Schemes - Aggressive Hybrid Fund )
 
+
+Aditya Birla Sun Life Mutual Fund
+120517;INF209K01ZC0;;Aditya Birla Sun Life Aggressive Hybrid Fund - Direct Plan-Growth;1770.56;28-Aug-2026
+103155;INF209K01BT5;;Aditya Birla Sun Life Aggressive Hybrid Fund - Regular Plan-Growth;1567.76;28-Aug-2026
+120518;INF209KA1LH3;INF209K01ZB2;Aditya Birla Sun Life Aggressive Hybrid Fund -DIRECT - IDCW;296.02;28-Aug-2026
+103154;INF209K01BS7;INF209K01EE1;Aditya Birla Sun Life Aggressive Hybrid Fund -Regular - IDCW;171.81;28-Aug-2026
 
 Axis Mutual Fund
 144394;INF846K01E25;;Axis Aggressive Hybrid Fund - Direct Plan - Growth Option;23.30;28-Aug-2026
@@ -10214,8 +10207,8 @@ Axis Mutual Fund
 Edelweiss Mutual Fund
 154548;INF754K01XJ5;;Edelweiss Nifty REITs & Realty Index Fund - Direct Growth;9.9677;28-Aug-2026
 154549;INF754K01XK3;INF754K01XL1;Edelweiss Nifty REITs & Realty Index Fund - Direct IDCW;9.9677;28-Aug-2026
-154561;INF754K01XN7;;Edelweiss REITs & Realty Index Fund - Regular Growth;9.9671;28-Aug-2026
-154559;INF754K01XO5;INF754K01XP2;Edelweiss REITs & Realty Index Fund - Regular IDCW Payout;9.9671;28-Aug-2026
+154561;INF754K01XN7;;Edelweiss Nifty REITs & Realty Index Fund - Regular Growth;9.9671;28-Aug-2026
+154559;INF754K01XO5;INF754K01XP2;Edelweiss Nifty REITs & Realty Index Fund - Regular IDCW Payout;9.9671;28-Aug-2026
 
 Groww Mutual Fund
 153704;INF666M01KT3;;Groww Nifty 50 Index Fund Direct Growth;9.7018;28-Aug-2026
@@ -10369,10 +10362,6 @@ Axis Mutual Fund
 153882;INF846KA1242;INF846KA1267;Axis CRISIL-IBX Financial Services 3-6 Months Debt Index Fund - Direct Plan - IDCW option;10.6348;28-Aug-2026
 153880;INF846KA1218;;Axis CRISIL-IBX Financial Services 3-6 Months Debt Index Fund - Regular Plan - Growth option;10.6240;28-Aug-2026
 153881;INF846KA1234;INF846KA1259;Axis CRISIL-IBX Financial Services 3-6 Months Debt Index Fund - Regular Plan - IDCW option;10.6231;28-Aug-2026
-153924;INF846KA1283;;Axis Income Plus Arbitrage Passive FOF - Direct Plan - Growth Option;10.5019;28-Aug-2026
-153925;INF846KA1309;INF846KA1325;Axis Income Plus Arbitrage Passive FOF - Direct Plan - IDCW Option;10.5019;28-Aug-2026
-153927;INF846KA1275;;Axis Income Plus Arbitrage Passive FOF - Regular Plan - Growth Option;10.4774;28-Aug-2026
-153926;INF846KA1291;INF846KA1317;Axis Income Plus Arbitrage Passive FOF - Regular Plan - IDCW Option;10.4735;28-Aug-2026
 150854;INF846K018K6;;Axis Nifty SDL September 2026 Debt Index Fund - Direct Plan - Growth;13.0077;28-Aug-2026
 150852;INF846K019K4;INF846K010L1;Axis Nifty SDL September 2026 Debt Index Fund - Direct Plan - IDCW;13.0076;28-Aug-2026
 150853;INF846K012L7;INF846K013L5;Axis Nifty SDL September 2026 Debt Index Fund - Regular Plan -  IDCW;12.9462;28-Aug-2026
@@ -10779,6 +10768,10 @@ Axis Mutual Fund
 147888;INF846K01W07;INF846K01W15;Axis Income Plus Arbitrage Omni FOF - Regular Plan - IDCW;15.3680;28-Aug-2026
 147896;INF846K01V57;INF846K01V40;Axis Income Plus Arbitrage Omni FOF - Regular Plan - Monthly IDCW;15.3627;28-Aug-2026
 147905;INF846K01V73;INF846K01V65;Axis Income Plus Arbitrage Omni FOF - Regular Plan - Quarterly IDCW;11.4170;28-Aug-2026
+153924;INF846KA1283;;Axis Income Plus Arbitrage Passive FOF - Direct Plan - Growth Option;10.5019;28-Aug-2026
+153925;INF846KA1309;INF846KA1325;Axis Income Plus Arbitrage Passive FOF - Direct Plan - IDCW Option;10.5019;28-Aug-2026
+153927;INF846KA1275;;Axis Income Plus Arbitrage Passive FOF - Regular Plan - Growth Option;10.4774;28-Aug-2026
+153926;INF846KA1291;INF846KA1317;Axis Income Plus Arbitrage Passive FOF - Regular Plan - IDCW Option;10.4735;28-Aug-2026
 149847;INF846K011G9;;Axis Multi Factor Passive FoF - Direct Plan - Growth Option;15.8176;28-Aug-2026
 149846;INF846K012G7;INF846K013G5;Axis Multi Factor Passive FoF - Direct Plan - IDCW;15.8173;28-Aug-2026
 149844;INF846K014G3;;Axis Multi Factor Passive FoF - Regular Plan - Growth Option;15.5925;28-Aug-2026
@@ -10843,8 +10836,8 @@ Groww Mutual Fund
 153528;INF666M01KY3;INF666M01KZ0;Groww Silver ETF FOF - Regular - IDCW;23.2666;28-Aug-2026
 
 HDFC Mutual Fund
-154505;;;HDFC Nifty Metal ETF FOF - Direct Plan - Growth Option;10.216;28-Aug-2026
-154506;;;HDFC Nifty Metal ETF FOF - Growth Option;10.2113;28-Aug-2026
+154505;INF179KC1KS6;;HDFC Nifty Metal ETF FOF - Direct Plan - Growth Option;10.216;28-Aug-2026
+154506;INF179KC1KR8;;HDFC Nifty Metal ETF FOF - Growth Option;10.2113;28-Aug-2026
 
 HSBC Mutual Fund
 129199;INF336L01HY1;INF336L01HZ8;HSBC Aggressive Hybrid Active FOF - Dividend;30.6766;28-Aug-2026

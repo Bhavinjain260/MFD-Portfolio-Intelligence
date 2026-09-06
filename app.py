@@ -19,6 +19,7 @@ import capital_gain as cg
 
 import capital_gain as cg_row
 import data_manager
+import nav_data_ingestion
 import nav_scheduler
 import data_manager as dm
 from data_manager import current as data_version
@@ -695,7 +696,11 @@ def get_or_fetch_nav_for_date(target_iso: str) -> dict:
         resp = download_business_day_nav(target_d, timeout=30)
         actual = resp.get("actual_date")
         if actual and resp.get("text"):
-            _save_nav_snapshot(resp["text"], actual)
+            saved_res = _save_nav_snapshot(resp["text"], actual)
+            try:
+                nav_data_ingestion.ingest_nav_file_to_db(saved_res["path"])
+            except Exception as e:
+                log.exception("[NAV-DB] Ingestion error: %s", e)
             with open(_snapshot_path(actual), 'r', encoding='utf-8') as f:
                 nav_map, _, _ = _parse_nav_text(f.read())
             return {k: v[0] for k, v in nav_map.items() if v[0] > 0}
@@ -2223,130 +2228,47 @@ def get_snapshot_status() -> dict:
 
 # ==================== THE LIVE-FILE DOWNLOAD ====================
 
-def download_and_save_nav(timeout: int = 30) -> dict:
-    log.info("[AMFI] Downloading NAV file from %s", AMFI_TEXT_URL)
-    res = requests.get(AMFI_TEXT_URL, timeout=timeout)
-    res.raise_for_status()
-    text = res.text
-
-    _ensure_text_dir()
-    today = datetime.now().strftime("%Y-%m-%d")
-    path = _snapshot_path(today)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
-
-    size = os.path.getsize(path)
-    log.info("[AMFI] Saved NAV file: %s (%s bytes, %s lines)", path, size, text.count("\n") + 1)
-    return {"path": path, "bytes": size, "date": today}
-
-
-
-# NAV re-publish cutoffs during the day. Domestic NAVs settle ~3 PM,
-# foreign/international scheme NAVs land later, ~11 PM.
-NAV_REDOWNLOAD_TIMES = [time_cls(15, 0), time_cls(23, 0)]
-
-def _last_passed_cutoff_today(now: datetime) -> Optional[time_cls]:
-    """Latest cutoff time that has already passed today, or None if before all of them."""
-    passed = [t for t in NAV_REDOWNLOAD_TIMES if now.time() >= t]
-    return max(passed) if passed else None
-
-
-# def download_and_save_nav_if_needed(force: bool = False) -> dict:
-#     """
-#     Re-fetches if:
-#       - no file exists for today, OR
-#       - today's file was saved BEFORE the most recent cutoff time that has
-#         already passed (e.g. file saved at 9 AM, now it's 4 PM → 3 PM cutoff
-#         already passed and file predates it → stale, refetch).
-#     Otherwise skip — avoids hammering AMFI on every page load.
-#     """
-#     now = datetime.now()
-#     today = now.strftime("%Y-%m-%d")
-#     today_path = _snapshot_path(today)
-
-#     if not force and os.path.exists(today_path):
-#         cutoff = _last_passed_cutoff_today(now)
-#         if cutoff is None:
-#             size = os.path.getsize(today_path)
-#             log.info("[AMFI] Before first cutoff — keeping existing file for %s", today)
-#             return {"ran": False, "ok": True, "reason": "before first cutoff, file is current", "bytes": size}
-
-#         file_mtime = datetime.fromtimestamp(os.path.getmtime(today_path))
-#         cutoff_dt = datetime.combine(now.date(), cutoff)
-#         if file_mtime >= cutoff_dt:
-#             size = os.path.getsize(today_path)
-#             log.info("[AMFI] File already fresh for cutoff %s (saved %s)", cutoff, file_mtime.time())
-#             return {"ran": False, "ok": True, "reason": f"already fresh past {cutoff} cutoff", "bytes": size}
-
-#         log.info("[AMFI] File saved at %s predates %s cutoff — redownloading", file_mtime.time(), cutoff)
-
-#     try:
-#         result = download_and_save_nav()
-#         return {"ran": True, "ok": True, "reason": "downloaded", "bytes": result["bytes"]}
-#     except Exception as e:
-#         log.exception("[AMFI] Download failed")
-#         return {"ran": True, "ok": False, "reason": f"download failed: {e}", "bytes": None}
-
-
-
-def download_and_save_nav_if_needed(force: bool = False) -> dict:
-    """
-    Re-fetches if:
-      - no file exists for today, OR
-      - today's file was saved BEFORE the most recent cutoff time that has
-        already passed (e.g. file saved at 9 AM, now it's 4 PM → 3 PM cutoff
-        already passed and file predates it → stale, refetch).
-    Otherwise skip — avoids hammering AMFI on every page load.
-    """
-    now = datetime.now()
-    today = now.strftime("%Y-%m-%d")
-    today_path = _snapshot_path(today)
-
-    # 1. Check if we need to skip downloading
-    if not force and os.path.exists(today_path):
-        cutoff = _last_passed_cutoff_today(now)
-        if cutoff is None:
-            size = os.path.getsize(today_path)
-            log.info("[AMFI] Before first cutoff — keeping existing file for %s", today)
-            # File is already there, no need to ingest again
-            return {"ran": False, "ok": True, "reason": "before first cutoff, file is current", "bytes": size}
-
-        file_mtime = datetime.fromtimestamp(os.path.getmtime(today_path))
-        cutoff_dt = datetime.combine(now.date(), cutoff)
-        if file_mtime >= cutoff_dt:
-            size = os.path.getsize(today_path)
-            log.info("[AMFI] File already fresh for cutoff %s (saved %s)", cutoff, file_mtime.time())
-            # File is already there, no need to ingest again
-            return {"ran": False, "ok": True, "reason": f"already fresh past {cutoff} cutoff", "bytes": size}
-
-        log.info("[AMFI] File saved at %s predates %s cutoff — redownloading", file_mtime.time(), cutoff)
-
-    # 2. Download the file
-    try:
-        result = download_and_save_nav()
-        
-        # 3. ▼▼▼ TRIGGER DATABASE INGESTION ▼▼▼
-        if os.path.exists(today_path):
-            log.info("[NAV-DB] File ready. Starting database ingestion for %s...", today_path)
-            try:
-                ingest_result = data_manager.parse_nav_filepath(today_path)
-                if ingest_result.get('ok'):
-                    log.info("[NAV-DB] Success: %s", ingest_result.get('reason'))
-                else:
-                    log.error("[NAV-DB] Failed: %s", ingest_result.get('reason'))
-            except Exception as e:
-                log.exception("[NAV-DB] Ingestion error: %s", e)
-        else:
-            log.error("[NAV-DB] File path %s does not exist after download. Skipping ingestion.", today_path)
-            
-        return {"ran": True, "ok": True, "reason": "downloaded and ingested", "bytes": result.get("bytes")}
-        
-    except Exception as e:
-        log.exception("[AMFI] Download failed")
-        return {"ran": True, "ok": False, "reason": f"download failed: {e}", "bytes": None}
-
-
 # ==================== PARSER (shared by live + history files) ====================
+
+def _extract_nav_date_from_text(text: str) -> Optional[str]:
+    """
+    Extract NAV date from the file. Handles both formats:
+    - Old (6 cols):  Code;ISIN1;ISIN2;Name;NAV;Date
+    - New (8 cols):  Code;ISIN1;ISIN2;Name;Plan;Option;NAV;Date
+    
+    Date is always the LAST column in both formats.
+    Returns date as YYYY-MM-DD or None if extraction fails.
+    """
+    for line in text.splitlines():
+        line = line.strip()
+        
+        # Skip empty lines and non-data lines
+        if not line or ";" not in line:
+            continue
+        
+        parts = line.split(";")
+        
+        # Skip header row and lines with insufficient columns
+        if len(parts) < 6 or parts[0].strip() == "Scheme Code":
+            continue
+        
+        # Date is ALWAYS the last column (works for both 6-col and 8-col formats)
+        date_field = parts[-1].strip()
+        
+        try:
+            # Try parsing with AMFI's date format (01-Jan-2026)
+            parsed_date = datetime.strptime(date_field, "%d-%b-%Y")
+            log.debug("[NAV-DATE-EXTRACT] Extracted NAV date: %s from line: %s", 
+                     parsed_date.strftime("%Y-%m-%d"), line[:80])
+            return parsed_date.strftime("%Y-%m-%d")
+        except ValueError:
+            # If parsing fails, skip this line and try next
+            continue
+    
+    # No valid date found
+    log.error("[NAV-DATE-EXTRACT] Could not extract NAV date from text")
+    return None
+
 
 def _parse_nav_text(text: str) -> tuple[dict, dict, list[dict]]:
     """
@@ -2355,12 +2277,17 @@ def _parse_nav_text(text: str) -> tuple[dict, dict, list[dict]]:
       amc_map:  {isin: amc_name}
       records:  list of {isin, scheme_code, isin_payout, scheme_name,
                           amc_name, category, nav, nav_date}
+    
+    Handles both formats:
+    - Old (6 cols):  Code;ISIN1;ISIN2;Name;NAV;Date
+    - New (8 cols):  Code;ISIN1;ISIN2;Name;Plan;Option;NAV;Date
     """
     nav_map: dict[str, tuple[float, str]] = {}
     amc_map: dict[str, str] = {}
     records: list[dict] = []
     current_amc = ""
     current_category = ""
+    format_detected = None
 
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -2375,6 +2302,8 @@ def _parse_nav_text(text: str) -> tuple[dict, dict, list[dict]]:
             continue
 
         parts = line.split(";")
+        
+        # Skip header and lines with insufficient columns
         if len(parts) < 6 or parts[0] == "Scheme Code":
             continue
 
@@ -2383,15 +2312,24 @@ def _parse_nav_text(text: str) -> tuple[dict, dict, list[dict]]:
         isin_2 = parts[2].strip()
         scheme_name = parts[3].strip()
 
-        # AMFI added Plan/Option as separate columns (8-col format, Aug 2026+).
+        # Detect format and extract NAV + Date accordingly
         # Old: Code;ISIN1;ISIN2;Name;NAV;Date (6 cols)
         # New: Code;ISIN1;ISIN2;Name;Plan;Option;NAV;Date (8 cols)
         if len(parts) >= 8:
+            # 8-column format: NAV at [6], Date at [7]
             nav_str = parts[6].strip()
             date_str = parts[7].strip()
+            if format_detected is None:
+                format_detected = "8-col"
+                log.info("[NAV-PARSE] Detected 8-column format (new AMFI format with Plan/Option)")
         else:
+            # 6-column format: NAV at [4], Date at [5]
             nav_str = parts[4].strip()
             date_str = parts[5].strip()
+            if format_detected is None:
+                format_detected = "6-col"
+                log.info("[NAV-PARSE] Detected 6-column format (old AMFI format)")
+        
         try:
             nav = float(nav_str) if nav_str not in ("N.A.", "") else 0.0
         except ValueError:
@@ -2428,7 +2366,146 @@ def _parse_nav_text(text: str) -> tuple[dict, dict, list[dict]]:
                 if current_amc:
                     amc_map[isin_u] = current_amc
 
+    log.info("[NAV-PARSE] Parsed %d records using %s format", len(records), format_detected or "unknown")
     return nav_map, amc_map, records
+
+
+# ==================== THE LIVE-FILE DOWNLOAD ====================
+
+def download_and_save_nav(timeout: int = 30) -> dict:
+    """
+    Downloads NAV from AMFI and saves with the ACTUAL NAV DATE from file content.
+    Overwrites if file for same date already exists.
+    
+    Returns:
+        {
+            "path": file_path or None,
+            "bytes": file_size or 0,
+            "date": nav_date (YYYY-MM-DD) or None
+        }
+    """
+    log.info("[AMFI] Downloading NAV file from %s", AMFI_TEXT_URL)
+    
+    try:
+        res = requests.get(AMFI_TEXT_URL, timeout=timeout)
+        res.raise_for_status()
+    except requests.RequestException as e:
+        log.error("[AMFI] Download failed: %s", e)
+        return {"path": None, "bytes": 0, "date": None}
+    
+    text = res.text
+    
+    if not text or not text.strip():
+        log.error("[AMFI] Downloaded file is empty")
+        return {"path": None, "bytes": 0, "date": None}
+
+    _ensure_text_dir()
+    
+    # ── EXTRACT ACTUAL NAV DATE FROM CONTENT ──
+    actual_nav_date = _extract_nav_date_from_text(text)
+    if not actual_nav_date:
+        log.error("[AMFI] Could not extract NAV date from downloaded file")
+        return {"path": None, "bytes": 0, "date": None}
+    
+    # ── USE ACTUAL NAV DATE FOR FILENAME ──
+    path = _snapshot_path(actual_nav_date)
+    
+    # ── CHECK IF FILE ALREADY EXISTS ──
+    file_exists = os.path.exists(path)
+    if file_exists:
+        old_size = os.path.getsize(path)
+        log.info("[AMFI] File already exists at %s (size: %s bytes) — overwriting with fresh data", 
+                 path, old_size)
+    
+    # ── WRITE FILE (OVERWRITES IF EXISTS) ──
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+    except IOError as e:
+        log.error("[AMFI] Failed to write file %s: %s", path, e)
+        return {"path": None, "bytes": 0, "date": None}
+
+    size = os.path.getsize(path)
+    status = "overwritten" if file_exists else "created"
+    line_count = text.count("\n") + 1
+    
+    log.info("[AMFI] NAV file %s: %s (%s bytes, %s lines) | NAV Date: %s", 
+             status, path, size, line_count, actual_nav_date)
+    
+    return {"path": path, "bytes": size, "date": actual_nav_date}
+
+
+def download_and_save_nav_if_needed(force: bool = False) -> dict:
+    """
+    Re-fetches if:
+      - no file exists for today, OR
+      - today's file was saved BEFORE the most recent cutoff time that has
+        already passed (e.g. file saved at 9 AM, now it's 4 PM → 3 PM cutoff
+        already passed and file predates it → stale, refetch).
+    Otherwise skip — avoids hammering AMFI on every page load.
+    
+    Files are saved with their ACTUAL NAV DATE (from file content), not download date.
+    If file for same NAV date already exists, it will be overwritten.
+    """
+    now = datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    today_path = _snapshot_path(today)
+
+    # 1. Check if we need to skip downloading
+    if not force and os.path.exists(today_path):
+        cutoff = _last_passed_cutoff_today(now)
+        if cutoff is None:
+            size = os.path.getsize(today_path)
+            log.info("[AMFI] Before first cutoff — keeping existing file for %s", today)
+            return {"ran": False, "ok": True, "reason": "before first cutoff, file is current", "bytes": size}
+
+        file_mtime = datetime.fromtimestamp(os.path.getmtime(today_path))
+        cutoff_dt = datetime.combine(now.date(), cutoff)
+        if file_mtime >= cutoff_dt:
+            size = os.path.getsize(today_path)
+            log.info("[AMFI] File already fresh for cutoff %s (saved %s)", cutoff, file_mtime.time())
+            return {"ran": False, "ok": True, "reason": f"already fresh past {cutoff} cutoff", "bytes": size}
+
+        log.info("[AMFI] File saved at %s predates %s cutoff — redownloading", file_mtime.time(), cutoff)
+
+    # 2. Download the file
+    try:
+        result = download_and_save_nav()
+        
+        # ── Handle case where extraction failed ──
+        if result.get("date") is None:
+            return {"ran": True, "ok": False, "reason": "NAV date extraction failed", "bytes": None}
+        
+        # 3. ▼▼▼ TRIGGER DATABASE INGESTION ▼▼▼
+        if os.path.exists(result["path"]):
+            log.info("[NAV-DB] File ready. Starting database ingestion for %s...", result["path"])
+            try:
+                ingest_result = nav_data_ingestion.ingest_nav_file_to_db(result["path"])
+                if ingest_result.get('ok'):
+                    log.info("[NAV-DB] Success: %s", ingest_result.get('reason'))
+                else:
+                    log.error("[NAV-DB] Failed: %s", ingest_result.get('reason'))
+            except Exception as e:
+                log.exception("[NAV-DB] Ingestion error: %s", e)
+        else:
+            log.error("[NAV-DB] File path %s does not exist after download. Skipping ingestion.", result["path"])
+            
+        return {"ran": True, "ok": True, "reason": "downloaded and ingested", "bytes": result.get("bytes")}
+        
+    except Exception as e:
+        log.exception("[AMFI] Download failed with exception")
+        return {"ran": True, "ok": False, "reason": f"download failed: {e}", "bytes": None}
+
+
+
+# NAV re-publish cutoffs during the day. Domestic NAVs settle ~3 PM,
+# foreign/international scheme NAVs land later, ~11 PM.
+NAV_REDOWNLOAD_TIMES = [time_cls(15, 0), time_cls(23, 0)]
+
+def _last_passed_cutoff_today(now: datetime) -> Optional[time_cls]:
+    """Latest cutoff time that has already passed today, or None if before all of them."""
+    passed = [t for t in NAV_REDOWNLOAD_TIMES if now.time() >= t]
+    return max(passed) if passed else None
 
 
 # ==================== BUSINESS DAY LOGIC (needs _parse_nav_text above) ====================
@@ -2540,21 +2617,6 @@ def _normalize_history_text_to_live_format(text: str) -> str:
     return "\n".join(out_lines)
 
 
-def _extract_nav_date_from_text(text: str) -> Optional[str]:
-
-        for line in text.splitlines():
-            line = line.strip()
-            if ";" not in line:
-                continue
-            parts = line.split(";")
-            if len(parts) < 5 or parts[0].strip() == "Scheme Code":
-                continue
-            date_field = parts[-1].strip()
-            try:
-                return datetime.strptime(date_field, "%d-%b-%Y").strftime("%Y-%m-%d")
-            except ValueError:
-                continue
-        return None
 
 def download_business_day_nav(target_date, timeout: int = 30) -> dict:
     """
@@ -2683,6 +2745,10 @@ def sync_previous_business_day_nav(force: bool = False, timeout: int = 30, max_l
         if actual_date == iso_date:
             # AMFI genuinely has data for the exact date we asked for.
             saved = _save_nav_snapshot(result["text"], actual_date)
+            try:
+                nav_data_ingestion.ingest_nav_file_to_db(saved["path"])
+            except Exception as e:
+                log.exception("[NAV-DB] Ingestion error: %s", e)
             return {"ran": True, "ok": True, "reason": "downloaded", **saved}
 
         # AMFI returned real data, but dated earlier than requested — this
@@ -2698,6 +2764,10 @@ def sync_previous_business_day_nav(force: bool = False, timeout: int = 30, max_l
             return {"ran": False, "ok": True, "reason": f"already have {actual_date}", "date": actual_date}
 
         saved = _save_nav_snapshot(result["text"], actual_date)
+        try:
+            nav_data_ingestion.ingest_nav_file_to_db(saved["path"])
+        except Exception as e:
+            log.exception("[NAV-DB] Ingestion error: %s", e)
         return {"ran": True, "ok": True, "reason": f"requested {iso_date}, saved actual {actual_date}", **saved}
 
     return {"ran": True, "ok": False, "reason": f"no business day found within {max_lookback} days"}

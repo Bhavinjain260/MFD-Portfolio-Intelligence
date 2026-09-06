@@ -6519,12 +6519,12 @@ Open Ended Schemes ( Income/Debt Oriented Schemes - Ultra Short Term Fund )
 
 
 Aditya Birla Sun Life Mutual Fund
-119501;INF209K01UR9;;Aditya Birla Sun Life Savings Fund - Growth - Direct Plan;603.4584;03-Sep-2026
-101317;INF209K01LZ1;;Aditya Birla Sun Life Savings Fund - Growth - Regular Plan;591.0598;03-Sep-2026
-119500;INF209K01UQ1;;Aditya Birla Sun Life Savings Fund-DIRECT - DAILY IDCW;100.0863;03-Sep-2026
-119499;INF209K01US7;;Aditya Birla Sun Life Savings Fund-DIRECT - WEEKLY IDCW;100.7569;03-Sep-2026
-105888;INF209K01LY4;;Aditya Birla Sun Life Savings Fund-Regular - DAILY IDCW;100.0863;03-Sep-2026
-105887;INF209K01MA2;;Aditya Birla Sun Life Savings Fund-Regular - weekly IDCW;100.6787;03-Sep-2026
+119501;INF209K01UR9;;Aditya Birla Sun Life Ultra Short Term Fund - Growth - Direct Plan;603.4584;03-Sep-2026
+101317;INF209K01LZ1;;Aditya Birla Sun Life Ultra Short Term Fund - Growth - Regular Plan;591.0598;03-Sep-2026
+119500;INF209K01UQ1;;Aditya Birla Sun Life Ultra Short Term Fund-DIRECT - DAILY IDCW;100.0863;03-Sep-2026
+119499;INF209K01US7;;Aditya Birla Sun Life Ultra Short Term Fund-DIRECT - WEEKLY IDCW;100.7569;03-Sep-2026
+105888;INF209K01LY4;;Aditya Birla Sun Life Ultra Short Term Fund-Regular - DAILY IDCW;100.0863;03-Sep-2026
+105887;INF209K01MA2;;Aditya Birla Sun Life Ultra Short Term Fund-Regular - weekly IDCW;100.6787;03-Sep-2026
 
 Axis Mutual Fund
 144753;;INF846K01F57;Axis Ultra Short Duration Fund - Direct Plan - Daily IDCW;10.0338;03-Sep-2026
@@ -6753,12 +6753,12 @@ Open Ended Schemes ( Income/Debt Oriented Schemes - Ultra Short to Short Term Fu
 
 
 Aditya Birla Sun Life Mutual Fund
-119523;INF209K01XU7;;Aditya Birla Sun Life Low duration Fund - Growth - Direct Plan;783.5155;03-Sep-2026
-119524;INF209K01XW3;;Aditya Birla Sun Life Low Duration Fund -Direct - daily IDCW;100.0000;03-Sep-2026
-119522;;INF209K01XV5;Aditya Birla Sun Life Low Duration Fund -Direct - weekly IDCW;100.8368;03-Sep-2026
-113307;;INF209KA1LP6;Aditya Birla Sun Life Low Duration Fund -Regular - DAILY IDCW;100.0000;03-Sep-2026
-103193;;INF209KA1LQ4;Aditya Birla Sun Life Low Duration Fund -REGULAR - WEEKLY IDCW;100.6911;03-Sep-2026
-103192;INF209K01LQ0;;Aditya Birla Sun Life Low Duration Fund -Regular- Growth Plan;700.6949;03-Sep-2026
+119523;INF209K01XU7;;Aditya Birla Sun Life Ultra Short to Short Term Fund - Growth - Direct Plan;783.5155;03-Sep-2026
+119524;INF209K01XW3;;Aditya Birla Sun Life Ultra Short to Short Term Fund -Direct - daily IDCW;100.0000;03-Sep-2026
+119522;;INF209K01XV5;Aditya Birla Sun Life Ultra Short to Short Term Fund -Direct - weekly IDCW;100.8368;03-Sep-2026
+113307;;INF209KA1LP6;Aditya Birla Sun Life Ultra Short to Short Term Fund -Regular - DAILY IDCW;100.0000;03-Sep-2026
+103193;;INF209KA1LQ4;Aditya Birla Sun Life Ultra Short to Short Term Fund -REGULAR - WEEKLY IDCW;100.6911;03-Sep-2026
+103192;INF209K01LQ0;;Aditya Birla Sun Life Ultra Short to Short Term Fund -Regular- Growth Plan;700.6949;03-Sep-2026
 
 Axis Mutual Fund
 120515;;INF846K01EQ4;Axis Treasury Advantage Fund - Direct Plan - Daily IDCW;1012.4737;03-Sep-2026
@@ -7041,12 +7041,12 @@ Open Ended Schemes ( Income/Debt Oriented Schemes - Money Market Fund )
 
 
 Aditya Birla Sun Life Mutual Fund
-101973;;INF209K01SZ6;Aditya Birla Sun Life Money Manager Fund - Daily IDCW;100.1029;03-Sep-2026
-119513;;INF209K01UT5;Aditya Birla Sun Life Money Manager Fund - Direct - daily IDCW;100.1029;03-Sep-2026
-119512;INF209K01UV1;INF209KA1LM3;Aditya Birla Sun Life Money Manager Fund - Direct - weekly IDCW;100.2927;03-Sep-2026
-101976;INF209K01RV7;;Aditya Birla Sun Life Money Manager Fund - Growth;399.2255;03-Sep-2026
-119511;INF209K01UU3;;Aditya Birla Sun Life Money Manager Fund - Growth - Direct Plan;405.0961;03-Sep-2026
-101974;;INF209K01SY9;Aditya Birla Sun Life Money Manager Fund - WEEKLY IDCW;100.2903;03-Sep-2026
+101973;;INF209K01SZ6;Aditya Birla Sun Life Money Market Fund - Daily IDCW;100.1029;03-Sep-2026
+119513;;INF209K01UT5;Aditya Birla Sun Life Money Market Fund - Direct - daily IDCW;100.1029;03-Sep-2026
+119512;INF209K01UV1;INF209KA1LM3;Aditya Birla Sun Life Money Market Fund - Direct - weekly IDCW;100.2927;03-Sep-2026
+101976;INF209K01RV7;;Aditya Birla Sun Life Money Market Fund - Growth;399.2255;03-Sep-2026
+119511;INF209K01UU3;;Aditya Birla Sun Life Money Market Fund - Growth - Direct Plan;405.0961;03-Sep-2026
+101974;;INF209K01SY9;Aditya Birla Sun Life Money Market Fund - WEEKLY IDCW;100.2903;03-Sep-2026
 
 Axis Mutual Fund
 147576;INF846K01Q96;INF846K01Q88;Axis Money Market Fund - Direct Plan - Annual IDCW;1322.5371;03-Sep-2026
@@ -7360,14 +7360,14 @@ Open Ended Schemes ( Income/Debt Oriented Schemes - Medium Term Fund )
 
 
 Aditya Birla Sun Life Mutual Fund
-119540;INF209KA1KN3;;Aditya Birla Sun Life Medium Term Plan - DIRECT - HALF YEARLY IDCW;15.1385;03-Sep-2026
-119538;INF209KA1KO1;;Aditya Birla Sun Life Medium Term Plan - Direct - IDCW;18.3021;03-Sep-2026
-119541;INF209KA1KP8;;Aditya Birla Sun Life Medium Term Plan - DIRECT - Quarterly IDCW;14.5336;03-Sep-2026
-119539;INF209K01XA9;;Aditya Birla Sun Life Medium Term Plan - Growth - Direct Plan;48.0425;03-Sep-2026
-111803;INF209K01603;;Aditya Birla Sun Life Medium Term Plan - Growth - Regular Plan;43.7990;03-Sep-2026
-111811;INF209K01595;INF209K01CZ0;Aditya Birla Sun Life Medium Term Plan - REGULAR - HALFYEARLY IDCW;14.1418;03-Sep-2026
-111812;INF209K01611;INF209K01DA1;Aditya Birla Sun Life Medium Term Plan - Regular - IDCW;16.6283;03-Sep-2026
-111809;INF209K01637;INF209KB1OJ2;Aditya Birla Sun Life Medium Term Plan - REGULAR - Quarterly IDCW;13.7601;03-Sep-2026
+119541;INF209KA1KP8;;Aditya Birla Sun Life Medium Term Fund - DIRECT - Quarterly IDCW;14.5336;03-Sep-2026
+119539;INF209K01XA9;;Aditya Birla Sun Life Medium Term Fund - Growth - Direct Plan;48.0425;03-Sep-2026
+111812;INF209K01611;INF209K01DA1;Aditya Birla Sun Life Medium Term Fund - Regular - IDCW;16.6283;03-Sep-2026
+119540;INF209KA1KN3;;Aditya Birla Sun Life Medium Term Fund- DIRECT - HALF YEARLY IDCW;15.1385;03-Sep-2026
+119538;INF209KA1KO1;;Aditya Birla Sun Life Medium Term Fund- Direct - IDCW;18.3021;03-Sep-2026
+111803;INF209K01603;;Aditya Birla Sun Life Medium Term Fund- Growth - Regular Plan;43.7990;03-Sep-2026
+111811;INF209K01595;INF209K01CZ0;Aditya Birla Sun Life Medium Term Fund- REGULAR - HALFYEARLY IDCW;14.1418;03-Sep-2026
+111809;INF209K01637;INF209KB1OJ2;Aditya Birla Sun Life Medium Term Fund- REGULAR - Quarterly IDCW;13.7601;03-Sep-2026
 
 Axis Mutual Fund
 120475;INF846K01DT0;;Axis Strategic Bond Fund - Direct Plan - Growth Option;33.3649;03-Sep-2026
@@ -7474,12 +7474,12 @@ Open Ended Schemes ( Income/Debt Oriented Schemes - Medium to Long Term Fund )
 
 
 Aditya Birla Sun Life Mutual Fund
-133446;INF209KA1WL2;INF209KA1WM0;Aditya Birla Sun Life Income Fund - Direct - IDCW;13.1289;03-Sep-2026
-119655;INF209K01R13;INF209K01WZ8;Aditya Birla Sun Life Income Fund - Direct - Quarterly IDCW;14.0954;03-Sep-2026
-119657;INF209K01WY1;;Aditya Birla Sun Life Income Fund - Growth - Direct Plan;140.5935;03-Sep-2026
-100038;INF209K01579;;Aditya Birla Sun Life Income Fund - Growth - Regular Plan;129.7169;03-Sep-2026
-133445;INF209KA1WJ6;INF209KA1WK4;Aditya Birla Sun Life Income Fund - Regular - IDCW;12.2564;03-Sep-2026
-100037;INF209K01587;INF209K01CY3;Aditya Birla Sun Life Income Fund - Regular - Quarterly IDCW;13.0610;03-Sep-2026
+133446;INF209KA1WL2;INF209KA1WM0;Aditya Birla Sun Life Medium to Long Term Fund - Direct - IDCW;13.1289;03-Sep-2026
+119655;INF209K01R13;INF209K01WZ8;Aditya Birla Sun Life Medium to Long Term Fund - Direct - Quarterly IDCW;14.0954;03-Sep-2026
+119657;INF209K01WY1;;Aditya Birla Sun Life Medium to Long Term Fund - Growth - Direct Plan;140.5935;03-Sep-2026
+100038;INF209K01579;;Aditya Birla Sun Life Medium to Long Term Fund - Growth - Regular Plan;129.7169;03-Sep-2026
+133445;INF209KA1WJ6;INF209KA1WK4;Aditya Birla Sun Life Medium to Long Term Fund - Regular - IDCW;12.2564;03-Sep-2026
+100037;INF209K01587;INF209K01CY3;Aditya Birla Sun Life Medium to Long Term Fund - Regular - Quarterly IDCW;13.0610;03-Sep-2026
 
 Bandhan Mutual Fund
 118393;INF194K01R77;INF194K01R69;Bandhan Medium to Long Term Fund - Direct Plan - Annual IDCW;16.3925;03-Sep-2026
@@ -7594,10 +7594,10 @@ Open Ended Schemes ( Income/Debt Oriented Schemes - Long Term Fund )
 
 
 Aditya Birla Sun Life Mutual Fund
-150484;INF209KB17J2;;Aditya Birla Sun Life Long Duration Fund-Direct Growth;13.4136;03-Sep-2026
-150485;INF209KB18J0;INF209KB19J8;Aditya Birla Sun Life Long Duration Fund-Direct IDCW Payout;10.9513;03-Sep-2026
-150482;INF209KB14J9;;Aditya Birla Sun Life Long Duration Fund-Regular Growth;13.0757;03-Sep-2026
-150483;INF209KB15J6;INF209KB16J4;Aditya Birla Sun Life Long Duration Fund-Regular IDCW Payout;10.6705;03-Sep-2026
+150484;INF209KB17J2;;Aditya Birla Sun Life Long Term Fund-Direct Growth;13.4136;03-Sep-2026
+150485;INF209KB18J0;INF209KB19J8;Aditya Birla Sun Life Long Term Fund-Direct IDCW Payout;10.9513;03-Sep-2026
+150482;INF209KB14J9;;Aditya Birla Sun Life Long Term Fund-Regular Growth;13.0757;03-Sep-2026
+150483;INF209KB15J6;INF209KB16J4;Aditya Birla Sun Life Long Term Fund-Regular IDCW Payout;10.6705;03-Sep-2026
 
 Axis Mutual Fund
 151205;INF846K017M4;INF846K019M0;Axis Long Duration Fund - Direct Plan - Annual IDCW;1248.8879;03-Sep-2026
@@ -7693,14 +7693,14 @@ Open Ended Schemes ( Income/Debt Oriented Schemes - Dynamic Term Fund )
 122712;INF579M01217;INF579M01241;360 ONE Dynamic Term Fund Regular Plan Quarterly Dividend;23.3461;03-Sep-2026
 
 Aditya Birla Sun Life Mutual Fund
-119505;INF209K01N82;;Aditya Birla Sun Life Dynamic Bond Fund - Growth - Direct Plan;52.9718;03-Sep-2026
-102767;INF209K01793;;Aditya Birla Sun Life Dynamic Bond Fund - Growth - Regular Plan;49.0424;03-Sep-2026
-132918;INF209KA1TX3;;Aditya Birla Sun Life Dynamic Bond Fund -Direct - IDCW;13.2946;03-Sep-2026
-119503;INF209K01R62;;Aditya Birla Sun Life Dynamic Bond Fund -DIRECT - MONTHLY IDCW;11.1899;03-Sep-2026
-119502;INF209K01R88;;Aditya Birla Sun Life Dynamic Bond Fund -Direct - Quarterly IDCW;11.1246;03-Sep-2026
-132917;INF209KA1TV7;;Aditya Birla Sun Life Dynamic Bond Fund -Regular - IDCW;12.1974;03-Sep-2026
-111521;INF209K01801;INF209K01DG8;Aditya Birla Sun Life Dynamic Bond Fund -REGULAR - MONTHLY IDCW;10.6760;03-Sep-2026
-102766;INF209K01819;INF209K01DH6;Aditya Birla Sun Life Dynamic Bond Fund -Regular - Quarterly IDCW;10.7956;03-Sep-2026
+119505;INF209K01N82;;Aditya Birla Sun Life Dynamic Term Fund - Growth - Direct Plan;52.9718;03-Sep-2026
+102767;INF209K01793;;Aditya Birla Sun Life Dynamic Term Fund - Growth - Regular Plan;49.0424;03-Sep-2026
+132918;INF209KA1TX3;;Aditya Birla Sun Life Dynamic Term Fund -Direct - IDCW;13.2946;03-Sep-2026
+119503;INF209K01R62;;Aditya Birla Sun Life Dynamic Term Fund -DIRECT - MONTHLY IDCW;11.1899;03-Sep-2026
+119502;INF209K01R88;;Aditya Birla Sun Life Dynamic Term Fund -Direct - Quarterly IDCW;11.1246;03-Sep-2026
+132917;INF209KA1TV7;;Aditya Birla Sun Life Dynamic Term Fund -Regular - IDCW;12.1974;03-Sep-2026
+111521;INF209K01801;INF209K01DG8;Aditya Birla Sun Life Dynamic Term Fund -REGULAR - MONTHLY IDCW;10.6760;03-Sep-2026
+102766;INF209K01819;INF209K01DH6;Aditya Birla Sun Life Dynamic Term Fund -Regular - Quarterly IDCW;10.7956;03-Sep-2026
 
 Axis Mutual Fund
 120451;INF846K01DI3;;Axis Dynamic Bond Fund - Direct Plan - Growth Option;34.7862;03-Sep-2026
@@ -8168,10 +8168,10 @@ Open Ended Schemes ( Income/Debt Oriented Schemes - Gilt Fund )
 
 
 Aditya Birla Sun Life Mutual Fund
-119606;INF209KA1LC4;INF209K01XR3;Aditya Birla Sun Life Govenment Securities Fund -DIRECT - Quarterly IDCW;11.5426;03-Sep-2026
-100057;INF209K01AF6;INF209K01DP9;Aditya Birla Sun Life Govenment Securities Fund -Regular - Quarterly IDCW;10.7429;03-Sep-2026
-100058;INF209K01AC3;INF209K01AD1;Aditya Birla Sun Life Government Securities Fund  - Growth - Regular Plan;81.4288;03-Sep-2026
-119605;INF209K01XP7;;Aditya Birla Sun Life Government Securities Fund - Growth - Direct Plan;88.1476;03-Sep-2026
+100058;INF209K01AC3;INF209K01AD1;Aditya Birla Sun Life Gilt Fund  - Growth - Regular Plan;81.4288;03-Sep-2026
+119605;INF209K01XP7;;Aditya Birla Sun Life Gilt Fund - Growth - Direct Plan;88.1476;03-Sep-2026
+119606;INF209KA1LC4;INF209K01XR3;Aditya Birla Sun Life Gilt Fund -DIRECT - Quarterly IDCW;11.5426;03-Sep-2026
+100057;INF209K01AF6;INF209K01DP9;Aditya Birla Sun Life Gilt Fund -Regular - Quarterly IDCW;10.7429;03-Sep-2026
 
 Axis Mutual Fund
 120447;INF846K01DD4;;Axis Gilt Fund - Direct Plan - Growth Option;28.4601;03-Sep-2026
@@ -8305,12 +8305,12 @@ Open Ended Schemes ( Income/Debt Oriented Schemes - Floating Interest Rates Fund
 
 
 Aditya Birla Sun Life Mutual Fund
-122645;INF209K01UW9;;Aditya Birla Sun Life Floating Rate Fund-Direct - daily IDCW;100.1087;03-Sep-2026
-122648;INF209K01UY5;;Aditya Birla Sun Life Floating Rate Fund-Direct - weekly IDCW;100.9811;03-Sep-2026
-122646;INF209K01UX7;;Aditya Birla Sun Life Floating Rate Fund-Direct Plan-Growth;385.1235;03-Sep-2026
-122643;;INF209KA1LN1;Aditya Birla Sun Life Floating Rate Fund-Regular - DAILY IDCW;100.1087;03-Sep-2026
-122647;;INF209K01MH7;Aditya Birla Sun Life Floating Rate Fund-REGULAR - WEEKLY IDCW;100.8988;03-Sep-2026
-122644;INF209K01MG9;;Aditya Birla Sun Life Floating Rate Fund-Regular Plan-Growth;373.8664;03-Sep-2026
+122645;INF209K01UW9;;Aditya Birla Sun Life Floating Interest Rate Fund-Direct - daily IDCW;100.1087;03-Sep-2026
+122648;INF209K01UY5;;Aditya Birla Sun Life Floating Interest Rate Fund-Direct - weekly IDCW;100.9811;03-Sep-2026
+122646;INF209K01UX7;;Aditya Birla Sun Life Floating Interest Rate Fund-Direct Plan-Growth;385.1235;03-Sep-2026
+122643;;INF209KA1LN1;Aditya Birla Sun Life Floating Interest Rate Fund-Regular - DAILY IDCW;100.1087;03-Sep-2026
+122647;;INF209K01MH7;Aditya Birla Sun Life Floating Interest Rate Fund-REGULAR - WEEKLY IDCW;100.8988;03-Sep-2026
+122644;INF209K01MG9;;Aditya Birla Sun Life Floating Interest Rate Fund-Regular Plan-Growth;373.8664;03-Sep-2026
 
 Axis Mutual Fund
 149055;INF846K016A1;INF846K015A3;Axis Floater Fund - Direct Plan - Annual IDCW;1388.4150;03-Sep-2026
@@ -9546,10 +9546,10 @@ Open Ended Schemes ( Hybrid Schemes - Conservative Hybrid Fund )
 
 
 Aditya Birla Sun Life Mutual Fund
-120550;INF209K01R47;INF209K01XI2;Aditya Birla Sun Life Regular Savings Fund - DIRECT - MONTHLY IDCW;27.1111;03-Sep-2026
-120705;INF209K01XH4;;Aditya Birla Sun Life Regular Savings Fund - Growth / Payment - Direct Plan;79.4660;03-Sep-2026
-101818;INF209K01751;;Aditya Birla Sun Life Regular Savings Fund - Growth / Payment - Regular Plan;70.4139;03-Sep-2026
-101816;INF209K01769;INF209K01DF0;Aditya Birla Sun Life Regular Savings Fund - REGULAR - MONTHLY IDCW;16.4377;03-Sep-2026
+120550;INF209K01R47;INF209K01XI2;Aditya Birla Sun Life Conservative Hybrid Fund - DIRECT - MONTHLY IDCW;27.1111;03-Sep-2026
+120705;INF209K01XH4;;Aditya Birla Sun Life Conservative Hybrid Fund - Growth / Payment - Direct Plan;79.4660;03-Sep-2026
+101818;INF209K01751;;Aditya Birla Sun Life Conservative Hybrid Fund - Growth / Payment - Regular Plan;70.4139;03-Sep-2026
+101816;INF209K01769;INF209K01DF0;Aditya Birla Sun Life Conservative Hybrid Fund - REGULAR - MONTHLY IDCW;16.4377;03-Sep-2026
 
 Axis Mutual Fund
 120477;INF846K01DY0;INF846K01DZ7;Axis Conservative Hybrid Fund - Direct Plan - Annual IDCW;16.4793;03-Sep-2026
@@ -9636,10 +9636,10 @@ Open Ended Schemes ( Hybrid Schemes - Aggressive Hybrid Fund )
 
 
 Aditya Birla Sun Life Mutual Fund
-120517;INF209K01ZC0;;Aditya Birla Sun Life Equity Hybrid'95 Fund - Direct Plan-Growth;1753.09;03-Sep-2026
-103155;INF209K01BT5;;Aditya Birla Sun Life Equity Hybrid'95 Fund - Regular Plan-Growth;1552.10;03-Sep-2026
-120518;INF209KA1LH3;INF209K01ZB2;Aditya Birla Sun Life Equity Hybrid'95 Fund -DIRECT - IDCW;293.10;03-Sep-2026
-103154;INF209K01BS7;INF209K01EE1;Aditya Birla Sun Life Equity Hybrid'95 Fund -Regular - IDCW;170.09;03-Sep-2026
+120517;INF209K01ZC0;;Aditya Birla Sun Life Aggressive Hybrid Fund - Direct Plan-Growth;1753.09;03-Sep-2026
+103155;INF209K01BT5;;Aditya Birla Sun Life Aggressive Hybrid Fund - Regular Plan-Growth;1552.10;03-Sep-2026
+120518;INF209KA1LH3;INF209K01ZB2;Aditya Birla Sun Life Aggressive Hybrid Fund -DIRECT - IDCW;293.10;03-Sep-2026
+103154;INF209K01BS7;INF209K01EE1;Aditya Birla Sun Life Aggressive Hybrid Fund -Regular - IDCW;170.09;03-Sep-2026
 
 Axis Mutual Fund
 144394;INF846K01E25;;Axis Aggressive Hybrid Fund - Direct Plan - Growth Option;23.15;03-Sep-2026
