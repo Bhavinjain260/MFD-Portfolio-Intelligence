@@ -3527,10 +3527,10 @@ Kotak Mahindra Mutual Fund
 152911;INF174KA1TH7;INF174KA1TI5;Kotak MNC Fund;Direct Plan;IDCW Option;12.832;04-Sep-2026
 152913;INF174KA1TJ3;-;Kotak MNC Fund;Regular Plan;Growth;12.495;04-Sep-2026
 152912;INF174KA1TK1;INF174KA1TL9;Kotak MNC Fund;Regular Plan;IDCW Option;12.495;04-Sep-2026
-147727;INF174KA1EZ1;-;Kotak Pioneer Fund;Direct Plan;Growth;39.53;03-Sep-2026
-147724;INF174KA1EW8;-;Kotak Pioneer Fund;Regular Plan;Growth;35.565;03-Sep-2026
-147728;INF174KA1EU2;INF174KA1EV0;Kotak Pioneer Fund;Regular Plan;Reinvestment of Income Distribution cum capital withdrawal option;35.58;03-Sep-2026
-147725;INF174KA1EX6;INF174KA1EY4;Kotak Pioneer Fund;Direct Plan;Reinvestment of Income Distribution cum capital withdrawal option;39.524;03-Sep-2026
+147727;INF174KA1EZ1;-;Kotak Pioneer Fund;Direct Plan;Growth;39.533;04-Sep-2026
+147724;INF174KA1EW8;-;Kotak Pioneer Fund;Regular Plan;Growth;35.566;04-Sep-2026
+147728;INF174KA1EU2;INF174KA1EV0;Kotak Pioneer Fund;Regular Plan;Reinvestment of Income Distribution cum capital withdrawal option;35.582;04-Sep-2026
+147725;INF174KA1EX6;INF174KA1EY4;Kotak Pioneer Fund;Direct Plan;Reinvestment of Income Distribution cum capital withdrawal option;39.527;04-Sep-2026
 151881;INF174KA1OL0;-;Kotak Quant Fund;Direct Plan;Growth;15.42;04-Sep-2026
 151880;INF174KA1OM8;INF174KA1ON6;Kotak Quant Fund;Direct Plan;IDCW;15.42;04-Sep-2026
 151878;INF174KA1OI6;-;Kotak Quant Fund;Regular Plan;Growth;15.228;04-Sep-2026
@@ -5734,18 +5734,18 @@ Axis Mutual Fund
 120472;INF846K01DQ6;INF846K01DR4;Axis Gold Fund;Direct Plan;IDCW Option;48.5112;04-Sep-2026
 115897;INF846K01AL3;-;Axis Gold Fund;Regular Plan;Growth Option;44.4203;04-Sep-2026
 115898;INF846K01AM1;INF846K01AN9;Axis Gold Fund;Regular Plan;IDCW Option;44.4757;04-Sep-2026
-147895;INF846K01U25;INF846K01U17;Axis Income Plus Arbitrage Omni FOF;Direct Plan;Annual IDCW Option;14.2402;03-Sep-2026
-147889;INF846K01U09;-;Axis Income Plus Arbitrage Omni FOF;Direct Plan;Growth Option;15.7228;03-Sep-2026
-147894;INF846K01U74;INF846K01U82;Axis Income Plus Arbitrage Omni FOF;Direct Plan;Half Yearly Dividend Option;11.7242;03-Sep-2026
-147891;INF846K01U90;INF846K01V08;Axis Income Plus Arbitrage Omni FOF;Direct Plan;IDCW Option;15.7360;03-Sep-2026
-147892;INF846K01U41;INF846K01U33;Axis Income Plus Arbitrage Omni FOF;Direct Plan;Monthly IDCW Option;15.7359;03-Sep-2026
-147893;INF846K01U66;INF846K01U58;Axis Income Plus Arbitrage Omni FOF;Direct Plan;Quarterly IDCW Option;12.2876;03-Sep-2026
-147898;INF846K01V32;INF846K01V24;Axis Income Plus Arbitrage Omni FOF;Regular Plan;Annual IDCW Option;13.9411;03-Sep-2026
-147890;INF846K01V16;-;Axis Income Plus Arbitrage Omni FOF;Regular Plan;Growth Option;15.3841;03-Sep-2026
-147897;INF846K01V81;INF846K01V99;Axis Income Plus Arbitrage Omni FOF;Regular Plan;Half Yearly IDCW Option;12.2599;03-Sep-2026
-147888;INF846K01W07;INF846K01W15;Axis Income Plus Arbitrage Omni FOF;Regular Plan;IDCW Option	;15.3885;03-Sep-2026
-147896;INF846K01V57;INF846K01V40;Axis Income Plus Arbitrage Omni FOF;Regular Plan;Monthly IDCW Option;15.3833;03-Sep-2026
-147905;INF846K01V73;INF846K01V65;Axis Income Plus Arbitrage Omni FOF;Regular Plan;Quarterly IDCW Option;11.4323;03-Sep-2026
+147895;INF846K01U25;INF846K01U17;Axis Income Plus Arbitrage Omni FOF;Direct Plan;Annual IDCW Option;14.2362;04-Sep-2026
+147889;INF846K01U09;-;Axis Income Plus Arbitrage Omni FOF;Direct Plan;Growth Option;15.7184;04-Sep-2026
+147894;INF846K01U74;INF846K01U82;Axis Income Plus Arbitrage Omni FOF;Direct Plan;Half Yearly Dividend Option;11.7209;04-Sep-2026
+147891;INF846K01U90;INF846K01V08;Axis Income Plus Arbitrage Omni FOF;Direct Plan;IDCW Option;15.7316;04-Sep-2026
+147892;INF846K01U41;INF846K01U33;Axis Income Plus Arbitrage Omni FOF;Direct Plan;Monthly IDCW Option;15.7315;04-Sep-2026
+147893;INF846K01U66;INF846K01U58;Axis Income Plus Arbitrage Omni FOF;Direct Plan;Quarterly IDCW Option;12.2841;04-Sep-2026
+147898;INF846K01V32;INF846K01V24;Axis Income Plus Arbitrage Omni FOF;Regular Plan;Annual IDCW Option;13.9371;04-Sep-2026
+147890;INF846K01V16;-;Axis Income Plus Arbitrage Omni FOF;Regular Plan;Growth Option;15.3797;04-Sep-2026
+147897;INF846K01V81;INF846K01V99;Axis Income Plus Arbitrage Omni FOF;Regular Plan;Half Yearly IDCW Option;12.2563;04-Sep-2026
+147888;INF846K01W07;INF846K01W15;Axis Income Plus Arbitrage Omni FOF;Regular Plan;IDCW Option	;15.3841;04-Sep-2026
+147896;INF846K01V57;INF846K01V40;Axis Income Plus Arbitrage Omni FOF;Regular Plan;Monthly IDCW Option;15.3788;04-Sep-2026
+147905;INF846K01V73;INF846K01V65;Axis Income Plus Arbitrage Omni FOF;Regular Plan;Quarterly IDCW Option;11.4289;04-Sep-2026
 153924;INF846KA1283;-;Axis Income Plus Arbitrage Passive FOF;Direct Plan;Growth Option Option;10.5190;04-Sep-2026
 153925;INF846KA1309;INF846KA1325;Axis Income Plus Arbitrage Passive FOF;Direct Plan;IDCW Option;10.5190;04-Sep-2026
 153927;INF846KA1275;-;Axis Income Plus Arbitrage Passive FOF;Regular Plan;Growth Option;10.4937;04-Sep-2026
@@ -5754,10 +5754,10 @@ Axis Mutual Fund
 149846;INF846K012G7;INF846K013G5;Axis Multi Factor Passive FoF;Direct Plan;IDCW Option;15.6663;04-Sep-2026
 149844;INF846K014G3;-;Axis Multi Factor Passive FoF;Regular Plan;Growth Option;15.4419;04-Sep-2026
 149845;INF846K015G0;INF846K016G8;Axis Multi Factor Passive FoF;Regular Plan;IDCW Option;15.4428;04-Sep-2026
-153960;INF846KA1366;-;Axis Multi-Asset Omni FoF;Direct Plan;Growth Option;10.9587;03-Sep-2026
-153961;INF846KA1374;INF846KA1382;Axis Multi-Asset Omni FoF;Direct Plan;IDCW Option;10.9586;03-Sep-2026
-153963;INF846KA1333;-;Axis Multi-Asset Omni FoF;Regular Plan;Growth Option;10.8662;03-Sep-2026
-153962;INF846KA1341;INF846KA1358;Axis Multi-Asset Omni FoF;Regular Plan;IDCW Option;10.8662;03-Sep-2026
+153960;INF846KA1366;-;Axis Multi-Asset Omni FoF;Direct Plan;Growth Option;10.9706;04-Sep-2026
+153961;INF846KA1374;INF846KA1382;Axis Multi-Asset Omni FoF;Direct Plan;IDCW Option;10.9706;04-Sep-2026
+153963;INF846KA1333;-;Axis Multi-Asset Omni FoF;Regular Plan;Growth Option;10.8776;04-Sep-2026
+153962;INF846KA1341;INF846KA1358;Axis Multi-Asset Omni FoF;Regular Plan;IDCW Option;10.8776;04-Sep-2026
 150618;INF846K019J6;INF846K010K3;Axis Silver Fund of Fund;Regular Plan;IDCW Option;39.1625;04-Sep-2026
 150617;INF846K018J8;-;Axis Silver Fund of Fund;Regular Plan;Growth Option;39.1639;04-Sep-2026
 150616;INF846K016J2;INF846K017J0;Axis Silver Fund of Fund;Direct Plan;IDCW Option;39.9708;04-Sep-2026
@@ -11236,10 +11236,10 @@ Bandhan Mutual Fund
  
 Baroda BNP Paribas Mutual Fund
  
-150285;INF251K01QT5;-;Baroda BNP Paribas Aqua Fund of Fund;Direct Plan;Growth Option;16.3025;03-Sep-2026
-150287;INF251K01QU3;INF251K01QV1;Baroda BNP Paribas Aqua Fund of Fund;Direct Plan;IDCW Option;16.3025;03-Sep-2026
-150286;INF251K01QR9;INF251K01QS7;Baroda BNP Paribas Aqua Fund of Fund;Regular Plan;IDCW Option;15.4095;03-Sep-2026
-150284;INF251K01QQ1;-;Baroda BNP Paribas Aqua Fund of Fund;Regular Plan;Growth Option;15.4095;03-Sep-2026
+150285;INF251K01QT5;-;Baroda BNP Paribas Aqua Fund of Fund;Direct Plan;Growth Option;16.3362;04-Sep-2026
+150287;INF251K01QU3;INF251K01QV1;Baroda BNP Paribas Aqua Fund of Fund;Direct Plan;IDCW Option;16.3362;04-Sep-2026
+150286;INF251K01QR9;INF251K01QS7;Baroda BNP Paribas Aqua Fund of Fund;Regular Plan;IDCW Option;15.4410;04-Sep-2026
+150284;INF251K01QQ1;-;Baroda BNP Paribas Aqua Fund of Fund;Regular Plan;Growth Option;15.4410;04-Sep-2026
  
 DSP Mutual Fund
  
@@ -11292,8 +11292,8 @@ Franklin Templeton Mutual Fund
  
 HDFC Mutual Fund
  
-149180;INF179KC1BO4;-;HDFC Developed World Overseas Equity Passive FOF;;;21.943;03-Sep-2026
-149181;INF179KC1BP1;-;HDFC Developed World Overseas Equity Passive FOF;;;21.45;03-Sep-2026
+149180;INF179KC1BO4;-;HDFC Developed World Overseas Equity Passive FOF;;;21.957;04-Sep-2026
+149181;INF179KC1BP1;-;HDFC Developed World Overseas Equity Passive FOF;;;21.463;04-Sep-2026
  
 ICICI Prudential Mutual Fund
  
@@ -11363,10 +11363,10 @@ SBI Mutual Fund
  
 Sundaram Mutual Fund
  
-119602;INF903J01OB6;-;Sundaram Global Brand Theme-Equity Active FOF;Direct Plan;GROWTH;48.5925;03-Sep-2026
-119601;INF903J01NZ7;INF903J01OA8;Sundaram Global Brand Theme-Equity Active FOF;Direct Plan;IDCW (Income Distribution CUM Capital Withdrawal);40.7808;03-Sep-2026
-106370;INF903J01EX1;-;Sundaram Global Brand Theme-Equity Active FOF;Regular Plan;GROWTH;43.9119;03-Sep-2026
-106369;INF903J01EY9;INF903J01EZ6;Sundaram Global Brand Theme-Equity Active FOF;Regular Plan;IDCW (Income Distribution CUM Capital Withdrawal);35.4976;03-Sep-2026
+119602;INF903J01OB6;-;Sundaram Global Brand Theme-Equity Active FOF;Direct Plan;GROWTH;48.3843;04-Sep-2026
+119601;INF903J01NZ7;INF903J01OA8;Sundaram Global Brand Theme-Equity Active FOF;Direct Plan;IDCW (Income Distribution CUM Capital Withdrawal);40.6060;04-Sep-2026
+106370;INF903J01EX1;-;Sundaram Global Brand Theme-Equity Active FOF;Regular Plan;GROWTH;43.7226;04-Sep-2026
+106369;INF903J01EY9;INF903J01EZ6;Sundaram Global Brand Theme-Equity Active FOF;Regular Plan;IDCW (Income Distribution CUM Capital Withdrawal);35.3446;04-Sep-2026
  
 Open Ended Schemes(Other Scheme - Gold ETF)
  
@@ -12936,10 +12936,10 @@ Kotak Mahindra Mutual Fund
 106442;INF174K01DX9;INF174K01DW1;Kotak Global Emerging Market Overseas Equity Active FOF;Regular Plan;Payout of Income Distribution cum capital withdrawal option;39.688;04-Sep-2026
 119778;INF174K01LX2;INF174K01LY0;Kotak Global Emerging Market Overseas Equity Active FOF;Direct Plan;Payout of Income Distribution cum capital withdrawal option;43.495;04-Sep-2026
 106441;INF174K01DV3;-;Kotak Global Emerging Market Overseas Equity Active FOF;Regular Plan;Growth;39.685;04-Sep-2026
-149058;INF174KA1HE9;INF174KA1HF6;Kotak Global Innovation Overseas Equity Active FOF;Regular Plan;IDCW Option;14.8875;03-Sep-2026
-149056;INF174KA1HD1;-;Kotak Global Innovation Overseas Equity Active FOF;Regular Plan;Growth;14.887;03-Sep-2026
-149060;INF174KA1HH2;INF174KA1HI0;Kotak Global Innovation Overseas Equity Active FOF;Direct Plan;IDCW Option;15.8076;03-Sep-2026
-149059;INF174KA1HG4;-;Kotak Global Innovation Overseas Equity Active FOF;Direct Plan;Growth;15.81;03-Sep-2026
+149058;INF174KA1HE9;INF174KA1HF6;Kotak Global Innovation Overseas Equity Active FOF;Regular Plan;IDCW Option;14.9865;04-Sep-2026
+149056;INF174KA1HD1;-;Kotak Global Innovation Overseas Equity Active FOF;Regular Plan;Growth;14.986;04-Sep-2026
+149060;INF174KA1HH2;INF174KA1HI0;Kotak Global Innovation Overseas Equity Active FOF;Direct Plan;IDCW Option;15.9131;04-Sep-2026
+149059;INF174KA1HG4;-;Kotak Global Innovation Overseas Equity Active FOF;Direct Plan;Growth;15.9156;04-Sep-2026
 148646;INF174KA1FO2;-;Kotak International REIT Overseas Equity Active FOF;Direct Plan;Growth;12.0893;04-Sep-2026
 148649;INF174KA1FN4;INF174KA1FP9;Kotak International REIT Overseas Equity Active FOF;Direct Plan;Payout of Income Distribution cum capital withdrawal option;12.0891;04-Sep-2026
 148645;INF174KA1FL8;-;Kotak International REIT Overseas Equity Active FOF;Regular Plan;Growth;11.4965;04-Sep-2026

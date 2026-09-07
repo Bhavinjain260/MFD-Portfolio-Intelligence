@@ -10,6 +10,8 @@ from datetime import timedelta, datetime as dt
 from datetime import time as time_cls
 from datetime import timedelta
 from typing import Optional
+from datetime import datetime
+from bse_auto import should_auto_download, start_background_download
 
 import pandas as pd
 import plotly.express as px
@@ -42,7 +44,14 @@ PAGE_SIZE = 20
 
 _WHITESPACE_RE = re.compile(r"\s+")
 
-
+with get_conn() as conn:
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS admin_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
 
 
 
@@ -3691,17 +3700,19 @@ ensure_family_tables()
 # ==================== BSE SCHEME MASTER AUTO-DOWNLOAD ====================
 def _auto_bse_scheme_master():
     """Non-blocking: starts background download if needed, once per day."""
-    from bse_auto import should_auto_download, start_background_download
-
-    # Only run if user hasn't disabled it
-    if not st.session_state.get("bse_auto_toggle", True):
+    today = datetime.now().date()
+    
+    # Read setting from database
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT value FROM admin_settings WHERE key = 'bse_auto_enabled'"
+        ).fetchone()
+    
+    bse_enabled = row[0] == "1" if row else True
+    
+    if not bse_enabled:
         return
 
-    # Only schedule once per day
-    last_run = st.session_state.get("bse_auto_last_run")
-    today = datetime.now().strftime("%Y-%m-%d")
-    if last_run == today:
-        return
 
     st.session_state["bse_auto_last_run"] = today
 
@@ -7797,6 +7808,30 @@ elif mode == "🧮 Capital Gains":
 # ==================== ⚙️ ADMIN PANEL ====================
 elif mode == "⚙️ Admin Panel":
     st.header("⚙️ Admin Panel")
+
+    # Read database value fresh every page load
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT value FROM admin_settings WHERE key = 'bse_auto_enabled'"
+        ).fetchone()
+
+    db_value = row[0] == "1" if row else True
+
+    # Toggle WITHOUT key - no session state caching
+    new_value = st.toggle(
+        "📥 Auto-download daily",
+        value=db_value
+    )
+
+    if new_value != db_value:
+        with get_conn() as conn:
+            conn.execute(
+                "INSERT INTO admin_settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP",
+                ("bse_auto_enabled", "1" if new_value else "0")
+            )
+        st.rerun()
+    
 
     # ── Manual NAV redownload ──
     nav_status = get_snapshot_status()
