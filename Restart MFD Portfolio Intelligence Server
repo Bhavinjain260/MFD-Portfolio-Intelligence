@@ -26,7 +26,7 @@ source ~/venvs/mfd/bin/activate
 
 ## 5. Go to project and run Streamlit
 ```
-cd /mnt/sdcard/pictures/USB/MFD-Portfolio-Intelligence
+cd ~/projects/MFD-Portfolio-Intelligence
 streamlit run app.py --server.port 8501 --server.address 0.0.0.0
 ```
 Access at: `http://100.94.7.23:8501`

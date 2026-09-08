@@ -22,7 +22,7 @@ import capital_gain as cg
 import capital_gain as cg_row
 import data_manager
 import nav_data_ingestion
-import nav_scheduler
+# import nav_scheduler
 import data_manager as dm
 from data_manager import current as data_version
 import xirr
@@ -3755,7 +3755,7 @@ _auto_bse_scheme_master()
 # nav_scheduler.ensure_started(get_conn, download_and_save_nav_if_needed, _amfi.load)
 
 cams_mailback_sync.ensure_poller_started()
-nav_scheduler.ensure_started(get_conn, download_and_save_nav_if_needed, _amfi.load)
+# nav_scheduler.ensure_started(get_conn, download_and_save_nav_if_needed, _amfi.load)
 
 
 # ==================== GLOBAL BSE DOWNLOAD/PARSE NOTIFICATION ====================
@@ -7898,15 +7898,16 @@ elif mode == "⚙️ Admin Panel":
     #     st.rerun()
 
     # st.divider()
+   
 
-    nav_sched_on = st.toggle(            
-        "📈 Auto NAV download (11 AM & 3 PM daily)",            
-        value=nav_scheduler.is_nav_schedule_enabled(get_conn),            
-        key="nav_sched_toggle"        
-    )
-    if nav_sched_on != nav_scheduler.is_nav_schedule_enabled(get_conn):            
-        nav_scheduler.set_nav_schedule_enabled(get_conn, nav_sched_on)            
-        st.rerun()
+    # nav_sched_on = st.toggle(            
+    #     "📈 Auto NAV download (11 AM & 3 PM daily)",            
+    #     value=nav_scheduler.is_nav_schedule_enabled(get_conn),            
+    #     key="nav_sched_toggle"        
+    # )
+    # if nav_sched_on != nav_scheduler.is_nav_schedule_enabled(get_conn):            
+    #     nav_scheduler.set_nav_schedule_enabled(get_conn, nav_sched_on)            
+    #     st.rerun()
 
     tab_upload, tab_raw = st.tabs(["📤 Upload Data", "📄 View Raw Data"])
 

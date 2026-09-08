@@ -1,0 +1,533 @@
+================================================================================
+NAV CRON JOB - COMPLETE SETUP & MANAGEMENT GUIDE
+MFD Portfolio Intelligence (proot Debian)
+================================================================================
+
+TABLE OF CONTENTS
+1. Initial Setup
+2. Starting & Stopping Cron
+3. Monitoring & Debugging
+4. Troubleshooting
+5. Auto-start on Proot Login
+6. Manual Testing
+7. Log Management
+
+================================================================================
+1. INITIAL SETUP (One-time)
+================================================================================
+
+STEP 1: SSH into Termux
+------------------------
+ssh U0_a313@100.94.7.23 -p 8022
+
+
+STEP 2: Enter proot Debian
+------------------------
+proot-distro login debian --bind /storage/emulated/0:/root/storage
+
+
+STEP 3: Install Cron Package
+------------------------
+apt-get update
+apt-get install cron -y
+
+
+STEP 4: Create NAV Cron Script
+------------------------
+From home directory (~), create the wrapper script:
+
+cat > ~/mfd_nav_cron.sh << 'EOF'
+#!/bin/bash
+VENV="/root/mfd-venv"
+PROJECT_DIR="/root/projects/MFD-Portfolio-Intelligence"
+SCRIPT="$PROJECT_DIR/nav_cron_job_FINAL.py"
+LOG_FILE="/root/nav_cron.log"
+
+source "$VENV/bin/activate"
+cd "$PROJECT_DIR"
+python3 "$SCRIPT" >> "$LOG_FILE" 2>&1
+EOF
+
+Make it executable:
+chmod +x ~/mfd_nav_cron.sh
+
+
+STEP 5: Schedule the Cron Job
+------------------------
+crontab -e
+
+This opens a nano editor. Scroll to the BOTTOM and add:
+
+0 11 * * * ~/mfd_nav_cron.sh
+0 15 * * * ~/mfd_nav_cron.sh
+
+Then save:
+- Press Ctrl+X
+- Press Y
+- Press Enter
+
+This schedules NAV downloads at:
+  - 11:00 AM (morning)
+  - 3:00 PM (afternoon)
+
+EVERY DAY (Monday-Sunday)
+
+
+STEP 6: Start Cron Service
+------------------------
+service cron start
+
+Output should be:
+"Starting periodic command scheduler: cron."
+
+
+STEP 7: Verify Installation
+------------------------
+# Check that cron is running
+service cron status
+
+# List your cron jobs
+crontab -l
+
+Expected output:
+0 11 * * * ~/mfd_nav_cron.sh
+0 15 * * * ~/mfd_nav_cron.sh
+
+
+STEP 8: Test the Script
+------------------------
+Run manually to verify:
+~/mfd_nav_cron.sh
+
+Check the log:
+tail /root/nav_cron.log
+
+Expected log output:
+================================================================================
+2026-09-08 11:05:23 [INFO] ================================================================================
+2026-09-08 11:05:23 [INFO] NAV CRON JOB STARTED at 2026-09-08T11:05:23.123456
+2026-09-08 11:05:23 [INFO] Step 1: Downloading NAV...
+2026-09-08 11:05:28 [INFO] ✅ Download successful: /root/projects/MFD-Portfolio-Intelligence/nav_20260908.txt
+2026-09-08 11:05:28 [INFO] Step 2: Ingesting NAV to DB...
+2026-09-08 11:05:32 [INFO] ✅ Ingestion successful: 2543 inserted, 12 skipped (date: 2026-09-08, fund houses: ...)
+2026-09-08 11:05:32 [INFO] ✅ NAV CRON JOB COMPLETED SUCCESSFULLY
+================================================================================
+
+If you see "✅ Ingestion successful" → Setup is complete! ✅
+
+
+================================================================================
+2. STARTING & STOPPING CRON
+================================================================================
+
+START CRON SERVICE
+------------------------
+service cron start
+
+Output: "Starting periodic command scheduler: cron."
+
+
+STOP CRON SERVICE
+------------------------
+service cron stop
+
+Output: "Stopping periodic command scheduler: cron."
+
+
+RESTART CRON SERVICE
+------------------------
+service cron restart
+
+Output:
+"Stopping periodic command scheduler: cron."
+"Starting periodic command scheduler: cron."
+
+
+CHECK CRON STATUS
+------------------------
+service cron status
+
+Output will be:
+- "cron is running" (if active)
+- "cron is not running" (if inactive)
+
+
+KILL ALL CRON PROCESSES (Emergency)
+------------------------
+pkill -f cron
+pkill -9 cron  # Force kill if above doesn't work
+
+
+================================================================================
+3. MONITORING & DEBUGGING
+================================================================================
+
+WATCH CRON LOG IN REAL-TIME
+------------------------
+tail -f /root/nav_cron.log
+
+This shows logs as they happen. Press Ctrl+C to exit.
+
+
+VIEW LAST 50 LINES OF LOG
+------------------------
+tail -50 /root/nav_cron.log
+
+
+VIEW LAST 100 LINES OF LOG
+------------------------
+tail -100 /root/nav_cron.log
+
+
+SEARCH LOG FOR ERRORS
+------------------------
+grep "ERROR\|FAILED\|❌" /root/nav_cron.log
+
+
+SEARCH LOG FOR SUCCESS
+------------------------
+grep "✅\|SUCCESS" /root/nav_cron.log
+
+
+FULL LOG FILE
+------------------------
+cat /root/nav_cron.log
+
+
+CHECK WHICH CRON JOBS ARE SCHEDULED
+------------------------
+crontab -l
+
+Expected:
+0 11 * * * ~/mfd_nav_cron.sh
+0 15 * * * ~/mfd_nav_cron.sh
+
+
+LIST ALL RUNNING CRON PROCESSES
+------------------------
+ps aux | grep cron
+
+Should show something like:
+root       1234  0.0  0.0 ...  cron
+
+
+================================================================================
+4. TROUBLESHOOTING
+================================================================================
+
+PROBLEM: "crontab: command not found"
+SOLUTION:
+apt-get install cron -y
+service cron start
+
+
+PROBLEM: Script doesn't run at scheduled time
+DIAGNOSIS:
+1. Check if cron is running:
+   service cron status
+
+2. Check cron logs:
+   tail -f /root/nav_cron.log
+
+3. Verify script is executable:
+   ls -la ~/mfd_nav_cron.sh
+   # Should show: -rwxr-xr-x (has x permission)
+
+4. Test script manually:
+   ~/mfd_nav_cron.sh
+   tail /root/nav_cron.log
+
+
+PROBLEM: "Permission denied" when running script
+SOLUTION:
+chmod +x ~/mfd_nav_cron.sh
+
+
+PROBLEM: "venv: command not found"
+DIAGNOSIS:
+The venv path is wrong. Check:
+ls -la /root/mfd-venv/bin/activate
+
+SOLUTION:
+Find correct venv path:
+ls -la /root/
+
+Edit ~/mfd_nav_cron.sh:
+nano ~/mfd_nav_cron.sh
+
+Change VENV= to correct path.
+
+
+PROBLEM: "No module named 'app'" or import errors
+DIAGNOSIS:
+1. Test script manually to see full error:
+   ~/mfd_nav_cron.sh
+
+2. Check log:
+   tail /root/nav_cron.log
+
+SOLUTION:
+- Make sure all files exist in PROJECT_DIR
+- Make sure nav_cron_job_FINAL.py is in PROJECT_DIR
+- Verify app.py has the correct imports
+
+
+PROBLEM: Database locked errors
+DIAGNOSIS:
+tail /root/nav_cron.log
+(Look for "database is locked")
+
+SOLUTION:
+This usually resolves itself. If persistent:
+1. Stop Streamlit app (close browser)
+2. Stop cron: service cron stop
+3. Wait 10 seconds
+4. Restart: service cron start
+
+
+PROBLEM: Log file grows too large
+DIAGNOSIS:
+ls -lh /root/nav_cron.log
+(Shows file size)
+
+SOLUTION:
+Clear old logs:
+> /root/nav_cron.log
+
+Or keep only recent logs:
+tail -1000 /root/nav_cron.log > /root/nav_cron.log.tmp
+mv /root/nav_cron.log.tmp /root/nav_cron.log
+
+
+================================================================================
+5. AUTO-START ON PROOT LOGIN
+================================================================================
+
+PROBLEM: Cron stops when proot is restarted
+
+SOLUTION: Add to ~/.bashrc
+
+nano ~/.bashrc
+
+Scroll to the bottom and add:
+
+# Auto-start cron
+service cron start 2>/dev/null || true
+
+Save: Ctrl+X → Y → Enter
+
+Now cron will start automatically when you login to proot.
+
+
+VERIFY AUTO-START:
+Exit proot:
+exit
+
+Re-enter proot:
+proot-distro login debian --bind /storage/emulated/0:/root/storage
+
+Check cron is running:
+service cron status
+
+Should show: "cron is running"
+
+
+================================================================================
+6. MANUAL TESTING
+================================================================================
+
+TEST 1: Run script manually
+------------------------
+~/mfd_nav_cron.sh
+
+Wait 10 seconds, then check log:
+tail /root/nav_cron.log
+
+
+TEST 2: Verify cron is reading the scheduled jobs
+------------------------
+crontab -l
+
+Should show your 2 jobs:
+0 11 * * * ~/mfd_nav_cron.sh
+0 15 * * * ~/mfd_nav_cron.sh
+
+
+TEST 3: Check if cron daemon is listening
+------------------------
+ps aux | grep cron
+
+Should show cron process running.
+
+
+TEST 4: Wait for scheduled time
+------------------------
+At 11:00 AM or 3:00 PM, watch the log:
+tail -f /root/nav_cron.log
+
+Should see new entry starting at that time.
+
+If you see it, cron is working! ✅
+
+
+TEST 5: Verify NAV data was ingested to DB
+------------------------
+From another terminal, check DB:
+cd ~/projects/MFD-Portfolio-Intelligence
+sqlite3 mfd_local.db
+
+In sqlite3:
+SELECT COUNT(*) FROM nav_history;
+
+Number should increase after cron runs.
+
+
+================================================================================
+7. LOG MANAGEMENT
+================================================================================
+
+VIEW LOG FILE PATH
+------------------------
+/root/nav_cron.log
+
+
+CLEAR LOG (Start fresh)
+------------------------
+> /root/nav_cron.log
+
+Or:
+rm /root/nav_cron.log
+
+(Log will be recreated on next run)
+
+
+BACKUP LOG BEFORE CLEARING
+------------------------
+cp /root/nav_cron.log /root/nav_cron.log.backup
+> /root/nav_cron.log
+
+
+ROTATE LOG (Keep last 1000 lines, delete rest)
+------------------------
+tail -1000 /root/nav_cron.log > /tmp/nav_cron.log.tmp
+mv /tmp/nav_cron.log.tmp /root/nav_cron.log
+
+
+COMPRESS OLD LOG
+------------------------
+gzip /root/nav_cron.log
+# Creates nav_cron.log.gz
+
+
+VIEW COMPRESSED LOG
+------------------------
+zcat /root/nav_cron.log.gz | tail -50
+
+
+SCHEDULE AUTOMATIC LOG ROTATION
+------------------------
+Add to crontab:
+0 0 * * 0 tail -1000 /root/nav_cron.log > /tmp/nav_cron.log.tmp && mv /tmp/nav_cron.log.tmp /root/nav_cron.log
+
+(Clears log every Sunday at midnight, keeping last 1000 lines)
+
+
+================================================================================
+QUICK REFERENCE COMMANDS
+================================================================================
+
+Start cron:
+  service cron start
+
+Stop cron:
+  service cron stop
+
+Restart cron:
+  service cron restart
+
+Check status:
+  service cron status
+
+View cron jobs:
+  crontab -l
+
+Edit cron jobs:
+  crontab -e
+
+Test script:
+  ~/mfd_nav_cron.sh
+
+View log (real-time):
+  tail -f /root/nav_cron.log
+
+View log (last 50 lines):
+  tail -50 /root/nav_cron.log
+
+Clear log:
+  > /root/nav_cron.log
+
+Search for errors:
+  grep "ERROR\|❌" /root/nav_cron.log
+
+Search for success:
+  grep "✅" /root/nav_cron.log
+
+Kill cron:
+  pkill -f cron
+
+Make script executable:
+  chmod +x ~/mfd_nav_cron.sh
+
+Check script permissions:
+  ls -la ~/mfd_nav_cron.sh
+
+Auto-start on proot login:
+  echo "service cron start" >> ~/.bashrc
+
+
+================================================================================
+EXPECTED BEHAVIOR
+================================================================================
+
+NORMAL: 
+- Cron runs at 11:00 AM and 3:00 PM
+- Logs new entries to /root/nav_cron.log
+- NAV data updates in database
+- No errors in log
+
+AFTER REBOOT/PROOT RESTART:
+- Run: service cron start
+- Cron resumes at next scheduled time
+- Or add to ~/.bashrc for auto-start
+
+IF STREAMLIT IS RUNNING:
+- Cron and Streamlit both access same DB
+- SQLite handles concurrent access
+- No conflicts expected
+
+IF STREAMLIT CRASHES:
+- Cron continues running independently
+- NAV data still updates
+- App can be restarted without issues
+
+
+================================================================================
+SUPPORT CHECKLIST
+================================================================================
+
+Before debugging, verify:
+☐ Cron service is running (service cron status)
+☐ Cron jobs are scheduled (crontab -l)
+☐ Script is executable (ls -la ~/mfd_nav_cron.sh)
+☐ venv path is correct (ls -la /root/mfd-venv/bin/activate)
+☐ PROJECT_DIR exists (ls -la /root/projects/MFD-Portfolio-Intelligence)
+☐ nav_cron_job_FINAL.py exists in PROJECT_DIR
+☐ Log file exists (ls -la /root/nav_cron.log)
+☐ No permission errors in log (grep ERROR /root/nav_cron.log)
+☐ At scheduled time, log shows new entries (tail -f /root/nav_cron.log at 11 AM or 3 PM)
+
+If all checked, cron is working correctly! ✅
+
+================================================================================
+END OF GUIDE
+================================================================================
