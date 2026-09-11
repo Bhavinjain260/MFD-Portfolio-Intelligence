@@ -6,6 +6,10 @@ CAMS: purchase = negative, redemption (trxntype == 'R1') = positive.
 KFin: no confirmed redemption code yet -> everything treated as
        purchase (negative). Flip the sign logic once the real
        redemption code is confirmed.
+       
+FIXES APPLIED:
+1. Filter out transactions after as_of_date to exclude future SIP payments
+2. Parse KFinTech dates as DD/MM/YYYY format (not default MM/DD/YYYY)
 """
 import logging
 from datetime import datetime
@@ -52,8 +56,12 @@ def compute_xirr_debug(
     """
     Prints the full cash-flow table to terminal and returns
     {"xirr_pct": float|None, "cash_flows": [...]}.
+    
+    ✅ FIX: Filters out transactions after as_of_date
+    ✅ FIX: Uses DD/MM/YYYY format for KFinTech dates
     """
     rta = rta.upper()
+    as_of_date = pd.to_datetime(as_of_date or datetime.now())
 
     if rta == "CAMS":
         df = _fetch_cams(folio_no, product_code, get_conn)
@@ -61,6 +69,13 @@ def compute_xirr_debug(
             log.info("[XIRR] %s/%s: no CAMS transactions found", folio_no, product_code)
             return {"xirr_pct": None, "cash_flows": []}
         df["traddate"] = pd.to_datetime(df["traddate"])
+        
+        # ✅ FIX: Exclude transactions after as_of_date
+        df = df[df["traddate"] <= as_of_date]
+        if df.empty:
+            log.info("[XIRR] %s/%s: no transactions before %s", folio_no, product_code, as_of_date.date())
+            return {"xirr_pct": None, "cash_flows": []}
+        
         df = df.sort_values("traddate")
         dates = df["traddate"].tolist()
         amounts = [
@@ -73,7 +88,16 @@ def compute_xirr_debug(
         if df.empty:
             log.info("[XIRR] %s/%s: no Karvy transactions found", folio_no, product_code)
             return {"xirr_pct": None, "cash_flows": []}
-        df["traddate"] = pd.to_datetime(df["traddate"])
+        
+        # ✅ FIX: Use DD/MM/YYYY format for KFinTech dates
+        df["traddate"] = pd.to_datetime(df["traddate"], format="%d/%m/%Y", errors="coerce")
+        
+        # ✅ FIX: Exclude transactions after as_of_date
+        df = df[df["traddate"] <= as_of_date]
+        if df.empty:
+            log.info("[XIRR] %s/%s: no transactions before %s", folio_no, product_code, as_of_date.date())
+            return {"xirr_pct": None, "cash_flows": []}
+        
         df = df.sort_values("traddate")
         dates = df["traddate"].tolist()
         amounts = [-abs(float(a)) for a in df["amount"]]
@@ -82,17 +106,19 @@ def compute_xirr_debug(
         log.info("[XIRR] Unknown RTA: %s", rta)
         return {"xirr_pct": None, "cash_flows": []}
 
-    as_of_date = pd.to_datetime(as_of_date or datetime.now())
     dates.append(as_of_date)
     amounts.append(abs(float(current_value)))
 
     log.info("=" * 60)
     log.info("XIRR — %s | Folio: %s | Scheme: %s", rta, folio_no, product_code)
     log.info("=" * 60)
-    log.info(f"{'Date':<12} {'Amount':>15}")
+    log.info(f"{'Date':<12} {'Amount':>15} {'Type':<12}")
     log.info("-" * 60)
-    for d, a in zip(dates, amounts):
-        log.info(f"{d.strftime('%Y-%m-%d'):<12} {a:>15.2f}")
+    for d, a in zip(dates[:-1], amounts[:-1]):
+        typ = "Redemption" if a > 0 else "Purchase"
+        log.info(f"{d.strftime('%Y-%m-%d'):<12} {a:>15.2f} {typ:<12}")
+    log.info("-" * 60)
+    log.info(f"{dates[-1].strftime('%Y-%m-%d'):<12} {amounts[-1]:>15.2f} {'Current Val':<12}")
     log.info("-" * 60)
 
     xirr = calculate_xirr(dates, amounts)
@@ -120,6 +146,9 @@ def compute_xirr_for_folio(
     Callers must pass it as _get_conn=get_conn (keyword) or positionally.
 
     Returns {"xirr": float|None, "xirr_pct": float|None, "cash_flows": [...]}
+    
+    ✅ FIX: Filters out transactions after as_of_date to exclude future SIP payments
+    ✅ FIX: Uses DD/MM/YYYY format for KFinTech dates
     """
     get_conn = _get_conn
     rta_clean = rta.strip().upper()
@@ -156,12 +185,21 @@ def compute_xirr_for_folio(
             log.info("[XIRR] %s/%s/%s: no transactions found", rta_clean, folio_no, product_code)
         return {"xirr": None, "xirr_pct": None, "cash_flows": []}
 
-    df["traddate"] = pd.to_datetime(df["traddate"], errors="coerce")
+    if rta_clean == "CAMS":
+        df["traddate"] = pd.to_datetime(df["traddate"], errors="coerce")
+    else:
+        # ✅ FIX: Use DD/MM/YYYY format for KFinTech dates
+        df["traddate"] = pd.to_datetime(df["traddate"], format="%d/%m/%Y", errors="coerce")
+    
     df = df.dropna(subset=["traddate"]).sort_values("traddate").reset_index(drop=True)
 
+    # ✅ FIX: EXCLUDE TRANSACTIONS AFTER as_of_date
+    # This prevents future SIP payments from affecting XIRR calculation
+    df = df[df["traddate"] <= as_of_date]
+    
     if df.empty:
         if verbose:
-            log.info("[XIRR] %s/%s/%s: no parseable dates", rta_clean, folio_no, product_code)
+            log.info("[XIRR] %s/%s/%s: no transactions before %s", rta_clean, folio_no, product_code, as_of_date.date())
         return {"xirr": None, "xirr_pct": None, "cash_flows": []}
 
     dates = df["traddate"].tolist()
@@ -214,6 +252,9 @@ def compute_portfolio_xirr(
 ) -> dict:
     """
     Portfolio-level XIRR across all folio+scheme combinations.
+    
+    ✅ FIX: Filters out transactions after as_of_date
+    ✅ FIX: Uses DD/MM/YYYY format for KFinTech dates
     """
     as_of_date = pd.to_datetime(as_of_date or datetime.now())
 
@@ -254,6 +295,12 @@ def compute_portfolio_xirr(
                     continue
 
                 df_txn["traddate"] = pd.to_datetime(df_txn["traddate"], errors="coerce")
+                
+                # ✅ FIX: Exclude transactions after as_of_date
+                df_txn = df_txn[df_txn["traddate"] <= as_of_date]
+                if df_txn.empty:
+                    continue
+                
                 df_txn = df_txn.dropna(subset=["traddate"]).sort_values("traddate")
 
                 for _, t in df_txn.iterrows():
@@ -275,7 +322,14 @@ def compute_portfolio_xirr(
                 if df_txn.empty:
                     continue
 
-                df_txn["traddate"] = pd.to_datetime(df_txn["traddate"], errors="coerce")
+                # ✅ FIX: Use DD/MM/YYYY format for KFinTech dates
+                df_txn["traddate"] = pd.to_datetime(df_txn["traddate"], format="%d/%m/%Y", errors="coerce")
+                
+                # ✅ FIX: Exclude transactions after as_of_date
+                df_txn = df_txn[df_txn["traddate"] <= as_of_date]
+                if df_txn.empty:
+                    continue
+                
                 df_txn = df_txn.dropna(subset=["traddate"]).sort_values("traddate")
 
                 for _, t in df_txn.iterrows():
