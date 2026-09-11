@@ -1,0 +1,30 @@
+1. Client Section – Transaction Filter Issue
+
+In the Client section, when applying the Last 30 Days filter under Transactions, only Karvy transactions are being displayed.
+Please investigate and fix the issue so that all transactions within the selected date range are displayed.
+Also, provide an option to select a custom date range using “From” and “To” filters.
+
+2. All Transactions – Date Filter Issue
+
+In the All Transactions section, when selecting a date range such as Last 14–15 Days, only one transaction is being displayed.
+However, a KFintech transaction that occurred yesterday is not appearing in the list.
+Please investigate and ensure that all transactions falling within the selected date range are displayed correctly.
+
+3. BSE Auto File Fetch – Auto Fetch Setting Not Being Followed
+
+BSE Auto is fetching the files again after some time, even though the files already exist.
+Since the files are already available, the system is skipping them, but the auto-fetch process is still getting triggered.
+As per the database, the auto-fetch setting is turned OFF, but the system is not following this configuration.
+Please investigate why the database setting is not being respected and ensure that the auto-fetch process follows the configured ON/OFF status.
+
+4. Separate Daily NAV Download
+
+The Daily NAV download process needs to be separated from the existing auto-fetch functionality.
+Daily NAV downloading should have its own dedicated process/configuration so that it can be managed independently.
+
+5. NAV Auto-Fetch Logic
+
+For the remaining NAV auto-fetch functionality, we can keep the existing automated process.
+The system should automatically fetch NAV files only when the previous day's NAV or the required NAV for the last 7 days is not available.
+Before initiating a download, the system should check whether the required NAV data/file already exists.
+If the NAV is already available, the system should skip the download and avoid unnecessary fetching.
