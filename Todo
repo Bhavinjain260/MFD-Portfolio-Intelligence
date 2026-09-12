@@ -28,3 +28,5 @@ For the remaining NAV auto-fetch functionality, we can keep the existing automat
 The system should automatically fetch NAV files only when the previous day's NAV or the required NAV for the last 7 days is not available.
 Before initiating a download, the system should check whether the required NAV data/file already exists.
 If the NAV is already available, the system should skip the download and avoid unnecessary fetching.
+
+6. Need to Rewrite the Funtcions which fetchs the transactions.

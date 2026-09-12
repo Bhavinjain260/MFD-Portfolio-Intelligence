@@ -7878,36 +7878,6 @@ elif mode == "⚙️ Admin Panel":
                   st.error(f"❌ {result['reason']}")
     st.divider()
 
-    # st.subheader("🔁 Background Automation")
-
-
-    # ac1, ac2 = st.columns(2)
-
-    # with ac1:
-    #     with st.expander("📬 Mailback Auto-Sync (CAMS + KFinTech)", expanded=False):            
-    #         cams_mailback_sync.render_settings_ui()
-
-    # with ac2:
-    #     nav_sched_on = st.toggle(            
-    #         "📈 Auto NAV download (11 AM & 3 PM daily)",            
-    #         value=nav_scheduler.is_nav_schedule_enabled(get_conn),            
-    #         key="nav_sched_toggle"        
-    #         )
-    # if nav_sched_on != nav_scheduler.is_nav_schedule_enabled(get_conn):            
-    #     nav_scheduler.set_nav_schedule_enabled(get_conn, nav_sched_on)            
-    #     st.rerun()
-
-    # st.divider()
-   
-
-    # nav_sched_on = st.toggle(            
-    #     "📈 Auto NAV download (11 AM & 3 PM daily)",            
-    #     value=nav_scheduler.is_nav_schedule_enabled(get_conn),            
-    #     key="nav_sched_toggle"        
-    # )
-    # if nav_sched_on != nav_scheduler.is_nav_schedule_enabled(get_conn):            
-    #     nav_scheduler.set_nav_schedule_enabled(get_conn, nav_sched_on)            
-    #     st.rerun()
 
     tab_upload, tab_raw = st.tabs(["📤 Upload Data", "📄 View Raw Data"])
 
