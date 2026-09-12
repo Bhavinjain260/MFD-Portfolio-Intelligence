@@ -35,7 +35,18 @@ def _parse_date(val) -> date:
         return val.date()
     if isinstance(val, date):
         return val
-    return pd.to_datetime(val).date()
+    # Fast path for ISO "YYYY-MM-DD" — unambiguous, avoids pandas inference
+    # swaps on values like "17/08/2026" (which pandas reads as Aug 17).
+    if isinstance(val, str):
+        s = val.strip()
+        if len(s) >= 10 and s[4] == '-' and s[7] == '-':
+            try:
+                return datetime.strptime(s[:10], "%Y-%m-%d").date()
+            except ValueError:
+                pass
+    return pd.to_datetime(val, dayfirst=True, errors='coerce').date() if pd.notna(
+        pd.to_datetime(val, dayfirst=True, errors='coerce')
+    ) else None
 
 
 @dataclass

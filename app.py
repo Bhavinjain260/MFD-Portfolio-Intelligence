@@ -161,18 +161,14 @@ def get_client_cams_schemes(folio_ids: list[str], _v: int) -> pd.DataFrame:
 
 def get_cams_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
     """
-    Same output columns as before: traddate, trxntype, trxn_nature, units,
-    purprice, amount — but now genuinely chronologically ordered.
-
-    traddate values look like "1/16/2026" or "1/16/2026 12:00" (unpadded
-    M/D/YYYY, sometimes with a time component). pd.to_datetime with
-    format=None (infer) handles both; errors='coerce' turns anything
-    unparseable into NaT rather than crashing, and rows with NaT sort last
-    (still visible, just flagged) instead of silently vanishing.
+    Returns traddate in ISO YYYY-MM-DD format (from txn_date_iso when available,
+    falling back to raw traddate). Output columns unchanged: traddate, trxntype,
+    trxn_nature, units, purprice, amount — chronologically ordered.
     """
     with get_conn() as conn:
         df = pd.read_sql("""
-            SELECT traddate, trxntype, trxn_nature, units, purprice, amount
+            SELECT COALESCE(txn_date_iso, traddate) AS traddate,
+                   trxntype, trxn_nature, units, purprice, amount
             FROM cams_wbr2_transaction
             WHERE folio_no = ? AND UPPER(TRIM(prodcode)) = ?
         """, conn, params=(folio_no, product_code.strip().upper()))
@@ -180,7 +176,7 @@ def get_cams_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
     if df.empty:
         return df
 
-    df["_sort_date"] = pd.to_datetime(df["traddate"], errors="coerce")
+    df["_sort_date"] = pd.to_datetime(df["traddate"], errors="coerce", format="mixed")
     df = df.sort_values("_sort_date", kind="stable").drop(columns=["_sort_date"]).reset_index(drop=True)
     return df
 
@@ -618,8 +614,8 @@ def compute_client_holdings(
 def get_kfin_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
     with get_conn() as conn:
         df = pd.read_sql("""
-            SELECT td_trdt AS traddate, td_units AS units,
-                   td_pop AS purprice, td_amt AS amount
+            SELECT COALESCE(txn_date_iso, td_trdt) AS traddate,
+                   td_units AS units, td_pop AS purprice, td_amt AS amount
             FROM kfin_mfsd201_transaction
             WHERE td_acno = ? AND UPPER(TRIM(fmcode)) = ?
         """, conn, params=(folio_no, product_code.strip().upper()))
@@ -627,7 +623,7 @@ def get_kfin_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
     if df.empty:
         return df
 
-    df["_sort_date"] = pd.to_datetime(df["traddate"], errors="coerce")
+    df["_sort_date"] = pd.to_datetime(df["traddate"], errors="coerce", format="mixed")
     df = df.sort_values("_sort_date", kind="stable").drop(columns=["_sort_date"]).reset_index(drop=True)
     return df
 
@@ -682,7 +678,7 @@ def fetch_all_folio_transactions(folio_no: str, rta: str) -> pd.DataFrame:
 
     
 
-    df['_date'] = pd.to_datetime(df['traddate'], errors='coerce')
+    df['_date'] = pd.to_datetime(df['traddate'], errors='coerce', format='mixed')
     still_nat = df['_date'].isna() & df['traddate'].notna()
     if still_nat.any():
         log.warning("[VALUATION] Folio %s: %d rows with unparseable dates",
@@ -851,7 +847,7 @@ def generate_capital_gain_pdf(
         if val is None:
             return ""
         try:
-            return val.strftime("%Y-%m-%d")
+            return val.strftime("%d-%m-%Y")
         except AttributeError:
             return str(val)
 
@@ -1021,8 +1017,8 @@ def generate_capital_gain_html(
         gl = r.get('Gain/Loss')
         gl_cls = "positive" if gl and gl >= 0 else ("negative" if gl and gl < 0 else "")
         
-        buy_date = r['Buy Date'].strftime('%Y-%m-%d') if r.get('Buy Date') else ''
-        sale_date = r['Sale Date'].strftime('%Y-%m-%d') if r.get('Sale Date') else ''
+        buy_date = r['Buy Date'].strftime('%d-%m-%Y') if r.get('Buy Date') else ''
+        sale_date = r['Sale Date'].strftime('%d-%m-%Y') if r.get('Sale Date') else ''
         
         html += f"""<tr>
   <td>{r.get('Scheme', '')}</td>
@@ -1177,7 +1173,7 @@ def generate_valuation_html(
 <tr><th class="center">Date</th><th class="left">Type</th><th class="right">Units</th><th class="right">Price</th><th class="right">Amount</th><th class="right">Balance</th></tr>"""
 
             for _, row in tdf.iterrows():
-                d = row['_date'].strftime('%Y-%m-%d') if pd.notna(row['_date']) else ''
+                d = row['_date'].strftime('%d-%m-%Y') if pd.notna(row['_date']) else ''
                 price = row.get('purprice', None)
                 if price is None:
                     price = row.get('td_pop', None)
@@ -1433,7 +1429,7 @@ def generate_valuation_pdf(
                 else:
                     fill = False
 
-                date_str = row['_date'].strftime('%Y-%m-%d') if pd.notna(row['_date']) else ''
+                date_str = row['_date'].strftime('%d-%m-%Y') if pd.notna(row['_date']) else ''
                 price = row.get('purprice', row.get('td_pop', None))
                 amount = row.get('amount', 0)
 
@@ -3236,7 +3232,7 @@ def get_cams_invested_per_scheme(folio_list: list, _v: int) -> pd.DataFrame:
                 SELECT
                     folio_no      AS folio_id,
                     UPPER(TRIM({scheme_col})) AS product_code,
-                    traddate,
+                    COALESCE(txn_date_iso, traddate) AS traddate,
                     trxntype,
                     trxn_nature,
                     units,
@@ -3250,7 +3246,7 @@ def get_cams_invested_per_scheme(folio_list: list, _v: int) -> pd.DataFrame:
                 SELECT
                     folio_no      AS folio_id,
                     NULL          AS product_code,
-                    traddate,
+                    COALESCE(txn_date_iso, traddate) AS traddate,
                     trxntype,
                     trxn_nature,
                     units,
@@ -3265,7 +3261,7 @@ def get_cams_invested_per_scheme(folio_list: list, _v: int) -> pd.DataFrame:
         return pd.DataFrame(columns=["folio_id", "product_code", "invested_amount", "total_units"])
 
     # ── Chronological sort (critical for FIFO) ──
-    df["_sort_date"] = pd.to_datetime(df["traddate"], errors="coerce")
+    df["_sort_date"] = pd.to_datetime(df["traddate"], errors="coerce", format="mixed")
     df = df.sort_values(["folio_id", "product_code", "_sort_date"], kind="stable").reset_index(drop=True)
     df = df.drop(columns=["_sort_date"])
 
@@ -5163,44 +5159,46 @@ elif mode == "👥 Clients":
                             fid, frta = fr['folio_id'], fr['rta']
                             if frta == 'CAMS':
                                 df_t = pd.read_sql("""
-                                                   SELECT trxnno,
-                                                          traddate,
-                                                          trxntype,
-                                                          trxnmode,
-                                                          trxnstat,
-                                                          purprice,
-                                                          units,
-                                                          amount,
-                                                          brokcode,
-                                                          subbrok,
-                                                          remarks
-                                                   FROM cams_wbr2_transaction
-                                                   WHERE folio_no = ?
-                                                   ORDER BY traddate DESC
-                                                   """, conn, params=(fid,))
+                                    SELECT trxnno,
+                                        COALESCE(txn_date_iso, traddate) AS txn_display_date,
+                                        trxntype, trxnmode, trxnstat,
+                                        purprice, units, amount, brokcode, subbrok, remarks
+                                    FROM cams_wbr2_transaction
+                                    WHERE folio_no = ?
+                                    ORDER BY COALESCE(txn_date_iso, traddate) DESC
+                                """, conn, params=(fid,))
                             else:
                                 df_t = pd.read_sql("""
-                                                   SELECT td_trno   as trxnno,
-                                                          td_trdt   as traddate,
-                                                          td_purred as trxntype,
-                                                          trnmode   as trxnmode,
-                                                          trnstat   as trxnstat,
-                                                          td_pop    as purprice,
-                                                          td_units  as units,
-                                                          td_amt    as amount,
-                                                          td_broker as brokcode,
-                                                          ''        as subbrok,
-                                                          trdesc    as remarks
-                                                   FROM kfin_mfsd201_transaction
-                                                   WHERE td_acno = ?
-                                                   ORDER BY td_trdt DESC
-                                                   """, conn, params=(fid,))
+                                    SELECT td_trno   AS trxnno,
+                                        COALESCE(txn_date_iso, td_trdt) AS txn_display_date,
+                                        td_purred AS trxntype,
+                                        trnmode   AS trxnmode,
+                                        trnstat   AS trxnstat,
+                                        td_pop    AS purprice,
+                                        td_units  AS units,
+                                        td_amt    AS amount,
+                                        td_broker AS brokcode,
+                                        ''        AS subbrok,
+                                        trdesc    AS remarks
+                                    FROM kfin_mfsd201_transaction
+                                    WHERE td_acno = ?
+                                    ORDER BY COALESCE(txn_date_iso, td_trdt) DESC
+                                """, conn, params=(fid,))
                             if not df_t.empty:
                                 df_t.insert(0, 'folio_id', fid)
                                 df_t.insert(1, 'rta', frta)
                             txn_frames.append(df_t)
-
+                    
                     txn_df = pd.concat(txn_frames, ignore_index=True) if txn_frames else pd.DataFrame()
+
+                    if not txn_df.empty:
+                        # SQL already returned the unified date as `txn_display_date`.
+                        # Just normalize the display format to DD-MM-YYYY.
+                        txn_df['txn_display_date'] = pd.to_datetime(
+                            txn_df['txn_display_date'],
+                            errors='coerce',
+                            format='mixed',
+                        ).dt.strftime('%d-%m-%Y').fillna('—')
 
                     if not txn_df.empty:
                         try:
@@ -5510,6 +5508,20 @@ elif mode == "👥 Clients":
             if txn_frames:
                 txn_df = pd.concat(txn_frames, ignore_index=True)
 
+                # ══════════════════════════════════════════════════════════════
+                # UNIFY DATE FORMAT — prefer txn_date_iso (both RTAs populate it),
+                # fall back to raw traddate. Output: DD-MM-YYYY.
+                # ══════════════════════════════════════════════════════════════
+                txn_df['txn_display_date'] = pd.to_datetime(
+                    txn_df['txn_date_iso'].fillna(txn_df['traddate']),
+                    errors='coerce',
+                    format='mixed',
+                ).dt.strftime('%d-%m-%Y')
+                # Rows where both were unparseable — show the raw value so nothing vanishes
+                txn_df['txn_display_date'] = txn_df['txn_display_date'].fillna(
+                    txn_df['traddate'].astype(str)
+                )
+
                 # ── Resolve scheme names via bse_scheme_master ──
                 if not txn_df['product_code'].dropna().empty:
                     with get_conn() as conn:
@@ -5564,7 +5576,8 @@ elif mode == "👥 Clients":
 
                 # ── Reorder & rename columns ──
                 col_order = [
-                    'traddate', 'folio_id', 'rta', 'scheme_name', 'product_code',
+                    'txn_display_date',          # ← was 'traddate'
+                    'folio_id', 'rta', 'scheme_name', 'product_code',
                     'trxntype', 'trxnmode', 'trxnstat', 'units', 'purprice', 'amount',
                     'brokcode', 'subbrok', 'remarks', 'trxnno'
                 ]
@@ -5572,7 +5585,8 @@ elif mode == "👥 Clients":
                 txn_df = txn_df[col_order]
 
                 display_txn = txn_df.rename(columns={
-                    'traddate': 'Date', 'folio_id': 'Folio', 'rta': 'RTA',
+                    'txn_display_date': 'Date',  # ← was 'traddate'
+                    'folio_id': 'Folio', 'rta': 'RTA',
                     'scheme_name': 'Scheme', 'product_code': 'Product Code',
                     'trxntype': 'Type', 'trxnmode': 'Mode', 'trxnstat': 'Status',
                     'units': 'Units', 'purprice': 'Price', 'amount': 'Amount',
@@ -5759,7 +5773,7 @@ elif mode == "👥 Clients":
                         "proc_date", ascending=False
                     ).copy()
                     detail_display["proc_date"] = detail_display["proc_date"].dt.strftime(
-                        "%Y-%m-%d"
+                        "%d-%m-%Y"
                     )
 
                     st.dataframe(
@@ -5852,9 +5866,12 @@ elif mode == "📋 Transactions":
         if all_txn.empty:
             return pd.DataFrame()
 
-        # Dates are already ISO from SQL — just coerce to datetime
+        # Dates are already ISO from SQL — coerce to datetime.
         all_txn["txn_date"] = pd.to_datetime(all_txn["txn_date"], errors="coerce", format="mixed")
         all_txn = all_txn.dropna(subset=["txn_date"])
+
+        # Display column: uniform DD-MM-YYYY for both RTAs
+        all_txn["txn_date_display"] = all_txn["txn_date"].dt.strftime("%d-%m-%Y")
 
         # Normalize product code for joining
         all_txn["product_code_norm"] = (
@@ -5886,7 +5903,7 @@ elif mode == "📋 Transactions":
         all_txn["amc_name"] = all_txn["amc_name"].fillna("⚠️ Unresolved")
 
         return all_txn
-
+        
     all_txn_df = load_all_transactions(data_version())
 
     if all_txn_df.empty:
@@ -6994,7 +7011,7 @@ elif mode == "📊 Reports":
                         show_tdf = tdf[[
                             '_date', 'trxntype', 'signed_units', 'amount', 'Balance'
                         ]].copy()
-                        show_tdf['Date'] = show_tdf['_date'].dt.strftime('%Y-%m-%d')
+                        show_tdf['Date'] = show_tdf['_date'].dt.strftime('%d-%m-%Y')
                         show_tdf = show_tdf[[
                             'Date', 'trxntype', 'signed_units', 'amount', 'Balance'
                         ]].rename(columns={
