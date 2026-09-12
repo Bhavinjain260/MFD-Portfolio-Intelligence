@@ -4,6 +4,14 @@ Background-threaded auto-downloader using Selenium.
 Non-blocking: UI stays responsive while download runs.
 """
 
+# ═══════════════════════════════════════════════════════════════
+# Note: the ONLY public entry point used by the app is `sync_now()`.
+# The threaded helpers below (start_background_download, _download_worker)
+# and the old auto-trigger helpers (should_auto_download,
+# parse_and_import_latest) are kept for reference but no longer called
+# by Streamlit or the background worker.
+# ═══════════════════════════════════════════════════════════════
+
 import os
 import re
 import time
@@ -315,4 +323,99 @@ def parse_and_import_latest(parse_func) -> dict:
         "msg": f"{result['msg']} | DB: {db_msg}",
         "path": str(path),
         "preview": preview,
+    }
+
+def sync_now(parse_func) -> dict:
+    """
+    Force-download today's BSE Scheme Master, parse it, and import into DB.
+    Runs synchronously — callers block until done.
+
+    Bypasses the "already have today's file" cache check on purpose: if the
+    user clicks Sync, they want a fresh download, even if one already ran
+    today. Old files are moved aside so they don't accumulate.
+
+    Returns:
+        {
+            "ok": bool,
+            "msg": str,
+            "path": str | None,
+            "rows": int | None,
+            "updated": int | None,
+            "skipped": int | None,
+        }
+    """
+    import shutil
+    from datetime import datetime as _dt
+
+    out = get_download_dir()
+    pending = out / _today_filename()
+    done = out / _today_done_filename()
+
+    # Move today's files aside so Selenium's new download lands cleanly
+    archive_dir = out / "_archive"
+    archive_dir.mkdir(exist_ok=True)
+    stamp = _dt.now().strftime("%Y%m%d_%H%M%S")
+
+    for f in (pending, done):
+        if f.exists():
+            try:
+                shutil.move(str(f), str(archive_dir / f"{f.stem}_{stamp}{f.suffix}"))
+                log.info("[BSE-SYNC] Archived old file: %s", f.name)
+            except Exception as e:
+                log.warning("[BSE-SYNC] Could not archive %s: %s", f.name, e)
+
+    # Force Selenium download (no cache short-circuit)
+    result = _do_download()
+    if not result.get("ok"):
+        return {
+            "ok": False,
+            "msg": result.get("msg", "Download failed"),
+            "path": None,
+            "rows": None,
+            "updated": None,
+            "skipped": None,
+        }
+
+    final_path = result.get("path")
+    if not final_path:
+        return {"ok": False, "msg": "Download succeeded but no path",
+                "path": None, "rows": None, "updated": None, "skipped": None}
+
+    path = Path(final_path)
+    if not path.exists():
+        return {"ok": False, "msg": f"File not found at {path}",
+                "path": None, "rows": None, "updated": None, "skipped": None}
+
+    # Parse + import
+    try:
+        with open(path, "rb") as f:
+            db_ok, db_msg, preview = parse_func(f, replace=False)
+    except Exception as e:
+        log.exception("[BSE-SYNC] Parse/import crashed")
+        return {"ok": False, "msg": f"Parse failed: {e}",
+                "path": str(path), "rows": None, "updated": None, "skipped": None}
+
+    if not db_ok:
+        return {"ok": False, "msg": f"DB import failed: {db_msg}",
+                "path": str(path), "rows": None, "updated": None, "skipped": None}
+
+    # Rename to done so file layout is consistent
+    done_path = path.with_name(_today_done_filename())
+    try:
+        path.rename(done_path)
+        final_path = str(done_path)
+    except Exception:
+        pass  # already renamed or something — no big deal
+
+    rows = (preview or {}).get("rows", 0)
+    updated = (preview or {}).get("updated", 0)
+    skipped = (preview or {}).get("skipped", 0)
+
+    return {
+        "ok": True,
+        "msg": f"Synced successfully — {rows} new, {updated} updated, {skipped} skipped",
+        "path": final_path,
+        "rows": rows,
+        "updated": updated,
+        "skipped": skipped,
     }

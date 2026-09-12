@@ -1,0 +1,170 @@
+2026-09-12 12:43:00,904 [INFO] background_worker | ======================================================================
+2026-09-12 12:43:00,905 [INFO] background_worker | BACKGROUND WORKER RUN  @ 2026-09-12T12:43:00
+2026-09-12 12:43:00,905 [INFO] background_worker | ======================================================================
+2026-09-12 12:43:00,958 [INFO] background_worker | [MAILBACK] Starting
+2026-09-12 12:43:04,783 [INFO] mailback_sync | [IMAP] Connected
+2026-09-12 12:43:05,193 [INFO] mailback_sync | [CAMS] Found 10 unread mailback emails
+2026-09-12 12:43:05,555 [INFO] mailback_sync | [CAMS] Processing email: OTP - Confirmation
+2026-09-12 12:43:05,563 [WARNING] mailback_sync | [CAMS] No report code found in subject/body for: OTP - Confirmation
+2026-09-12 12:43:06,014 [INFO] mailback_sync | [CAMS] Processing email: Your online request for empanelment against ARN-335644 with
+ AngelOne Mutual Fund
+2026-09-12 12:43:06,031 [WARNING] mailback_sync | [CAMS] No report code found in subject/body for: Your online request for empanelment against ARN-335644 with
+ AngelOne Mutual Fu
+2026-09-12 12:43:06,599 [INFO] mailback_sync | [CAMS] Processing email: OTP - Confirmation
+2026-09-12 12:43:06,622 [WARNING] mailback_sync | [CAMS] No report code found in subject/body for: OTP - Confirmation
+2026-09-12 12:43:07,654 [INFO] mailback_sync | [CAMS] Processing email: Your online request for empanelment against ARN-335644 with Choice
+ Mutual Fund
+2026-09-12 12:43:07,671 [WARNING] mailback_sync | [CAMS] No report code found in subject/body for: Your online request for empanelment against ARN-335644 with Choice
+ Mutual Fund
+2026-09-12 12:43:09,546 [INFO] mailback_sync | [CAMS] Processing email: CAMS AutoMailback Addition Confirmation
+2026-09-12 12:43:09,547 [WARNING] mailback_sync | [CAMS] No report code found in subject/body for: CAMS AutoMailback Addition Confirmation
+2026-09-12 12:43:11,982 [INFO] mailback_sync | [CAMS] Processing email: Ease of Doing Investment (EoDI) - Disclosure of Registered Name and Registration Number by SEBI-Regu
+2026-09-12 12:43:11,985 [WARNING] mailback_sync | [CAMS] No report code found in subject/body for: Ease of Doing Investment (EoDI) - Disclosure of Registered Name and Registration
+2026-09-12 12:43:14,174 [INFO] mailback_sync | [CAMS] Processing email: Brokerage structure  -WhiteOak Capital Dividend Yield Fund &
+ WhiteOak Capital Aggressive hybrid Fu
+2026-09-12 12:43:14,175 [WARNING] mailback_sync | [CAMS] No report code found in subject/body for: Brokerage structure  -WhiteOak Capital Dividend Yield Fund &
+ WhiteOak Capital 
+2026-09-12 12:43:16,074 [INFO] mailback_sync | [CAMS] Processing email: Login OTP
+2026-09-12 12:43:16,077 [WARNING] mailback_sync | [CAMS] No report code found in subject/body for: Login OTP
+2026-09-12 12:43:17,594 [INFO] mailback_sync | [CAMS] Processing email: NFO Brokerage Rate : JioBlackRock Balanced Advantage Fund
+2026-09-12 12:43:17,595 [WARNING] mailback_sync | [CAMS] No report code found in subject/body for: NFO Brokerage Rate : JioBlackRock Balanced Advantage Fund
+2026-09-12 12:43:18,064 [INFO] mailback_sync | [CAMS] Processing email: CAMS - PPFAS Mutual Fund - Brokerage Statement 
+2026-09-12 12:43:18,066 [WARNING] mailback_sync | [CAMS] No report code found in subject/body for: CAMS - PPFAS Mutual Fund - Brokerage Statement 
+2026-09-12 12:43:18,515 [INFO] mailback_sync | [KFinTech] Found 42 unread mailback emails
+2026-09-12 12:43:19,329 [INFO] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:19,341 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:19,734 [INFO] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:19,740 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:20,119 [INFO] mailback_sync | [KFinTech] Processing email: Subscribed Investor Master Information Report for
+ Ref.No:WBMST9447075
+2026-09-12 12:43:20,133 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Subscribed Investor Master Information Report for
+ Ref.No:WBMST9447075
+2026-09-12 12:43:20,467 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:20,479 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:20,868 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:20,879 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:21,274 [INFO] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:21,277 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:21,601 [INFO] mailback_sync | [KFinTech] Processing email: Subscribed Investor Master Information Report for
+ Ref.No:WBMST9447075
+2026-09-12 12:43:21,606 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Subscribed Investor Master Information Report for
+ Ref.No:WBMST9447075
+2026-09-12 12:43:21,920 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:21,920 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:22,244 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:22,248 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:22,576 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:22,578 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:22,914 [INFO] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:22,916 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:23,237 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:23,238 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:23,552 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:23,561 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:23,885 [INFO] mailback_sync | [KFinTech] Processing email: Subscribed Investor Master Information Report for
+ Ref.No:WBMST9447075
+2026-09-12 12:43:23,898 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Subscribed Investor Master Information Report for
+ Ref.No:WBMST9447075
+2026-09-12 12:43:24,214 [INFO] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:24,224 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:24,754 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:24,757 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:25,074 [INFO] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:25,077 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:25,398 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:25,401 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:25,726 [INFO] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:25,730 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:26,053 [INFO] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:26,074 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:26,396 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:26,407 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:26,733 [INFO] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:26,738 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:27,095 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:27,108 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:27,430 [INFO] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:27,446 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:27,761 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:27,769 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:28,082 [INFO] mailback_sync | [KFinTech] Processing email: Mirae Mutual Fund- Brokerage  Annexure - August2026 for ARN-335644
+2026-09-12 12:43:28,085 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Mirae Mutual Fund- Brokerage  Annexure - August2026 for ARN-335644
+2026-09-12 12:43:28,407 [INFO] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:28,414 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:28,729 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:28,731 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:29,045 [INFO] mailback_sync | [KFinTech] Processing email: Nippon India Mutual Fund- Brokerage Threshold Annexure Mailers
+ August2026 for ARN-335644
+2026-09-12 12:43:29,055 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Nippon India Mutual Fund- Brokerage Threshold Annexure Mailers
+ August2026 for 
+2026-09-12 12:43:29,368 [INFO] mailback_sync | [KFinTech] Processing email: Subscribed Investor Master Information Report for
+ Ref.No:WBMST9447075
+2026-09-12 12:43:29,371 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Subscribed Investor Master Information Report for
+ Ref.No:WBMST9447075
+2026-09-12 12:43:29,686 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:29,693 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:30,027 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:30,029 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:30,340 [INFO] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:30,356 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:30,685 [INFO] mailback_sync | [KFinTech] Processing email: Jm Mutual Fund- Brokerage  Annexure - August2026 for ARN-335644
+2026-09-12 12:43:30,706 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Jm Mutual Fund- Brokerage  Annexure - August2026 for ARN-335644
+2026-09-12 12:43:31,026 [INFO] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:31,031 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:31,343 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:31,358 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:31,676 [INFO] mailback_sync | [KFinTech] Processing email: Subscribed SIP Registration Report for Ref.No : WSREG8279819
+2026-09-12 12:43:31,678 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Subscribed SIP Registration Report for Ref.No : WSREG8279819
+2026-09-12 12:43:31,988 [INFO] mailback_sync | [KFinTech] Processing email: Motilal Mutual Fund- Brokerage  Annexure - August2026 for
+ ARN-335644
+2026-09-12 12:43:31,990 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Motilal Mutual Fund- Brokerage  Annexure - August2026 for
+ ARN-335644
+2026-09-12 12:43:32,300 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:32,302 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:32,612 [INFO] mailback_sync | [KFinTech] Processing email: Subscribed Investor Master Information Report for
+ Ref.No:WBMST9447075
+2026-09-12 12:43:32,616 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Subscribed Investor Master Information Report for
+ Ref.No:WBMST9447075
+2026-09-12 12:43:32,931 [INFO] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:32,946 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-12 12:43:33,271 [INFO] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:33,286 [WARNING] mailback_sync | [KFinTech] No report code found in subject/body for: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-12 12:43:33,458 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,493 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,513 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,529 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,542 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,556 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,567 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,577 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,587 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,597 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,608 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,619 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,630 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,640 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,650 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,660 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,671 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,681 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,692 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,702 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:33,713 [WARNING] mailback_sync | [KFinTech-MFSD243] Parser returned error: 0 rows found
+2026-09-12 12:43:34,451 [INFO] background_worker | [MAILBACK] checked=52 downloaded=0 parsed=0 failed=21 no_data=0 errors=0
+2026-09-12 12:43:34,451 [INFO] background_worker | [mailback] -> OK
+2026-09-12 12:43:34,452 [INFO] background_worker | [NAV-LIVE] Starting
+2026-09-12 12:43:34,517 [INFO] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-09-12 12:43:34,952 [INFO] nav_service | [AMFI] NAV file overwritten: nav_data/nav_2026-09-11.txt (1519251 bytes, 18062 lines) | NAV Date: 2026-09-11
+2026-09-12 12:43:34,960 [INFO] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-09-11.txt...
+2026-09-12 12:43:35,238 [INFO] nav_db | [NAV-DB] Ingested 4258 records (skipped 0) for date 2026-09-11
+2026-09-12 12:43:35,240 [INFO] nav_service | [NAV-DB] Success: Inserted 4258 NAV records
+2026-09-12 12:43:35,240 [INFO] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-09-12 12:43:35,240 [INFO] background_worker | [nav_live] -> OK
+2026-09-12 12:43:35,240 [INFO] background_worker | [NAV-PREV] Starting
+2026-09-12 12:43:35,259 [INFO] nav_service | [AMFI-HIST] Already have 2026-09-10 — skipping fetch
+2026-09-12 12:43:35,259 [INFO] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-09-10
+2026-09-12 12:43:35,259 [INFO] background_worker | [nav_previous] -> OK
+2026-09-12 12:43:35,259 [INFO] background_worker | [BSE] Starting
+2026-09-12 12:43:35,278 [INFO] background_worker | [BSE] Today's file already present — skipping
+2026-09-12 12:43:35,278 [INFO] background_worker | [bse] -> OK
+2026-09-12 12:43:35,278 [INFO] background_worker | ======================================================================

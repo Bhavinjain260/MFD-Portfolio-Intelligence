@@ -495,16 +495,18 @@ def get_client_identity(client_code: str) -> Optional[dict]:
     return {"name": name, "pan": pan, "is_minor": is_minor, "match_pan": match_pan}
 
 @st.cache_data(show_spinner=False)
-def compute_client_holdings(client_code: str, _folio_nav_df: pd.DataFrame, _v: int) -> pd.DataFrame:
+def compute_client_holdings(
+    client_code: str,
+    nav_version: str,
+    _folio_nav_df: pd.DataFrame,
+    _v: int,
+) -> pd.DataFrame:
     """
     Same enrichment logic as the Clients tab, factored out so Family Portfolio
     can reuse it per member.
 
-    NOTE: param is _folio_nav_df so Streamlit skips hashing it — hashing a
-    multi-thousand-row DataFrame on every call would cost nearly as much as
-    just recomputing. Cache key is client_code only. This means the cache
-    won't auto-invalidate if folio_nav_df's contents change without
-    client_code changing — st.cache_data.clear() on Refresh handles that.
+    nav_version: cheap string that changes when NAV updates (max nav_date).
+    Forces cache invalidation when NAV changes but data_version() doesn't.
     """
     folio_nav_df = _folio_nav_df
 
@@ -514,21 +516,22 @@ def compute_client_holdings(client_code: str, _folio_nav_df: pd.DataFrame, _v: i
     name, match_pan, is_minor = identity["name"], identity["match_pan"], identity["is_minor"]
     name_clean = name.strip().upper() if name else ""
 
-    with get_conn() as conn:
-        if is_minor:
-            cams_f = pd.read_sql(
-                "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
-                conn, params=(name_clean,))
-            kfin_f = pd.read_sql(
-                "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
-                conn, params=(name_clean,))
-        else:
-            cams_f = pd.read_sql(
-                "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
-                conn, params=(match_pan, name))
-            kfin_f = pd.read_sql(
-                "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
-                conn, params=(match_pan, name))
+    from init_db import get_shared_read_conn
+    _rconn = get_shared_read_conn()
+    if is_minor:
+        cams_f = pd.read_sql(
+            "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+            _rconn, params=(name_clean,))
+        kfin_f = pd.read_sql(
+            "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+            _rconn, params=(name_clean,))
+    else:
+        cams_f = pd.read_sql(
+            "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+            _rconn, params=(match_pan, name))
+        kfin_f = pd.read_sql(
+            "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
+            _rconn, params=(match_pan, name))
 
     all_folios = set(cams_f['foliochk'].tolist() + kfin_f['folio'].tolist())
     if not all_folios:
@@ -2836,7 +2839,7 @@ def _previous_snapshot_path(current_nav_date: Optional[str] = None) -> tuple[Opt
     return None, None
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=86400, show_spinner=False)
 def load_previous_nav_map() -> dict:
     path, _ = _previous_snapshot_path()
     if not path:
@@ -3242,6 +3245,117 @@ def load_active_amcs(_v: int) -> list:
     if df.empty:
         return []
     return sorted(df["amc_name"].dropna().unique().tolist())
+
+
+# ══════════════════════════════════════════════════════════════
+# SHARED ENRICHED FOLIO+NAV DATAFRAME (server-wide cache)
+# ══════════════════════════════════════════════════════════════
+@st.cache_data(show_spinner="⏳ Loading NAV data...", ttl=1800)
+def get_enriched_folio_nav_df(_v: int) -> pd.DataFrame:
+    """
+    Single source of truth for folio+NAV+invested data.
+    Shared across ALL browser sessions. Recomputes only on:
+      - data_version() change (upload happened)
+      - TTL expiry (30 min safety net)
+    """
+    log.info("[NAV-ENRICH] Cache miss — rebuilding enriched folio_nav_df (v=%s)", _v)
+
+    # NOTE: no network calls here. The standalone background_worker.py
+    # is responsible for keeping the NAV snapshot fresh on disk. If the
+    # snapshot is missing, this just works with whatever's available.
+
+    folio_nav_df = get_all_folios_with_isin_and_nav(get_conn, _v)
+    if folio_nav_df.empty:
+        return folio_nav_df
+
+    folio_nav_df['product_code_norm'] = (
+        folio_nav_df['product_code'].astype(str).str.strip().str.upper()
+    )
+
+    # ── CAMS: overwrite file_aum & units from transaction sums ──
+    cams_folios_all = folio_nav_df.loc[folio_nav_df['rta'] == 'CAMS', 'folio_id'].unique().tolist()
+    if cams_folios_all:
+        cams_invested_all = get_cams_invested_per_scheme(cams_folios_all, _v)
+        if not cams_invested_all.empty:
+            cams_invested_all['product_code_norm'] = (
+                cams_invested_all['product_code'].astype(str).str.strip().str.upper()
+            )
+            folio_nav_df = folio_nav_df.merge(
+                cams_invested_all,
+                on=['folio_id', 'product_code_norm'],
+                how='left',
+                suffixes=('', '_cams'),
+            )
+            m = folio_nav_df['rta'] == 'CAMS'
+            has = m & folio_nav_df['invested_amount'].notna()
+            folio_nav_df.loc[has, 'file_aum']      = folio_nav_df.loc[has, 'invested_amount']
+            folio_nav_df.loc[has, 'units']         = folio_nav_df.loc[has, 'total_units']
+            folio_nav_df.loc[has, 'nav_based_aum'] = (
+                folio_nav_df.loc[has, 'units'] * folio_nav_df.loc[has, 'current_nav']
+            )
+            folio_nav_df = folio_nav_df.drop(
+                columns=['invested_amount', 'total_units', 'product_code_norm_cams'],
+                errors='ignore',
+            )
+
+    # ── KFinTech: overwrite file_aum from transaction sums ──
+    kfin_folios_all = folio_nav_df.loc[folio_nav_df['rta'] == 'KFinTech', 'folio_id'].unique().tolist()
+    if kfin_folios_all:
+        kfin_invested_all = get_kfin_invested_per_scheme(kfin_folios_all, _v)
+        if not kfin_invested_all.empty:
+            kfin_invested_all['product_code_norm'] = (
+                kfin_invested_all['product_code'].astype(str).str.strip().str.upper()
+            )
+            folio_nav_df = folio_nav_df.merge(
+                kfin_invested_all,
+                on=['folio_id', 'product_code_norm'],
+                how='left',
+                suffixes=('', '_kfin'),
+            )
+            m = folio_nav_df['rta'] == 'KFinTech'
+            has = m & folio_nav_df['invested_amount'].notna()
+            folio_nav_df.loc[has, 'file_aum']      = folio_nav_df.loc[has, 'invested_amount']
+            folio_nav_df.loc[has, 'nav_based_aum'] = (
+                folio_nav_df.loc[has, 'units'] * folio_nav_df.loc[has, 'current_nav']
+            )
+            folio_nav_df = folio_nav_df.drop(
+                columns=['invested_amount', 'product_code_norm_kfin'],
+                errors='ignore',
+            )
+
+    folio_nav_df = folio_nav_df.drop(columns=['product_code_norm'], errors='ignore')
+    log.info("[NAV-ENRICH] Rebuilt %s rows", len(folio_nav_df))
+    return folio_nav_df
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def get_folio_nav_summary_cached(_v: int) -> dict:
+    return get_folio_nav_summary(get_conn, _v)
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def get_client_xirr_batch(_v: int, folio_key: tuple) -> dict:
+    """
+    Cached XIRR computation for a client's folios.
+    folio_key: sorted tuple of (folio_id, rta, product_code, current_value_rounded).
+    Including current_value makes the cache invalidate when NAV changes.
+    """
+    result = {}
+    for folio_id, rta, prodcode, current_value in folio_key:
+        try:
+            xres = xirr.compute_xirr_for_folio(
+                folio_no=folio_id,
+                _get_conn=get_conn,
+                rta=rta,
+                product_code=prodcode,
+                current_value=current_value,
+                verbose=False,
+            )
+            if xres and xres.get("xirr") is not None:
+                result[folio_id] = xres["xirr_pct"]
+        except Exception as e:
+            log.warning("[XIRR] %s failed: %s", folio_id, e)
+    return result
 
 
 def normalize_folio(folio: str) -> str:
@@ -3698,34 +3812,8 @@ ensure_family_tables()
 
 
 # ==================== BSE SCHEME MASTER AUTO-DOWNLOAD ====================
-def _auto_bse_scheme_master():
-    """Non-blocking: starts background download if needed, once per day."""
-    today = datetime.now().date()
-    
-    # Read setting from database
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT value FROM admin_settings WHERE key = 'bse_auto_enabled'"
-        ).fetchone()
-    
-    bse_enabled = row[0] == "1" if row else True
-    
-    if not bse_enabled:
-        return
-
-
-    st.session_state["bse_auto_last_run"] = today
-
-    if should_auto_download():
-        log.info("[BSE-AUTO-STARTUP] Scheduling background download...")
-
-        start_background_download(parse_func=dm.parse_bse_scheme_master)
-        # Don't block — let the UI render. The status will show on next rerun.
-    else:
-        log.info("[BSE-AUTO-STARTUP] Today's file already exists.")
-
-
-_auto_bse_scheme_master()
+# Moved to background_worker.py — Streamlit no longer triggers downloads
+# on startup. Use the Admin Panel button for manual runs.
 
 
 # # ==================== CAMS MAILBACK AUTO-SYNC ====================
@@ -3749,17 +3837,14 @@ _auto_bse_scheme_master()
 #     elif status["done"]:
 #         st.success(status["msg"]) if status["ok"] else st.error(status["msg"])
 
-
-# _auto_cams_mailback_sync()
-# cams_mailback_sync.ensure_poller_started()
-# nav_scheduler.ensure_started(get_conn, download_and_save_nav_if_needed, _amfi.load)
-
-cams_mailback_sync.ensure_poller_started()
-# nav_scheduler.ensure_started(get_conn, download_and_save_nav_if_needed, _amfi.load)
+# Background workers (mailback IMAP poller, NAV schedule, BSE Selenium)
+# now run in the standalone `background_worker.py` process, not inside
+# Streamlit. Do NOT re-add a startup call here — it would double-run them.
 
 
 # ==================== GLOBAL BSE DOWNLOAD/PARSE NOTIFICATION ====================
-# Runs on every page, not just Admin Panel, so the toast fires wherever the user is.
+# Reads the last BSE result written by the standalone background worker
+# (via bse_auto's status file), and shows a toast once per session.
 def _notify_bse_scheme_status():
     from bse_auto import get_download_status
     status = get_download_status()
@@ -3773,6 +3858,34 @@ def _notify_bse_scheme_status():
 
 _notify_bse_scheme_status()
 
+
+
+# ══════════════════════════════════════════════════════════════
+# CACHE WARM-UP — runs once per server process
+# NOTE: does NOT trigger any network downloads — assumes the standalone
+# background_worker.py has already fetched today's NAV. If the snapshot
+# is missing, caches still warm but use whatever file is on disk.
+# ══════════════════════════════════════════════════════════════
+@st.cache_resource(show_spinner=False)
+def _warm_caches_once() -> bool:
+    log.info("[WARMUP] Warming caches (no network fetch)...")
+    try:
+        _ = get_enriched_folio_nav_df(data_version())
+    except Exception as e:
+        log.warning("[WARMUP] folio_nav_df warmup failed: %s", e)
+    try:
+        _ = load_all_clients_with_display(data_version())
+    except Exception as e:
+        log.warning("[WARMUP] clients warmup failed: %s", e)
+    try:
+        _ = load_previous_nav_map()
+    except Exception as e:
+        log.warning("[WARMUP] prev nav warmup failed: %s", e)
+    log.info("[WARMUP] Done")
+    return True
+
+
+_warm_caches_once()
 
 
 # -------------------- THEME (native Streamlit System/Light/Dark) --------------------
@@ -3838,87 +3951,16 @@ if mode == "📊 Dashboard":
     folio_nav_df = pd.DataFrame()
     nav_stats = {}
 
-    if "folio_nav_df" not in st.session_state or "folio_nav_summary" not in st.session_state:
-        with st.spinner("⏳ Fetching ISIN mappings & latest NAVs from AMFI... (5–10s)"):
-            try:
-                download_and_save_nav_if_needed()
-                sync_previous_business_day_nav_if_needed()
-
-                folio_nav_df = get_all_folios_with_isin_and_nav(get_conn, data_version())
-
-                # ── Normalize product_code once for all merges ──
-                folio_nav_df['product_code_norm'] = folio_nav_df['product_code'].astype(str).str.strip().str.upper()
-
-                # ═══════════════════════════════════════════════════════════
-                # CAMS: overwrite file_aum & units from transaction sums
-                # ═══════════════════════════════════════════════════════════
-                cams_folios_all = folio_nav_df[folio_nav_df['rta'] == 'CAMS']['folio_id'].unique().tolist()
-                if cams_folios_all:
-                    cams_invested_all = get_cams_invested_per_scheme(cams_folios_all, data_version())
-                    if not cams_invested_all.empty:
-                        cams_invested_all['product_code_norm'] = cams_invested_all['product_code'].astype(
-                            str).str.strip().str.upper()
-                        folio_nav_df = folio_nav_df.merge(
-                            cams_invested_all,
-                            left_on=['folio_id', 'product_code_norm'],
-                            right_on=['folio_id', 'product_code_norm'],
-                            how='left',
-                            suffixes=('', '_cams')
-                        )
-                        cams_mask = folio_nav_df['rta'] == 'CAMS'
-                        has_txn = cams_mask & folio_nav_df['invested_amount'].notna()
-                        folio_nav_df.loc[has_txn, 'file_aum'] = folio_nav_df.loc[has_txn, 'invested_amount']
-                        folio_nav_df.loc[has_txn, 'units'] = folio_nav_df.loc[has_txn, 'total_units']
-                        folio_nav_df.loc[has_txn, 'nav_based_aum'] = (
-                                folio_nav_df.loc[has_txn, 'units'] * folio_nav_df.loc[has_txn, 'current_nav']
-                        )
-                        folio_nav_df = folio_nav_df.drop(
-                            columns=['invested_amount', 'total_units', 'product_code_norm_cams'], errors='ignore'
-                        )
-
-                # ═══════════════════════════════════════════════════════════
-                # KFinTech: overwrite file_aum from transaction sums
-                # (units are already correct from the master query)
-                # ═══════════════════════════════════════════════════════════
-                kfin_folios_all = folio_nav_df[folio_nav_df['rta'] == 'KFinTech']['folio_id'].unique().tolist()
-                if kfin_folios_all:
-                    kfin_invested_all = get_kfin_invested_per_scheme(kfin_folios_all, data_version())
-                    if not kfin_invested_all.empty:
-                        kfin_invested_all['product_code_norm'] = kfin_invested_all['product_code'].astype(
-                            str).str.strip().str.upper()
-                        folio_nav_df = folio_nav_df.merge(
-                            kfin_invested_all,
-                            left_on=['folio_id', 'product_code_norm'],
-                            right_on=['folio_id', 'product_code_norm'],
-                            how='left',
-                            suffixes=('', '_kfin')
-                        )
-                        kfin_mask = folio_nav_df['rta'] == 'KFinTech'
-                        has_txn = kfin_mask & folio_nav_df['invested_amount'].notna()
-                        folio_nav_df.loc[has_txn, 'file_aum'] = folio_nav_df.loc[has_txn, 'invested_amount']
-                        # Recalculate NAV-based AUM even though units haven't changed
-                        folio_nav_df.loc[has_txn, 'nav_based_aum'] = (
-                                folio_nav_df.loc[has_txn, 'units'] * folio_nav_df.loc[has_txn, 'current_nav']
-                        )
-                        folio_nav_df = folio_nav_df.drop(
-                            columns=['invested_amount', 'product_code_norm_kfin'], errors='ignore'
-                        )
-
-                # Clean up temp column
-                folio_nav_df = folio_nav_df.drop(columns=['product_code_norm'], errors='ignore')
-
-                nav_stats = get_folio_nav_summary(get_conn, data_version())
-                st.session_state["folio_nav_df"] = folio_nav_df
-                st.session_state["folio_nav_summary"] = nav_stats
-                nav_ready = True
-                st.toast("✅ NAV data synced!")
-            except Exception as e:
-                st.error(f"Failed to fetch NAV: {e}")
-                log.exception("Auto NAV fetch failed")
-    else:
-        folio_nav_df = st.session_state["folio_nav_df"]
-        nav_stats = st.session_state["folio_nav_summary"]
-        nav_ready = True
+    try:
+        folio_nav_df = get_enriched_folio_nav_df(data_version())
+        nav_stats = get_folio_nav_summary_cached(data_version())
+        nav_ready = not folio_nav_df.empty
+    except Exception as e:
+        st.error(f"Failed to fetch NAV: {e}")
+        log.exception("NAV load failed")
+        folio_nav_df = pd.DataFrame()
+        nav_stats = {}
+        nav_ready = False
 
     # ── Skeleton loading if NAV not ready ──
     if not nav_ready:
@@ -3952,10 +3994,12 @@ if mode == "📊 Dashboard":
     c_refresh, _ = st.columns([1, 5])
     with c_refresh:
         if st.button("🔄 Refresh Data", width="stretch"):
-            st.cache_data.clear()
-            st.session_state.pop("folio_nav_df", None)
-            st.session_state.pop("folio_nav_summary", None)
+            get_enriched_folio_nav_df.clear()
+            get_folio_nav_summary_cached.clear()
+            get_all_folios_with_isin_and_nav.clear()
+            load_previous_nav_map.clear()
             _amfi.load(force=True)
+            download_and_save_nav_if_needed(force=True)
             st.rerun()
 
     # ── AUM Cards (muted) ──
@@ -4024,8 +4068,8 @@ if mode == "📊 Dashboard":
     st.divider()
     st.subheader("📊 Portfolio Movement — Day & Week Diff")
 
-    if "folio_nav_df" in st.session_state:
-        df_nav = st.session_state["folio_nav_df"].copy()
+    if nav_ready and not folio_nav_df.empty:
+        df_nav = folio_nav_df.copy()
         df_nav["investor_name"] = df_nav["investor_name"].str.upper().str.strip()
         
         # Load previous day and week NAV data
@@ -4633,8 +4677,8 @@ if mode == "📊 Dashboard":
         st.divider()
         st.subheader("📈 Folio-Level ISIN & Current NAV")
 
-        if "folio_nav_df" in st.session_state:
-            df = st.session_state["folio_nav_df"]
+        if nav_ready and not folio_nav_df.empty:
+            df = folio_nav_df
 
             f1, f2, f3 = st.columns([2, 2, 2])
             with f1:
@@ -4747,12 +4791,7 @@ elif mode == "👥 Clients":
     st.divider()
 
     # ── NAV Data ──
-    if "folio_nav_df" not in st.session_state:
-        with st.spinner("Loading NAV..."):
-            download_and_save_nav_if_needed()
-            st.session_state["folio_nav_df"] = get_all_folios_with_isin_and_nav(get_conn, data_version())
-
-    folio_nav_df = st.session_state["folio_nav_df"]
+    folio_nav_df = get_enriched_folio_nav_df(data_version())
 
     # ── FAMILY PORTFOLIO ──
     family = get_family_for_client(client_code)
@@ -4832,8 +4871,14 @@ elif mode == "👥 Clients":
 
             fam_holdings_list = []
             member_rows = []
+            _nav_version = str(folio_nav_df["nav_date"].max()) if not folio_nav_df.empty else "none"
             for mc in member_codes:
-                h = compute_client_holdings(mc, _folio_nav_df=folio_nav_df, _v=data_version())
+                h = compute_client_holdings(
+                    mc,
+                    _nav_version,
+                    _folio_nav_df=folio_nav_df,
+                    _v=data_version(),
+                )
                 if h is None:
                     h = pd.DataFrame()
                 mname_arr = members_df.loc[members_df['client_code'] == mc, 'name'].values
@@ -4894,7 +4939,12 @@ elif mode == "👥 Clients":
                 )
                 selected_member_code = member_options[selected_member_label]
 
-                member_holdings = compute_client_holdings(selected_member_code, _folio_nav_df=folio_nav_df, _v=data_version())
+                member_holdings = compute_client_holdings(
+                    selected_member_code,
+                    _nav_version,
+                    _folio_nav_df=folio_nav_df,
+                    _v=data_version(),
+                )
                 if not member_holdings.empty:
                     mem_inv = member_holdings["file_aum"].sum()
                     mem_cur = member_holdings["nav_based_aum"].sum()
@@ -5165,57 +5215,26 @@ elif mode == "👥 Clients":
                 holdings["gain_loss"] = holdings["nav_based_aum"] - holdings["file_aum"]
 
                 # ═══════════════════════════════════════════════════════════
-                # COMPUTE XIRR PER FOLIO (like invested value calculation)
+                # COMPUTE XIRR PER FOLIO (cached batch — shared across sessions)
                 # ═══════════════════════════════════════════════════════════
-                # st.caption("⏳ Computing XIRR per folio...")
-
-                folio_xirr_map = {}
-                xirr_errors = []
-
-                for fid in holdings["folio_id"].unique():
-                    folio_rows = holdings[holdings["folio_id"] == fid]
-                    if folio_rows.empty:
+                _xirr_key_rows = []
+                for _, _r in holdings[["folio_id", "rta", "product_code", "nav_based_aum"]] \
+                        .drop_duplicates("folio_id").iterrows():
+                    _cv = _r["nav_based_aum"]
+                    if pd.isna(_cv) or _cv <= 0:
                         continue
+                    _xirr_key_rows.append((
+                        str(_r["folio_id"]),
+                        str(_r["rta"]),
+                        str(_r["product_code"]),
+                        round(float(_cv), 2),
+                    ))
+                folio_key = tuple(sorted(_xirr_key_rows))
 
-                    folio_row = folio_rows.iloc[0]
-                    frta = folio_row["rta"]
-                    fprod = folio_row.get("product_code")
-                    fvalue = folio_row["nav_based_aum"]
+                folio_xirr_map = get_client_xirr_batch(data_version(), folio_key)
 
-                    if pd.isna(fvalue) or fvalue <= 0:
-                        xirr_errors.append(f"{fid}: No NAV/current value")
-                        continue
-
-                    try:
-                        # Call XIRR function with verbose=True for terminal logging
-                        xres = xirr.compute_xirr_for_folio(
-                            folio_no=fid,
-                            _get_conn=get_conn,
-                            rta=frta,
-                            product_code=fprod,
-                            current_value=round(float(fvalue), 2), 
-                            verbose=True,  # <-- Prints to terminal for Excel verification
-                        )
-
-                        if xres["xirr"] is not None:
-                            folio_xirr_map[fid] = xres["xirr_pct"]  # use pre-computed %
-                            if show_debug:
-                                st.write(f"✅ {fid}: XIRR = {xres['xirr_pct']}%")
-                        else:
-                            err_msg = xres.get("error") or "Unknown error"
-                            xirr_errors.append(f"{fid}: {err_msg}")
-                            if show_debug:
-                                st.write(f"❌ {fid}: {err_msg}")
-
-                    except Exception as e:
-                        xirr_errors.append(f"{fid}: Exception - {e}")
-                        if show_debug:
-                            st.write(f"❌ {fid}: Exception - {e}")
-
-                if show_debug and xirr_errors:
-                    with st.expander("XIRR Errors"):
-                        for err in xirr_errors:
-                            st.caption(err)
+                if show_debug:
+                    st.caption(f"XIRR computed for {len(folio_xirr_map)} / {len(folio_key)} folios")
 
                 # ── Club rows by scheme (across folios) for display ──
                 grouped_holdings = (
@@ -7589,11 +7608,7 @@ elif mode == "🧮 Capital Gains":
             st.info("No remaining units to redeem.")
         else:
             # ── Reliable NAV: reuse same canonical AMFI source as Dashboard/Client ──
-            cg_nav_df = st.session_state.get("folio_nav_df")
-            if cg_nav_df is None:
-                download_and_save_nav_if_needed()
-                cg_nav_df = get_all_folios_with_isin_and_nav(get_conn, data_version())
-                st.session_state["folio_nav_df"] = cg_nav_df
+            cg_nav_df = get_enriched_folio_nav_df(data_version())
 
             nav_match = cg_nav_df[
                 (cg_nav_df["folio_id"] == folio_no) &
@@ -7669,11 +7684,7 @@ elif mode == "🧮 Capital Gains":
             st.info("No redemptions found — all units already held as-is.")
         else:
             # Get current NAV
-            cg_nav_df = st.session_state.get("folio_nav_df")
-            if cg_nav_df is None:
-                download_and_save_nav_if_needed()
-                cg_nav_df = get_all_folios_with_isin_and_nav(get_conn, data_version())
-                st.session_state["folio_nav_df"] = cg_nav_df
+            cg_nav_df = get_enriched_folio_nav_df(data_version())
 
             nav_match = cg_nav_df[
                 (cg_nav_df["folio_id"] == folio_no) &
@@ -7809,28 +7820,6 @@ elif mode == "🧮 Capital Gains":
 elif mode == "⚙️ Admin Panel":
     st.header("⚙️ Admin Panel")
 
-    # Read database value fresh every page load
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT value FROM admin_settings WHERE key = 'bse_auto_enabled'"
-        ).fetchone()
-
-    db_value = row[0] == "1" if row else True
-
-    # Toggle WITHOUT key - no session state caching
-    new_value = st.toggle(
-        "📥 Auto-download daily",
-        value=db_value
-    )
-
-    if new_value != db_value:
-        with get_conn() as conn:
-            conn.execute(
-                "INSERT INTO admin_settings (key, value) VALUES (?, ?) "
-                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP",
-                ("bse_auto_enabled", "1" if new_value else "0")
-            )
-        st.rerun()
     
 
     # ── Manual NAV redownload ──
@@ -7848,9 +7837,9 @@ elif mode == "⚙️ Admin Panel":
             with st.spinner("Fetching latest NAV from AMFI..."):
                 result = download_and_save_nav_if_needed(force=True)
             if result["ok"]:
-                st.cache_data.clear()
-                st.session_state.pop("folio_nav_df", None)
-                st.session_state.pop("folio_nav_summary", None)
+                get_enriched_folio_nav_df.clear()
+                get_folio_nav_summary_cached.clear()
+                load_previous_nav_map.clear()
                 _amfi.load(force=True)
                 st.success(f"✅ {result['reason']}")
                 st.rerun()
@@ -7869,9 +7858,8 @@ elif mode == "⚙️ Admin Panel":
               with st.spinner("Fetching previous business day NAV from AMFI..."):
                   result = sync_previous_business_day_nav_if_needed(force=True)
               if result["ok"]:
-                  st.cache_data.clear()
-                  st.session_state.pop("folio_nav_df", None)
-                  st.session_state.pop("folio_nav_summary", None)
+                  get_enriched_folio_nav_df.clear()
+                  load_previous_nav_map.clear()
                   st.success(f"✅ {result['reason']}")
                   st.rerun()
               else:

@@ -3,6 +3,8 @@ import os
 import sqlite3
 from contextlib import contextmanager
 
+import streamlit as st
+
 DB_PATH = "mfd_local.db"
 
 
@@ -22,6 +24,24 @@ def get_conn():
         raise
     finally:
         conn.close()
+
+
+@st.cache_resource(show_spinner=False)
+def get_shared_read_conn():
+    """
+    Single long-lived SQLite connection for read-only queries.
+    Shared across sessions. Use get_conn() for writes.
+    """
+    conn = sqlite3.connect(
+        DB_PATH,
+        check_same_thread=False,
+        timeout=30.0,
+    )
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA busy_timeout = 30000")
+    return conn
 
 
 def init_db() -> None:

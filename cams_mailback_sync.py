@@ -79,35 +79,35 @@ for rta_config in RTA_CONFIG.values():
     REPORT_CODES.extend(rta_config["reports"])
 
 BASE_DIR = Path("mailback_sync")
-POLL_INTERVAL_SECONDS = 7200
+# POLL_INTERVAL_SECONDS = 7200
 
 
-def _poll_loop(interval_seconds: int = POLL_INTERVAL_SECONDS):
-    while True:
-        try:
-            if is_polling_enabled() and credentials_configured() and not _sync_status["running"]:
-                log.info("[MAILBACK-POLL] Checking for new mailback files...")
-                result = sync_once()
-                log.info(
-                    "[MAILBACK-POLL] %s downloaded, %s parsed, %s failed",
-                    len(result["downloaded"]), len(result["parsed"]), len(result["parse_failed"])
-                )
-                dm.set_credential("mailback_last_sync_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        except Exception:
-            log.exception("[MAILBACK-POLL] Poll cycle failed")
-        time.sleep(interval_seconds)
+# def _poll_loop(interval_seconds: int = POLL_INTERVAL_SECONDS):
+#     while True:
+#         try:
+#             if is_polling_enabled() and credentials_configured() and not _sync_status["running"]:
+#                 log.info("[MAILBACK-POLL] Checking for new mailback files...")
+#                 result = sync_once()
+#                 log.info(
+#                     "[MAILBACK-POLL] %s downloaded, %s parsed, %s failed",
+#                     len(result["downloaded"]), len(result["parsed"]), len(result["parse_failed"])
+#                 )
+#                 dm.set_credential("mailback_last_sync_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+#         except Exception:
+#             log.exception("[MAILBACK-POLL] Poll cycle failed")
+#         time.sleep(interval_seconds)
 
 
-def ensure_poller_started(interval_seconds: int = POLL_INTERVAL_SECONDS) -> None:
-    """Idempotent — safe to call on every Streamlit rerun."""
-    global _poller_started
-    with _poller_lock:
-        if _poller_started:
-            return
-        t = threading.Thread(target=_poll_loop, args=(interval_seconds,), daemon=True)
-        t.start()
-        _poller_started = True
-        log.info("[MAILBACK-POLL] Background poller started (every %ss)", interval_seconds)
+# def ensure_poller_started(interval_seconds: int = POLL_INTERVAL_SECONDS) -> None:
+#     """Idempotent — safe to call on every Streamlit rerun."""
+#     global _poller_started
+#     with _poller_lock:
+#         if _poller_started:
+#             return
+#         t = threading.Thread(target=_poll_loop, args=(interval_seconds,), daemon=True)
+#         t.start()
+#         _poller_started = True
+#         log.info("[MAILBACK-POLL] Background poller started (every %ss)", interval_seconds)
 
 
 def get_sync_status() -> dict:
@@ -149,8 +149,7 @@ _sync_status = {
 # ══════════════════════════════════════════════════════════════
 POLL_ENABLED_KEY = "mailback_poll_enabled"
 
-_poller_started = False
-_poller_lock = threading.Lock()
+
 
 
 def is_polling_enabled() -> bool:
@@ -237,8 +236,38 @@ def _detect_rta(sender: str) -> str | None:
 
 
 def _is_no_data(body: str) -> bool:
+    """
+    True if the email body indicates there's nothing to download for
+    this report cycle — KFinTech sends a "no changes" email rather
+    than skipping, so we need to catch these and mark them read
+    without attempting a download.
+
+    Patterns observed from KFinTech/CAMS mailback emails:
+      - "No data available"
+      - "No records found"
+      - "No transactions during this period"
+      - "No new transactions"
+      - "There are no records to report"
+      - "Nil report"
+    """
+    if not body:
+        return True
+
     lowered = body.lower()
-    return bool(re.search(r'no\s*data|no\s*records?\s*found', lowered))
+
+    patterns = [
+        r"no\s+data\s+available",
+        r"no\s+data",
+        r"no\s+records?\s+found",
+        r"no\s+records?\s+to\s+report",
+        r"no\s+transactions?\s+during\s+this\s+period",
+        r"no\s+new\s+transactions?",
+        r"no\s+transactions?",
+        r"nil\s+report",
+        r"there\s+are\s+no\s+records",
+        r"there\s+is\s+no\s+data",
+    ]
+    return any(re.search(p, lowered) for p in patterns)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -299,7 +328,13 @@ def _search_safe(imap, query: str, max_retries: int = 2) -> tuple[bool, list]:
 # DOWNLOAD + EXTRACT
 # ══════════════════════════════════════════════════════════════
 def _download_and_extract(url: str, rta: str, report_code: str, zip_password: str) -> list[str]:
-    """Download zip, extract, return list of file paths."""
+    """
+    Download zip, extract, return list of file paths.
+
+    Returns an empty list if the ZIP has zero entries — that's a
+    legitimate "no data" report, not an error. Callers should treat
+    an empty return as a no-op, not a failure.
+    """
     log.info("[%s-%s] Downloading %s", rta, report_code, url)
     resp = requests.get(url, timeout=60)
     resp.raise_for_status()
@@ -312,7 +347,12 @@ def _download_and_extract(url: str, rta: str, report_code: str, zip_password: st
     try:
         with pyzipper.AESZipFile(io.BytesIO(resp.content)) as zf:
             zf.setpassword(zip_password.encode())
-            for name in zf.namelist():
+            names = zf.namelist()
+            if not names:
+                log.info("[%s-%s] ZIP is empty (0 entries) — nothing to import",
+                         rta, report_code)
+                return []
+            for name in names:
                 data = zf.read(name)
                 out_path = out_dir / Path(name).name
                 out_path.write_bytes(data)
@@ -332,11 +372,17 @@ def _download_and_extract(url: str, rta: str, report_code: str, zip_password: st
 # AUTO-PARSE + AUTO-MOVE
 # ══════════════════════════════════════════════════════════════
 def _parse_and_move(path_str: str, rta: str, report_code: str) -> dict:
-    """Parse one extracted file into the DB. On success: move to done/"""
+    """
+    Parse one extracted file into the DB. On success: move to done/.
+
+    Zero-row files (header-only) are considered a successful no-op —
+    they get moved to done/ so they don't get retried every run, and
+    are logged at INFO rather than WARNING.
+    """
     path = Path(path_str)
     rta_config = RTA_CONFIG[rta]
     parser = rta_config["parsers"].get(report_code)
-    
+
     if parser is None:
         return {"path": path_str, "ok": False, "msg": f"No parser mapped for {rta}-{report_code}"}
 
@@ -346,6 +392,18 @@ def _parse_and_move(path_str: str, rta: str, report_code: str) -> dict:
     except Exception as e:
         log.exception("[%s-%s] Parse failed for %s", rta, report_code, path.name)
         return {"path": path_str, "ok": False, "msg": f"Exception: {e}"}
+
+    # Empty data is not an error — treat as a successful no-op.
+    if not ok and "0 rows found" in str(msg):
+        log.info("[%s-%s] %s contains 0 data rows — moving to done (no-op)",
+                 rta, report_code, path.name)
+        done_dir = path.parent / "done"
+        done_dir.mkdir(parents=True, exist_ok=True)
+        dest = done_dir / path.name
+        if dest.exists():
+            dest = done_dir / f"{path.stem}_{int(time.time())}{path.suffix}"
+        path.rename(dest)
+        return {"path": str(dest), "ok": True, "msg": "empty (0 rows) — ignored"}
 
     if not ok:
         log.warning("[%s-%s] Parser returned error: %s", rta, report_code, msg)
@@ -551,8 +609,13 @@ def sync_once() -> dict:
 
                 url = _extract_download_url(body)
                 if not url:
-                    log.error("[%s-%s] No download URL found in body", rta, report_code)
-                    results["errors"].append(f"{rta}: {subject} — no URL found")
+                    # KFinTech sends "no update" emails where the report
+                    # title is in the subject but the body contains no
+                    # download link. This is a normal empty report, not an
+                    # error. Mark as no_data so the summary reflects reality.
+                    log.info("[%s-%s] No download URL — treating as empty report, marking read",
+                             rta, report_code)
+                    results["no_data"].append(f"{rta}: {subject}")
                     try:
                         imap.store(mid, "+FLAGS", "\\Seen")
                     except:
@@ -568,16 +631,22 @@ def sync_once() -> dict:
                     log.exception("[%s-%s] Download/extract failed", rta, report_code)
                     continue
 
+                try:
+                    imap.store(mid, "+FLAGS", "\\Seen")
+                except:
+                    pass
+
+                # Empty ZIP → treat as no_data, not as a download
+                if not saved:
+                    results["no_data"].append(f"{rta}: {subject}")
+                    continue
+
                 results["downloaded"].append({
                     "rta": rta,
                     "report": report_code,
                     "subject": subject,
                     "files": saved
                 })
-                try:
-                    imap.store(mid, "+FLAGS", "\\Seen")
-                except:
-                    pass
 
                 for path_str in saved:
                     res = _parse_and_move(path_str, rta, report_code)
