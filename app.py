@@ -1050,245 +1050,6 @@ def generate_capital_gain_html(
 </body></html>"""
     return html
 
-def generate_valuation_pdf(
-    client_name: str,
-    pan: str,
-    client_code: str,
-    mobile: str,
-    val_date_str: str,
-    period_from_str: str,
-    summary_rows: list[dict],
-    rta_txns: dict,
-    total_invested: float,
-    total_value: float,
-    total_gain: float,
-) -> bytes | None:
-    """
-    Generate a PDF bytes buffer for the valuation report.
-    Returns None if fpdf2 is not installed or no font found.
-    """
-    try:
-        from fpdf import FPDF
-    except ImportError:
-        return None
-
-    reg_path, bold_path = _find_font_path()
-    if not reg_path:
-        return None
-
-    pdf = FPDF(orientation='P', unit='mm', format='A4')
-    pdf.set_auto_page_break(auto=True, margin=18)
-    pdf.add_font('Main', '', reg_path, uni=True)
-    pdf.add_font('Main', 'B', bold_path, uni=True)
-    pdf.set_margins(12, 12, 12)
-
-    # ── Colour palette ──
-    BLUE   = (41, 128, 185)
-    DARK   = (44, 62, 80)
-    GREY   = (127, 140, 141)
-    LIGHT  = (236, 240, 241)
-    WHITE  = (255, 255, 255)
-    GREEN  = (39, 174, 96)
-    RED    = (192, 57, 43)
-    PAGE_W = 210 - 24  # A4 width minus margins
-
-    def _fmt_inr(val) -> str:
-        try:
-            return f"\u20b9{float(val):,.2f}"
-        except (TypeError, ValueError):
-            return "N/A"
-
-    def _fmt_pct(val) -> str:
-        try:
-            return f"{float(val):.2f}%"
-        except (TypeError, ValueError):
-            return "N/A"
-
-    def _fmt_units(val) -> str:
-        try:
-            return f"{float(val):.4f}"
-        except (TypeError, ValueError):
-            return "N/A"
-
-    # ════════════════════════════════════════
-    # PAGE 1 — HEADER + SUMMARY TABLE
-    # ════════════════════════════════════════
-    pdf.add_page()
-
-    # Title
-    pdf.set_font('Main', 'B', 16)
-    pdf.set_text_color(*DARK)
-    pdf.cell(PAGE_W, 10, 'Portfolio Valuation Report', align='C', new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(3)
-
-    # Client info
-    pdf.set_font('Main', '', 9)
-    pdf.set_text_color(*GREY)
-    pdf.cell(PAGE_W, 5, f'Client: {client_name}', new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(PAGE_W, 5,
-             f'PAN: {pan or "N/A"}   |   Code: {client_code}   |   Mobile: {mobile or "N/A"}',
-             new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(PAGE_W, 5,
-             f'Period: {period_from_str} to {val_date_str}',
-             new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(4)
-
-    # Metrics bar
-    pdf.set_fill_color(*LIGHT)
-    col_w = PAGE_W / 3
-    pdf.set_font('Main', 'B', 8)
-    pdf.set_text_color(*GREY)
-    pdf.cell(col_w, 5, 'Total Invested', border=0, fill=True, new_x="RIGHT")
-    pdf.cell(col_w, 5, 'Total Value', border=0, fill=True, new_x="RIGHT")
-    pdf.cell(col_w, 5, 'Gain / Loss', border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
-
-    pdf.set_font('Main', 'B', 11)
-    pdf.set_text_color(*DARK)
-    pdf.cell(col_w, 7, _fmt_inr(total_invested), border=0, fill=True, new_x="RIGHT")
-    pdf.cell(col_w, 7, _fmt_inr(total_value), border=0, fill=True, new_x="RIGHT")
-    gain_color = GREEN if total_gain >= 0 else RED
-    pdf.set_text_color(*gain_color)
-    pdf.cell(col_w, 7, _fmt_inr(total_gain), border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
-    pdf.set_text_color(*DARK)
-    pdf.ln(6)
-
-    # Section header
-    pdf.set_font('Main', 'B', 11)
-    pdf.set_text_color(*BLUE)
-    pdf.cell(PAGE_W, 6, 'Scheme Summary', new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(2)
-
-    # Summary table
-    s_headers = ['Scheme', 'Folio', 'Invested', 'Value', 'Gain/Loss', 'Return %']
-    s_widths  = [70, 25, 30, 30, 30, 20]  # sum ≈ 205 ≈ PAGE_W
-    # Adjust last col to fill
-    s_widths[-1] = PAGE_W - sum(s_widths[:-1])
-
-    row_h = 6
-    pdf.set_font('Main', 'B', 7)
-    pdf.set_fill_color(*BLUE)
-    pdf.set_text_color(*WHITE)
-    for h, w in zip(s_headers, s_widths):
-        pdf.cell(w, row_h, h, border=1, align='C', fill=True)
-    pdf.ln()
-
-    pdf.set_font('Main', '', 7)
-    pdf.set_text_color(*DARK)
-    for i, row in enumerate(summary_rows):
-        if i % 2 == 1:
-            pdf.set_fill_color(*LIGHT)
-            fill = True
-        else:
-            fill = False
-
-        vals = [
-            row.get('Scheme', ''),
-            str(row.get('Folio', '')),
-            _fmt_inr(row.get('Invested')),
-            _fmt_inr(row.get('Value')),
-            _fmt_inr(row.get('Gain/Loss')),
-            _fmt_pct(
-                (row.get('Gain/Loss', 0) / row.get('Invested', 1) * 100)
-                if row.get('Gain/Loss') is not None and row.get('Invested', 0) > 0
-                else None
-            ),
-        ]
-        aligns = ['L', 'C', 'R', 'R', 'R', 'R']
-        for v, w, a in zip(vals, s_widths, aligns):
-            pdf.cell(w, row_h, v, border=1, align=a, fill=fill)
-        pdf.ln()
-
-    # Total row
-    pdf.set_font('Main', 'B', 7)
-    pdf.set_fill_color(200, 200, 200)
-    n_folios = len(set(r.get('Folio', '') for r in summary_rows))
-    total_vals = [
-        'TOTAL',
-        f'{n_folios} folios',
-        _fmt_inr(total_invested),
-        _fmt_inr(total_value),
-        _fmt_inr(total_gain),
-        _fmt_pct(total_gain / total_invested * 100) if total_invested > 0 else 'N/A',
-    ]
-    for v, w, a in zip(total_vals, s_widths, aligns):
-        pdf.cell(w, row_h, v, border=1, align=a, fill=True)
-    pdf.ln(8)
-
-    # ════════════════════════════════════════
-    # TRANSACTIONS — PER RTA
-    # ════════════════════════════════════════
-    t_headers = ['Date', 'Type', 'Units', 'Price', 'Amount', 'Balance']
-    t_widths  = [22, 22, 22, 22, 28, 22]
-    t_widths[-1] = PAGE_W - sum(t_widths[:-1])
-    t_aligns  = ['C', 'L', 'R', 'R', 'R', 'R']
-
-    all_entries = rta_txns.get('CAMS', []) + rta_txns.get('KFinTech', [])
-    all_entries.sort(key=lambda e: e['label'])
-
-    for entry in all_entries:
-            label   = entry['label']
-            opening = entry['opening']
-            tdf     = entry['df']
-
-            pdf.set_font('Main', 'B', 8)
-            pdf.set_text_color(*DARK)
-            pdf.cell(PAGE_W, 5,
-                     f'{label}  —  Opening: {opening:.4f} units',
-                     new_x="LMARGIN", new_y="NEXT")
-
-            if tdf.empty:
-                pdf.set_font('Main', '', 7)
-                pdf.set_text_color(*GREY)
-                pdf.cell(PAGE_W, 5, '(no transactions during this period)',
-                         new_x="LMARGIN", new_y="NEXT")
-                pdf.ln(3)
-                continue
-
-            # Table header
-            pdf.set_font('Main', 'B', 6.5)
-            pdf.set_fill_color(*BLUE)
-            pdf.set_text_color(*WHITE)
-            for h, w in zip(t_headers, t_widths):
-                pdf.cell(w, 5, h, border=1, align='C', fill=True)
-            pdf.ln()
-
-            # Rows
-            pdf.set_font('Main', '', 6.5)
-            pdf.set_text_color(*DARK)
-            for r_idx, (_, row) in enumerate(tdf.iterrows()):
-                if r_idx % 2 == 1:
-                    pdf.set_fill_color(*LIGHT)
-                    fill = True
-                else:
-                    fill = False
-
-                date_str = row['_date'].strftime('%Y-%m-%d') if pd.notna(row['_date']) else ''
-                price = row.get('purprice', row.get('td_pop', None))
-                amount = row.get('amount', 0)
-
-                vals = [
-                    date_str,
-                    str(row.get('trxntype', '')),
-                    _fmt_units(row.get('signed_units', 0)),
-                    _fmt_units(price) if pd.notna(price) else '',
-                    _fmt_inr(amount),
-                    _fmt_units(row.get('Balance', 0)),
-                ]
-                for v, w, a in zip(vals, t_widths, t_aligns):
-                    pdf.cell(w, 4.5, v, border=1, align=a, fill=fill)
-                pdf.ln()
-
-            pdf.ln(4)
-
-    # ── Footer ──
-    pdf.set_font('Main', '', 7)
-    pdf.set_text_color(*GREY)
-    pdf.cell(PAGE_W, 4,
-             f'Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}',
-             align='C', new_x="LMARGIN", new_y="NEXT")
-
-    return bytes(pdf.output())
-
 
 def generate_valuation_html(
     client_name: str,
@@ -2596,21 +2357,6 @@ def _have_snapshot_for_date(iso_date: str) -> bool:
         if _get_file_nav_date(os.path.join(NAV_TEXT_DIR, fname)) == iso_date:
             return True
     return False
-
-
-import time
-import requests
-
-# Delay between successive lookback requests so we don't hammer AMFI.
-LOOKBACK_DELAY_SECONDS = 1.5
-
-_AMFI_SESSION = requests.Session()
-_AMFI_SESSION.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                  "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/plain,text/html,application/xhtml+xml,*/*",
-    "Referer": "https://www.amfiindia.com/",
-})
 
 
 def _looks_like_amfi_format(text: str) -> bool:
@@ -4692,17 +4438,6 @@ if mode == "📊 Dashboard":
                     }
                 )
 
-        else:
-                st.info("Breakdown requires NAV data. Refresh if still loading.")
-
-                # ── Recent Uploads ──
-                st.divider()
-                st.subheader("📤 Recent Uploads")
-                uploads_df = load_recent_uploads(data_version())
-                if not uploads_df.empty:
-                    st.dataframe(uploads_df, width="stretch", hide_index=True)
-                else:
-                    st.info("No uploads yet. Go to Admin Panel to upload data.")
 
 
 
@@ -5688,9 +5423,26 @@ elif mode == "👥 Clients":
             with fc2:
                 date_filter = st.selectbox(
                     "Time Period",
-                    ["All Time", "Last 30 Days", "Last 90 Days", "Last 6 Months", "Last 1 Year"],
+                    ["All Time", "Last 30 Days", "Last 90 Days",
+                     "Last 6 Months", "Last 1 Year", "Custom Range"],
                     key="txn_tab_date_filter"
                 )
+
+            custom_from = custom_to = None
+            if date_filter == "Custom Range":
+                cr1, cr2 = st.columns(2)
+                with cr1:
+                    custom_from = st.date_input(
+                        "From Date",
+                        value=date_cls.today() - timedelta(days=30),
+                        key="txn_tab_from_date"
+                    )
+                with cr2:
+                    custom_to = st.date_input(
+                        "To Date",
+                        value=date_cls.today(),
+                        key="txn_tab_to_date"
+                    )
 
             if folio_choice == "All Folios":
                 folios_to_fetch = sorted_folios
@@ -5713,6 +5465,7 @@ elif mode == "👥 Clients":
                                'CAMS'      AS rta,
                                trxnno,
                                traddate,
+                               txn_date_iso,
                                trxntype,
                                trxnmode,
                                trxnstat,
@@ -5737,6 +5490,7 @@ elif mode == "👥 Clients":
                                'KFinTech' AS rta,
                                td_trno    AS trxnno,
                                td_trdt    AS traddate,
+                               txn_date_iso, 
                                td_purred  AS trxntype,
                                trnmode    AS trxnmode,
                                trnstat    AS trxnstat,
@@ -5777,11 +5531,18 @@ elif mode == "👥 Clients":
                 else:
                     txn_df['scheme_name'] = None
 
-                # ── Parse dates for sorting & filtering ──
-                txn_df['_sort_date'] = pd.to_datetime(txn_df['traddate'], errors='coerce')
+                # ── Apply date filter — prefer txn_date_iso, fall back to traddate ──
+                _date_src = txn_df['txn_date_iso'] if 'txn_date_iso' in txn_df.columns else txn_df['traddate']
+                txn_df['_sort_date'] = pd.to_datetime(
+                    _date_src.fillna(txn_df['traddate']), errors='coerce'
+                )
 
-                # ── Apply date filter ──
-                if date_filter != "All Time":
+                if date_filter == "Custom Range" and custom_from and custom_to:
+                    txn_df = txn_df[
+                        (txn_df['_sort_date'].dt.date >= custom_from) &
+                        (txn_df['_sort_date'].dt.date <= custom_to)
+                    ]
+                elif date_filter != "All Time":
                     now = datetime.now()
                     deltas = {
                         "Last 30 Days": 30,
@@ -5792,7 +5553,7 @@ elif mode == "👥 Clients":
                     days = deltas.get(date_filter)
                     if days:
                         cutoff = now - timedelta(days=days)
-                        txn_df = txn_df[txn_df['_sort_date'] >= cutoff]
+                        txn_df = txn_df[txn_df['_sort_date'].dt.date >= cutoff.date()]
 
                 txn_df = (
                     txn_df
@@ -6049,7 +5810,7 @@ elif mode == "📋 Transactions":
                     folio_no AS folio,
                     inv_name AS client_name,
                     prodcode AS product_code,
-                    traddate AS txn_date,
+                    COALESCE(txn_date_iso, traddate) AS txn_date,
                     trxntype AS txn_type,
                     trxnmode AS txn_mode,
                     trxnstat AS txn_status,
@@ -6070,7 +5831,7 @@ elif mode == "📋 Transactions":
                     kt.td_acno AS folio,
                     kf.investor_name AS client_name,
                     UPPER(TRIM(kt.fmcode)) AS product_code,
-                    kt.td_trdt AS txn_date,
+                    COALESCE(kt.txn_date_iso, kt.td_trdt) AS txn_date,
                     kt.td_purred AS txn_type,
                     kt.trnmode AS txn_mode,
                     kt.trnstat AS txn_status,
@@ -6091,8 +5852,8 @@ elif mode == "📋 Transactions":
         if all_txn.empty:
             return pd.DataFrame()
 
-        # Parse dates once
-        all_txn["txn_date"] = pd.to_datetime(all_txn["txn_date"], errors="coerce")
+        # Dates are already ISO from SQL — just coerce to datetime
+        all_txn["txn_date"] = pd.to_datetime(all_txn["txn_date"], errors="coerce", format="mixed")
         all_txn = all_txn.dropna(subset=["txn_date"])
 
         # Normalize product code for joining
@@ -6175,9 +5936,13 @@ elif mode == "📋 Transactions":
         )
 
     with f5:
+        min_date = all_txn_df["txn_date"].min()
+        max_date = all_txn_df["txn_date"].max()
+        default_from = min_date.date() if pd.notna(min_date) else date_cls.today() - timedelta(days=365)
+        default_to = max_date.date() if pd.notna(max_date) else date_cls.today()
         date_range = st.date_input(
             "Date Range",
-            value=(all_txn_df["txn_date"].min().date(), all_txn_df["txn_date"].max().date()),
+            value=(default_from, default_to),
             key="txn_date_range"
         )
 
@@ -7521,7 +7286,11 @@ elif mode == "📊 Reports":
 # ==================== 🧮 CAPITAL GAINS ====================
 elif mode == "🧮 Capital Gains":
     st.header("🧮 Capital Gains (CAMS, FIFO)")
-    st.caption(...)
+    st.caption(
+        "FIFO cost basis, tax classification (equity / debt), and realized / "
+        "unrealized gain analysis per folio-scheme. KFinTech realizations require "
+        "redemption history to be present."
+    )
     
     selected_display, selected_client = render_client_selector("cg_tab", exclude_minors=True)
     

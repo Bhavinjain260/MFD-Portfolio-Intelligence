@@ -61,6 +61,54 @@ def get_conn():
         conn.close()
 
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DATE NORMALIZATION
+# ──────────────────────────────────────────────────────────────────────────────
+# Each RTA uses a different date convention. Parse each in its own format
+# ONCE at upload time and store the ISO result in txn_date_iso. Downstream
+# code never has to guess again.
+#
+#   CAMS traddate:  "M/D/YYYY  HH:MM:SS AM"  →  e.g. "8/17/2026  12:00:00 AM"
+#   KFin td_trdt:   "DD/MM/YYYY"             →  e.g. "17/08/2026"
+#   KFin td_purred: contains the transaction type letter (P, R, etc)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _cams_date_to_iso(raw) -> str | None:
+    """
+    CAMS traddate looks like '8/17/2026  12:00:00 AM' (M/D/YYYY, two spaces,
+    time suffix). Returns 'YYYY-MM-DD' or None on failure.
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s or s.lower() in ("nan", "none"):
+        return None
+    # Strip the time portion (everything after the first run of spaces)
+    date_part = re.split(r"\s+", s, maxsplit=1)[0]
+    # Now date_part is like "8/17/2026" — parse as M/D/YYYY
+    try:
+        dt = datetime.strptime(date_part, "%m/%d/%Y")
+        return dt.strftime("%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def _kfin_date_to_iso(raw) -> str | None:
+    """
+    KFin td_trdt looks like '17/08/2026' (DD/MM/YYYY).
+    Returns 'YYYY-MM-DD' or None on failure.
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s or s.lower() in ("nan", "none"):
+        return None
+    try:
+        dt = datetime.strptime(s, "%d/%m/%Y")
+        return dt.strftime("%Y-%m-%d")
+    except ValueError:
+        return None
 # ══════════════════════════════════════════════════════════════════════════════
 # PURE HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -965,6 +1013,7 @@ def parse_cams_wbr2_transaction(file, replace: bool) -> tuple[bool, str, dict]:
     for _, row in df.iterrows():
         trxnno = raw_val(row.get("TRXNNO", ""))
         if not trxnno: skipped += 1; continue
+        raw_traddate = raw_val(row.get("TRADDATE", ""))
         rows.append((raw_val(row.get("AMC_CODE", "")),
                      raw_val(row.get("FOLIO_NO", "")),
                      raw_val(row.get("PRODCODE", "")),
@@ -976,7 +1025,8 @@ def parse_cams_wbr2_transaction(file, replace: bool) -> tuple[bool, str, dict]:
                      raw_val(row.get("TRXNSTAT", "")),
                      raw_val(row.get("USERCODE", "")),
                      raw_val(row.get("USRTRXNO", "")),
-                     raw_val(row.get("TRADDATE", "")),
+                     raw_traddate,
+                     _cams_date_to_iso(raw_traddate),
                      raw_val(row.get("POSTDATE", "")),
                      raw_val(row.get("PURPRICE", "")),
                      raw_val(row.get("UNITS", "")),
@@ -1207,7 +1257,7 @@ table_column_map = {
                         "JH2_DOB", "GUARDIAN_DOB", "AMC_CODE", "GST_STATE_CODE", "FOLIO_OLD", "SCHEME_FOLIO_NUMBER",
                         "COUNTRY", "REMARKS", "JH1_EMAIL", "JH2_EMAIL", "JH1_MOBILE_NO", "JH2_MOBILE_NO"],
     "cams_wbr2_transaction": ["AMC_CODE", "FOLIO_NO", "PRODCODE", "SCHEME", "INV_NAME", "TRXNTYPE", "TRXNNO",
-                              "TRXNMODE", "TRXNSTAT", "USERCODE", "USRTRXNO", "TRADDATE", "POSTDATE", "PURPRICE",
+                              "TRXNMODE", "TRXNSTAT", "USERCODE", "USRTRXNO", "TRADDATE", "TXN_DATE_ISO", "POSTDATE", "PURPRICE",
                               "UNITS", "AMOUNT", "BROKCODE", "SUBBROK", "BROKPERC", "BROKCOMM", "ALTFOLIO", "REP_DATE",
                               "TIME1", "TRXNSUBTYP", "APPLICATION_NO", "TRXN_NATURE", "TAX", "TOTAL_TAX", "TE_15H",
                               "MICR_NO", "REMARKS", "SWFLAG", "OLD_FOLIO", "SEQ_NO", "REINVEST_FLAG", "MULT_BROK",
@@ -1342,12 +1392,14 @@ def parse_kfin_mfsd201_transaction(file, replace: bool) -> tuple[bool, str, dict
     for _, row in df.iterrows():
         trno = raw_val(row.get("TD_TRNO", ""))
         if not trno: skipped += 1; continue
+        raw_td_trdt = raw_val(row.get("TD_TRDT", ""))
         rows.append((raw_val(row.get("FMCODE", "")), raw_val(row.get("TD_FUND", "")), raw_val(row.get("TD_ACNO", "")),
                      raw_val(row.get("SCHPLN", "")), raw_val(row.get("DIVOPT", "")), raw_val(row.get("FUNDDESC", "")),
                      raw_val(row.get("TD_PURRED", "")), trno, raw_val(row.get("SMCODE", "")),
                      raw_val(row.get("CHQNO", "")), raw_val(row.get("INVNAME", "")), raw_val(row.get("TRNMODE", "")),
                      raw_val(row.get("TRNSTAT", "")), raw_val(row.get("TD_BRANCH", "")),
-                     raw_val(row.get("ISCTRNO", "")), raw_val(row.get("TD_TRDT", "")), raw_val(row.get("TD_PRDT", "")),
+                     raw_val(row.get("ISCTRNO", "")), raw_td_trdt, _kfin_date_to_iso(raw_td_trdt),
+                     raw_val(row.get("TD_PRDT", "")),
                      raw_val(row.get("TD_POP", "")), raw_val(row.get("LOADPER", "")), raw_val(row.get("TD_UNITS", "")),
                      raw_val(row.get("TD_AMT", "")), raw_val(row.get("LOAD1", "")), raw_val(row.get("TD_AGENT", "")),
                      raw_val(row.get("TD_BROKER", "")), raw_val(row.get("BROKPER", "")),
@@ -1663,6 +1715,7 @@ kfin_table_column_map = {
     "kfin_mfsd201_transaction": [(
         "FMCODE", "TD_FUND", "TD_ACNO", "SCHPLN", "DIVOPT", "FUNDDESC", "TD_PURRED", "TD_TRNO",
         "SMCODE", "CHQNO", "INVNAME", "TRNMODE", "TRNSTAT", "TD_BRANCH", "ISCTRNO", "TD_TRDT",
+        "TXN_DATE_ISO",
         "TD_PRDT", "TD_POP", "LOADPER", "TD_UNITS", "TD_AMT", "LOAD1", "TD_AGENT", "TD_BROKER",
         "BROKPER", "BROKCOMM", "INVID", "CRDATE", "CRTIME", "TRNSUB", "TD_APPNO", "UNQNO",
         "TRDESC", "TD_TRTYPE", "PURDATE", "PURAMT", "PURUNITS", "TRFLAG", "SFUNDDT", "CHQDATE",
