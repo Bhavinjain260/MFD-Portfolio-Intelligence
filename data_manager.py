@@ -1967,6 +1967,25 @@ def render_data_manager():
 
         st.divider()
         st.markdown("**— or upload manually —**")
+        
+
+        # ── Manual Upload ──
+        with st.container(border=True):
+            f_sm = st.file_uploader(
+                "Upload Scheme Master (Excel/CSV/TXT)",
+                type=["xlsx", "xls", "csv", "txt"],
+                key="up_bse_sm"
+            )
+            c_sm = st.checkbox("Replace all existing data?", key="chk_bse_sm")
+            if st.button("Process Scheme Master", type="secondary", key="btn_bse_sm") and f_sm:
+                with st.spinner("Processing BSE Scheme Master..."):
+                    ok, msg, preview = parse_bse_scheme_master(f_sm, c_sm)
+                    if ok:
+                        st.success(msg)
+                        if preview:
+                            st.json(preview)
+                    else:
+                        st.error(msg)
 
     # ───────────────────────────── CAMS ─────────────────────────────
     with st.expander("🏦 CAMS Uploads", expanded=False):
@@ -2132,18 +2151,18 @@ def render_data_manager():
                     if res["failed"]:
                         st.warning("; ".join(f"{r['report']}/{r['file']}: {r['msg']}" for r in res["failed"]))
 
-        st.divider()
-        pending = cms.get_pending_counts() or {}
-        done = cms.get_done_counts() or {}
+        # st.divider()
+        # pending = cms.get_pending_counts() or {}
+        # done = cms.get_done_counts() or {}
         
-        if hasattr(cms, 'REPORT_CODES') and cms.REPORT_CODES:
-            pc_cols = st.columns(len(cms.REPORT_CODES))
-            for i, code in enumerate(cms.REPORT_CODES):
-                with pc_cols[i]:
-                    st.metric(code, f"{done.get(code, 0)} imported", delta=f"{pending.get(code, 0)} pending",
-                              delta_color="inverse" if pending.get(code, 0) else "off")
-        else:
-            st.info("No report codes configured")
+        # if hasattr(cms, 'REPORT_CODES') and cms.REPORT_CODES:
+        #     pc_cols = st.columns(len(cms.REPORT_CODES))
+        #     for i, code in enumerate(cms.REPORT_CODES):
+        #         with pc_cols[i]:
+        #             st.metric(code, f"{done.get(code, 0)} imported", delta=f"{pending.get(code, 0)} pending",
+        #                       delta_color="inverse" if pending.get(code, 0) else "off")
+        # else:
+        #     st.info("No report codes configured")
 
 
 

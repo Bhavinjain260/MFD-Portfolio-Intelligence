@@ -1127,6 +1127,7 @@ def init_db() -> None:
     CREATE INDEX IF NOT EXISTS idx_bse_sip_folio        ON bse_sip(folio_no);
     CREATE INDEX IF NOT EXISTS idx_bse_scheme_isin      ON bse_scheme_master(isin);
     CREATE INDEX IF NOT EXISTS idx_bse_scheme_rta       ON bse_scheme_master(rta_scheme_code);
+    CREATE INDEX IF NOT EXISTS idx_bsm_channel_partner_code ON bse_scheme_master(Channel_Partner_Code);
 
     CREATE INDEX IF NOT EXISTS idx_cams_wbr4_folio      ON cams_wbr4_aum(foliochk);
     CREATE INDEX IF NOT EXISTS idx_cams_wbr4_pan        ON cams_wbr4_aum(pan_no);
@@ -1135,6 +1136,7 @@ def init_db() -> None:
     CREATE INDEX IF NOT EXISTS idx_cams_wbr2_folio      ON cams_wbr2_transaction(folio_no);
     CREATE INDEX IF NOT EXISTS idx_cams_wbr2_pan        ON cams_wbr2_transaction(pan);
     CREATE INDEX IF NOT EXISTS idx_cams_wbr2_traddate   ON cams_wbr2_transaction(traddate);
+    CREATE INDEX IF NOT EXISTS idx_cams_wbr2_prodcode   ON cams_wbr2_transaction(prodcode);
     CREATE INDEX IF NOT EXISTS idx_cams_wbr49_folio     ON cams_wbr49_sip(folio_no);
     CREATE INDEX IF NOT EXISTS idx_cams_wbr77_folio     ON cams_wbr77_brokerage(folio_no);
     CREATE INDEX IF NOT EXISTS idx_cams_wbr77_proc      ON cams_wbr77_brokerage(proc_date);
@@ -1144,6 +1146,7 @@ def init_db() -> None:
     CREATE INDEX IF NOT EXISTS idx_kfin_folio_inv       ON kfin_mfsd211_folio(folio);
     CREATE INDEX IF NOT EXISTS idx_kfin_txn_folio       ON kfin_mfsd201_transaction(td_acno);
     CREATE INDEX IF NOT EXISTS idx_kfin_txn_pan         ON kfin_mfsd201_transaction(pan1);
+    CREATE INDEX IF NOT EXISTS idx_kfin_txn_fmcode      ON kfin_mfsd201_transaction(fmcode);
     CREATE INDEX IF NOT EXISTS idx_kfin_sip_folio       ON kfin_mfsd243_sip(folio);
     CREATE INDEX IF NOT EXISTS idx_kfin_brk_proc        ON kfin_mfsd205_brokerage(process_date);
 

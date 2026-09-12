@@ -116,17 +116,47 @@ def format_brokerage(val) -> str:
     except (TypeError, ValueError):
         return "Rs -"
 
+@st.cache_data(show_spinner=False, ttl=3600)
+def _bse_scheme_lookup(_v: int) -> pd.DataFrame:
+    """Shared cached dedup of bse_scheme_master. product_code → scheme_name, isin.
+    Consumed by any function that maps a broker/AMC product code to a
+    scheme name or ISIN. One query, one cache entry, reused everywhere."""
+    with get_conn() as conn:
+        return pd.read_sql("""
+            SELECT UPPER(TRIM(Channel_Partner_Code)) AS product_code,
+                   MAX(Scheme_Name) AS scheme_name,
+                   MAX(ISIN)        AS isin
+            FROM bse_scheme_master
+            WHERE Channel_Partner_Code IS NOT NULL
+              AND TRIM(Channel_Partner_Code) != ''
+            GROUP BY UPPER(TRIM(Channel_Partner_Code))
+        """, conn)
+
+
 @st.cache_data(show_spinner=False)
 def get_client_cams_schemes(folio_ids: list[str], _v: int) -> pd.DataFrame:
     if not folio_ids:
         return pd.DataFrame(columns=["folio_no", "prodcode", "scheme"])
     placeholders = ",".join(["?"] * len(folio_ids))
     with get_conn() as conn:
-        return pd.read_sql(f"""
-            SELECT DISTINCT folio_no, prodcode, scheme
+        txns = pd.read_sql(f"""
+            SELECT DISTINCT folio_no, UPPER(TRIM(prodcode)) AS prodcode
             FROM cams_wbr2_transaction
             WHERE folio_no IN ({placeholders})
         """, conn, params=folio_ids)
+
+    bse = _bse_scheme_lookup(_v)
+    if bse.empty:
+        txns["scheme"] = txns["prodcode"]
+        return txns[["folio_no", "prodcode", "scheme"]]
+
+    merged = txns.merge(
+        bse.rename(columns={"product_code": "prodcode"}),
+        on="prodcode",
+        how="left",
+    )
+    merged["scheme"] = merged["scheme_name"].fillna(merged["prodcode"])
+    return merged[["folio_no", "prodcode", "scheme"]]
 
 
 def get_cams_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
@@ -170,21 +200,24 @@ def get_client_kfin_schemes(folio_ids: list[str], _v: int) -> pd.DataFrame:
         return pd.DataFrame(columns=["folio_no", "prodcode", "scheme"])
     placeholders = ",".join(["?"] * len(folio_ids))
     with get_conn() as conn:
-        df = pd.read_sql(f"""
+        txns = pd.read_sql(f"""
             SELECT DISTINCT td_acno AS folio_no, UPPER(TRIM(fmcode)) AS prodcode
             FROM kfin_mfsd201_transaction
             WHERE td_acno IN ({placeholders})
         """, conn, params=folio_ids)
-        bse = pd.read_sql("""
-            SELECT UPPER(TRIM(Channel_Partner_Code)) AS cp_code,
-                   MAX(Scheme_Name) AS scheme_name
-            FROM bse_scheme_master
-            WHERE Channel_Partner_Code IS NOT NULL AND TRIM(Channel_Partner_Code) != ''
-            GROUP BY UPPER(TRIM(Channel_Partner_Code))
-        """, conn)
-    df = df.merge(bse, left_on="prodcode", right_on="cp_code", how="left")
-    df["scheme"] = df["scheme_name"].fillna(df["prodcode"])
-    return df[["folio_no", "prodcode", "scheme"]]
+
+    bse = _bse_scheme_lookup(_v)
+    if bse.empty:
+        txns["scheme"] = txns["prodcode"]
+        return txns[["folio_no", "prodcode", "scheme"]]
+
+    merged = txns.merge(
+        bse.rename(columns={"product_code": "prodcode"}),
+        on="prodcode",
+        how="left",
+    )
+    merged["scheme"] = merged["scheme_name"].fillna(merged["prodcode"])
+    return merged[["folio_no", "prodcode", "scheme"]]
 
 
 def search_clients(query: str, limit: int = 20) -> pd.DataFrame:
@@ -6052,50 +6085,46 @@ elif mode == "📋 Transactions":
                 LEFT JOIN kfin_mfsd211_folio kf ON kt.td_acno = kf.Folio
             """, conn)
 
-            # Combine
-            all_txn = pd.concat([cams_txn, kfin_txn], ignore_index=True)
-            
-            if all_txn.empty:
-                return pd.DataFrame()
+        # Combine
+        all_txn = pd.concat([cams_txn, kfin_txn], ignore_index=True)
 
-            # Parse dates
-            all_txn["txn_date"] = pd.to_datetime(all_txn["txn_date"], errors="coerce")
-            all_txn = all_txn.dropna(subset=["txn_date"])
+        if all_txn.empty:
+            return pd.DataFrame()
 
-            # Resolve scheme names via BSE master
-            if not all_txn["product_code"].dropna().empty:
-                scheme_map_df = pd.read_sql("""
-                    SELECT UPPER(TRIM(Channel_Partner_Code)) AS product_code,
-                           MAX(Scheme_Name) AS scheme_name,
-                           MAX(ISIN) AS isin
-                    FROM bse_scheme_master
-                    WHERE Channel_Partner_Code IS NOT NULL
-                    GROUP BY UPPER(TRIM(Channel_Partner_Code))
-                """, conn)
-                scheme_map = dict(zip(scheme_map_df["product_code"], scheme_map_df["scheme_name"]))
-                isin_map = dict(zip(scheme_map_df["product_code"], scheme_map_df["isin"]))
-            else:
-                scheme_map = {}
-                isin_map = {}
+        # Parse dates once
+        all_txn["txn_date"] = pd.to_datetime(all_txn["txn_date"], errors="coerce")
+        all_txn = all_txn.dropna(subset=["txn_date"])
 
-            all_txn["product_code_norm"] = all_txn["product_code"].astype(str).str.strip().str.upper()
-            all_txn["scheme_name"] = all_txn["product_code_norm"].map(scheme_map).fillna(all_txn["product_code"])
-            all_txn["isin"] = all_txn["product_code_norm"].map(isin_map)
+        # Normalize product code for joining
+        all_txn["product_code_norm"] = (
+            all_txn["product_code"].astype(str).str.strip().str.upper()
+        )
 
-            # Resolve AMC via ISIN
-            folio_nav_df_amc = st.session_state.get("folio_nav_df")
-            if folio_nav_df_amc is not None and not folio_nav_df_amc.empty:
-                amc_map = dict(zip(
-                    folio_nav_df_amc["isin"].astype(str).str.strip().str.upper(),
-                    folio_nav_df_amc["amc_name"]
-                ))
-                all_txn["amc_name"] = all_txn["isin"].astype(str).str.strip().str.upper().map(amc_map)
-            else:
-                all_txn["amc_name"] = None
+        # Enrich scheme name + ISIN from the shared cached BSE lookup
+        # (single vectorized merge — no per-row Python .map)
+        bse = _bse_scheme_lookup(_v)
+        if not bse.empty:
+            all_txn = all_txn.merge(
+                bse.rename(columns={"product_code": "product_code_norm"}),
+                on="product_code_norm",
+                how="left",
+                suffixes=("", "_bse"),
+            )
+        else:
+            all_txn["scheme_name"] = None
+            all_txn["isin"] = None
 
-            all_txn["amc_name"] = all_txn["amc_name"].fillna("⚠️ Unresolved")
+        all_txn["scheme_name"] = all_txn["scheme_name"].fillna(all_txn["product_code"])
 
-            return all_txn
+        # Resolve AMC name via the in-memory AMFI index — fast dict lookup,
+        # no dependency on st.session_state or folio_nav_df
+        all_txn["amc_name"] = all_txn["isin"].apply(
+            lambda i: _amfi.get_amc(str(i).strip().upper())
+            if pd.notna(i) and str(i).strip() else None
+        )
+        all_txn["amc_name"] = all_txn["amc_name"].fillna("⚠️ Unresolved")
+
+        return all_txn
 
     all_txn_df = load_all_transactions(data_version())
 
