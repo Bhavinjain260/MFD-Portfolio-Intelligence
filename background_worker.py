@@ -22,6 +22,9 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+import fcntl
+
+LOCK_FILE = os.environ.get("WORKER_LOCK", "/tmp/background_worker.lock")
 
 PROJECT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_DIR))
@@ -225,29 +228,50 @@ def task_bse() -> dict:
 # ══════════════════════════════════════════════════════════════
 # MAIN
 # ══════════════════════════════════════════════════════════════
+
+
 def run_all():
     log.info("=" * 70)
     log.info("BACKGROUND WORKER RUN  @ %s", datetime.now().isoformat(timespec="seconds"))
     log.info("=" * 70)
 
+    # ── Single-instance guard ──
+    # If another instance is already running, exit immediately. This protects
+    # against: duplicate cron entries, manual runs overlapping cron, a fork
+    # left over from a previous crash, etc.
+    lock_fp = open(LOCK_FILE, "w")
     try:
-        _ensure_db()
-    except Exception:
-        log.exception("DB init failed — aborting")
+        fcntl.flock(lock_fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        log.warning("[WORKER] Another instance is already running — exiting")
+        lock_fp.close()
         return
 
-    for name, fn in [
-        ("mailback", task_mailback),
-        ("nav_live", task_nav_live),
-        ("nav_previous", task_nav_previous)
-    ]:
-        try:
-            res = fn()
-            log.info("[%s] -> %s", name, "OK" if res.get("ok") else "FAIL")
-        except Exception:
-            log.exception("[%s] crashed", name)
+    try:
+        lock_fp.write(str(os.getpid()))
+        lock_fp.flush()
 
-    log.info("=" * 70)
+        try:
+            _ensure_db()
+        except Exception:
+            log.exception("DB init failed — aborting")
+            return
+
+        for name, fn in [
+            ("mailback", task_mailback),
+            ("nav_live", task_nav_live),
+            ("nav_previous", task_nav_previous),
+        ]:
+            try:
+                res = fn()
+                log.info("[%s] -> %s", name, "OK" if res.get("ok") else "FAIL")
+            except Exception:
+                log.exception("[%s] crashed", name)
+
+        log.info("=" * 70)
+    finally:
+        fcntl.flock(lock_fp, fcntl.LOCK_UN)
+        lock_fp.close()
 
 
 if __name__ == "__main__":
