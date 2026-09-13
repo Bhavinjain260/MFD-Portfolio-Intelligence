@@ -21,10 +21,13 @@ import logging
 import os
 import sys
 from datetime import datetime
+import time as _time
 from pathlib import Path
 import fcntl
 
 LOCK_FILE = os.environ.get("WORKER_LOCK", "/tmp/background_worker.lock")
+os.environ.setdefault("TZ", "Asia/Kolkata")
+_time.tzset()
 
 PROJECT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_DIR))
