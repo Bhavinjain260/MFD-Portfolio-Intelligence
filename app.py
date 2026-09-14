@@ -5817,14 +5817,15 @@ elif mode == "📋 Transactions":
     @st.cache_data(show_spinner=False)
     def load_all_transactions(_v: int) -> pd.DataFrame:
         with get_conn() as conn:
-            # CAMS transactions
+            # ── CAMS: select traddate AND txn_date_iso separately ──
             cams_txn = pd.read_sql("""
                 SELECT 
                     'CAMS' AS rta,
                     folio_no AS folio,
                     inv_name AS client_name,
                     prodcode AS product_code,
-                    COALESCE(txn_date_iso, traddate) AS txn_date,
+                    traddate,
+                    txn_date_iso,
                     trxntype AS txn_type,
                     trxnmode AS txn_mode,
                     trxnstat AS txn_status,
@@ -5838,14 +5839,15 @@ elif mode == "📋 Transactions":
                 FROM cams_wbr2_transaction
             """, conn)
 
-            # KFinTech transactions (with JOIN to get investor name)
+            # ── KFinTech: same — both date columns separately ──
             kfin_txn = pd.read_sql("""
                 SELECT 
                     'KFinTech' AS rta,
                     kt.td_acno AS folio,
                     kf.investor_name AS client_name,
                     UPPER(TRIM(kt.fmcode)) AS product_code,
-                    COALESCE(kt.txn_date_iso, kt.td_trdt) AS txn_date,
+                    kt.td_trdt AS traddate,
+                    kt.txn_date_iso,
                     kt.td_purred AS txn_type,
                     kt.trnmode AS txn_mode,
                     kt.trnstat AS txn_status,
@@ -5866,36 +5868,45 @@ elif mode == "📋 Transactions":
         if all_txn.empty:
             return pd.DataFrame()
 
-        # Dates are already ISO from SQL — coerce to datetime.
-        all_txn["txn_date"] = pd.to_datetime(all_txn["txn_date"], errors="coerce", format="mixed")
-        all_txn = all_txn.dropna(subset=["txn_date"])
+        # ══════════════════════════════════════════════════════════
+        # UNIFY DATE — exactly like the Client tab's Transactions view:
+        # prefer txn_date_iso, fall back to raw traddate, no format guessing.
+        # ══════════════════════════════════════════════════════════
+        all_txn["_sort_date"] = pd.to_datetime(
+            all_txn["txn_date_iso"].fillna(all_txn["traddate"]),
+            errors="coerce",
+        )
+        all_txn = all_txn.dropna(subset=["_sort_date"]).copy()
+        all_txn["txn_date"] = all_txn["_sort_date"]
 
-        # Display column: uniform DD-MM-YYYY for both RTAs
+        # Display column: uniform DD-MM-YYYY
         all_txn["txn_date_display"] = all_txn["txn_date"].dt.strftime("%d-%m-%Y")
 
-        # Normalize product code for joining
+        # Normalize product code for lookup (same as Client tab)
         all_txn["product_code_norm"] = (
             all_txn["product_code"].astype(str).str.strip().str.upper()
         )
 
-        # Enrich scheme name + ISIN from the shared cached BSE lookup
-        # (single vectorized merge — no per-row Python .map)
+        # ══════════════════════════════════════════════════════════
+        # Resolve scheme name via the shared BSE lookup — use .map()
+        # (Client tab pattern) instead of merge-on-missing-key.
+        # ══════════════════════════════════════════════════════════
         bse = _bse_scheme_lookup(_v)
         if not bse.empty:
-            all_txn = all_txn.merge(
-                bse.rename(columns={"product_code": "product_code_norm"}),
-                on="product_code_norm",
-                how="left",
-                suffixes=("", "_bse"),
-            )
+            # bse already has product_code, scheme_name, isin — build dicts
+            scheme_map = dict(zip(bse["product_code"], bse["scheme_name"]))
+            isin_map   = dict(zip(bse["product_code"], bse["isin"]))
+            all_txn["scheme_name"] = all_txn["product_code_norm"].map(scheme_map)
+            all_txn["isin"]        = all_txn["product_code_norm"].map(isin_map)
         else:
             all_txn["scheme_name"] = None
             all_txn["isin"] = None
 
         all_txn["scheme_name"] = all_txn["scheme_name"].fillna(all_txn["product_code"])
 
-        # Resolve AMC name via the in-memory AMFI index — fast dict lookup,
-        # no dependency on st.session_state or folio_nav_df
+        # ══════════════════════════════════════════════════════════
+        # Resolve AMC name via the in-memory AMFI index
+        # ══════════════════════════════════════════════════════════
         all_txn["amc_name"] = all_txn["isin"].apply(
             lambda i: _amfi.get_amc(str(i).strip().upper())
             if pd.notna(i) and str(i).strip() else None
@@ -5913,94 +5924,210 @@ elif mode == "📋 Transactions":
     # ═══════════════════════════════════════════════════════════
     # SECTION 1: FILTER PANEL
     # ═══════════════════════════════════════════════════════════
-    st.subheader("🔍 Filters")
+        st.subheader("🔍 Filters")
 
+    # ═══════════════════════════════════════════════════════════
+    # ROW 1: RTA | AMC | Scheme | Txn Type | Time Period
+    # ═══════════════════════════════════════════════════════════
     f1, f2, f3, f4, f5 = st.columns(5)
+
+    all_rtas = sorted(all_txn_df["rta"].dropna().unique())
+    all_amcs = sorted([a for a in all_txn_df["amc_name"].dropna().unique() if a])
+    all_schemes = sorted([s for s in all_txn_df["scheme_name"].dropna().unique() if s])
+    all_types = sorted([t for t in all_txn_df["txn_type"].dropna().unique() if t])
+
+    # ── Pre-seed session state so first render uses full option lists ──
+    for key, options in [
+        ("txn_rta_filter_v4", all_rtas),
+        ("txn_amc_filter_v4", all_amcs),
+        ("txn_type_filter_v4", all_types),
+    ]:
+        if key not in st.session_state or not st.session_state[key]:
+            st.session_state[key] = options
+
+    if "txn_scheme_filter_v4" not in st.session_state:
+        st.session_state["txn_scheme_filter_v4"] = []
+
+    if "txn_period_filter_v4" not in st.session_state:
+        st.session_state["txn_period_filter_v4"] = "All Time"
 
     with f1:
         rta_filter = st.multiselect(
             "RTA",
-            options=sorted(all_txn_df["rta"].unique()),
-            default=sorted(all_txn_df["rta"].unique()),
-            key="txn_rta_filter"
+            options=all_rtas,
+            key="txn_rta_filter_v4",
         )
 
     with f2:
-        amc_options = sorted([a for a in all_txn_df["amc_name"].unique() if a])
         amc_filter = st.multiselect(
             "AMC",
-            options=amc_options,
-            default=amc_options,
-            key="txn_amc_filter"
+            options=all_amcs,
+            key="txn_amc_filter_v4",
         )
 
     with f3:
-        scheme_options = sorted([s for s in all_txn_df["scheme_name"].unique() if s])
         scheme_filter = st.multiselect(
             "Scheme",
-            options=scheme_options,
-            default=None,
-            key="txn_scheme_filter"
+            options=all_schemes,
+            key="txn_scheme_filter_v4",
         )
 
     with f4:
-        txn_type_options = sorted([t for t in all_txn_df["txn_type"].unique() if pd.notna(t)])
         txn_type_filter = st.multiselect(
             "Txn Type",
-            options=txn_type_options,
-            default=txn_type_options,
-            key="txn_type_filter"
+            options=all_types,
+            key="txn_type_filter_v4",
         )
 
+    # ── Time Period: preset dropdown (same UX as Client tab) ──
     with f5:
-        min_date = all_txn_df["txn_date"].min()
-        max_date = all_txn_df["txn_date"].max()
-        default_from = min_date.date() if pd.notna(min_date) else date_cls.today() - timedelta(days=365)
-        default_to = max_date.date() if pd.notna(max_date) else date_cls.today()
-        date_range = st.date_input(
-            "Date Range",
-            value=(default_from, default_to),
-            key="txn_date_range"
+        date_filter = st.selectbox(
+            "Time Period",
+            ["All Time", "Last 30 Days", "Last 90 Days",
+             "Last 6 Months", "Last 1 Year", "Custom Range"],
+            key="txn_period_filter_v4",
         )
 
-    # Client search (separate row)
+    # ═══════════════════════════════════════════════════════════
+    # ROW 2: Custom Range (only shown when selected) + Search
+    # ═══════════════════════════════════════════════════════════
+    custom_from = custom_to = None
+
+    if date_filter == "Custom Range":
+        cr1, cr2, _spacer = st.columns([1, 1, 3])
+        with cr1:
+            custom_from = st.date_input(
+                "From Date",
+                value=date_cls.today() - timedelta(days=30),
+                key="txn_custom_from_v4",
+            )
+        with cr2:
+            custom_to = st.date_input(
+                "To Date",
+                value=date_cls.today(),
+                key="txn_custom_to_v4",
+            )
+
     search_col1, search_col2 = st.columns([3, 2])
     with search_col1:
         client_search = st.text_input(
             "🔍 Search Client / Folio",
             placeholder="Type client name or folio number...",
-            key="txn_client_search"
+            key="txn_client_search_v4",
         )
-
     with search_col2:
         st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-        clear_filters = st.button("🔄 Clear Filters", key="txn_clear_btn", use_container_width=True)
+        clear_filters = st.button(
+            "🔄 Clear Filters",
+            key="txn_clear_btn_v4",
+            use_container_width=True,
+        )
 
-    # Apply filters
     if clear_filters:
+        for k in [
+            "txn_rta_filter_v4",
+            "txn_amc_filter_v4",
+            "txn_scheme_filter_v4",
+            "txn_type_filter_v4",
+            "txn_period_filter_v4",
+            "txn_custom_from_v4",
+            "txn_custom_to_v4",
+            "txn_client_search_v4",
+        ]:
+            st.session_state.pop(k, None)
         st.rerun()
 
-    filtered_df = all_txn_df[
-        (all_txn_df["rta"].isin(rta_filter)) &
-        (all_txn_df["amc_name"].isin(amc_filter)) &
-        (all_txn_df["txn_type"].isin(txn_type_filter))
-    ]
+    # ═══════════════════════════════════════════════════════════
+    # APPLY FILTERS — same order + semantics as Client tab
+    # ═══════════════════════════════════════════════════════════
+    filtered_df = all_txn_df.copy()
+
+    if rta_filter:
+        filtered_df = filtered_df[filtered_df["rta"].isin(rta_filter)]
+
+    if amc_filter:
+        filtered_df = filtered_df[filtered_df["amc_name"].isin(amc_filter)]
+
+    if txn_type_filter:
+        filtered_df = filtered_df[filtered_df["txn_type"].isin(txn_type_filter)]
 
     if scheme_filter:
         filtered_df = filtered_df[filtered_df["scheme_name"].isin(scheme_filter)]
 
-    if len(date_range) == 2:
+    # ── Date filter — preset-based, anchors to today (no stale session bug) ──
+    if date_filter == "Custom Range" and custom_from and custom_to:
         filtered_df = filtered_df[
-            (filtered_df["txn_date"].dt.date >= date_range[0]) &
-            (filtered_df["txn_date"].dt.date <= date_range[1])
+            (filtered_df["txn_date"].dt.date >= custom_from) &
+            (filtered_df["txn_date"].dt.date <= custom_to)
         ]
+    elif date_filter != "All Time":
+        _now = datetime.now()
+        _deltas = {
+            "Last 30 Days": 30,
+            "Last 90 Days": 90,
+            "Last 6 Months": 180,
+            "Last 1 Year": 365,
+        }
+        _days = _deltas.get(date_filter)
+        if _days:
+            _cutoff = _now - timedelta(days=_days)
+            filtered_df = filtered_df[
+                filtered_df["txn_date"].dt.date >= _cutoff.date()
+            ]
 
     if client_search.strip():
         mask = (
-            filtered_df["client_name"].astype(str).str.contains(client_search, case=False, na=False) |
-            filtered_df["folio"].astype(str).str.contains(client_search, case=False, na=False)
+            filtered_df["client_name"].astype(str).str.contains(client_search, case=False, na=False)
+            | filtered_df["folio"].astype(str).str.contains(client_search, case=False, na=False)
         )
         filtered_df = filtered_df[mask]
+
+    with st.expander("🐞 Debug: Filter Diagnostics", expanded=False):
+        rta_stage = all_txn_df[all_txn_df["rta"].isin(rta_filter)] if rta_filter else all_txn_df
+        amc_stage = rta_stage[rta_stage["amc_name"].isin(amc_filter)] if amc_filter else rta_stage
+        type_stage = amc_stage[amc_stage["txn_type"].isin(txn_type_filter)] if txn_type_filter else amc_stage
+        scheme_stage = type_stage[type_stage["scheme_name"].isin(scheme_filter)] if scheme_filter else type_stage
+
+        # Replicate the same date logic used in the main filter
+        date_stage = scheme_stage
+        if date_filter == "Custom Range" and custom_from and custom_to:
+            date_stage = scheme_stage[
+                (scheme_stage["txn_date"].dt.date >= custom_from)
+                & (scheme_stage["txn_date"].dt.date <= custom_to)
+            ]
+        elif date_filter != "All Time":
+            _deltas = {"Last 30 Days": 30, "Last 90 Days": 90,
+                       "Last 6 Months": 180, "Last 1 Year": 365}
+            _days = _deltas.get(date_filter)
+            if _days:
+                _cutoff = datetime.now() - timedelta(days=_days)
+                date_stage = scheme_stage[
+                    scheme_stage["txn_date"].dt.date >= _cutoff.date()
+                ]
+
+        search_stage = date_stage
+        if client_search.strip():
+            _m = (
+                date_stage["client_name"].astype(str).str.contains(client_search, case=False, na=False)
+                | date_stage["folio"].astype(str).str.contains(client_search, case=False, na=False)
+            )
+            search_stage = date_stage[_m]
+
+        st.write(
+            f"Start: **{len(all_txn_df):,}** → "
+            f"RTA: **{len(rta_stage):,}** → "
+            f"AMC: **{len(amc_stage):,}** → "
+            f"Type: **{len(type_stage):,}** → "
+            f"Scheme: **{len(scheme_stage):,}** → "
+            f"Date: **{len(date_stage):,}** → "
+            f"Search: **{len(search_stage):,}** → "
+            f"Final: **{len(filtered_df):,}**"
+        )
+        st.write(f"**Time Period:** `{date_filter}`")
+        if date_filter == "Custom Range":
+            st.write(f"**Custom range:** `{custom_from}` → `{custom_to}`")
+        st.write(f"**Data min/max:** `{all_txn_df['txn_date'].min()}` → `{all_txn_df['txn_date'].max()}`")
+        st.write(f"**Client search:** `{client_search!r}`")
 
     # ═══════════════════════════════════════════════════════════
     # SECTION 2: SUMMARY METRICS
@@ -6314,20 +6441,20 @@ elif mode == "📋 Transactions":
                 fig_rta_count = theme_plotly(fig_rta_count, dark)
                 st.plotly_chart(fig_rta_count, width="stretch")
 
-    # ═══════════════════════════════════════════════════════════
-    # SECTION 4: DOWNLOAD ALL
-    # ═══════════════════════════════════════════════════════════
-    st.divider()
-    st.subheader("📥 Download")
+    # # ═══════════════════════════════════════════════════════════
+    # # SECTION 4: DOWNLOAD ALL
+    # # ═══════════════════════════════════════════════════════════
+    # st.divider()
+    # st.subheader("📥 Download")
 
-    csv_all = filtered_df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "⬇️ Download All Filtered Transactions (CSV)",
-        csv_all,
-        f"transactions_all_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-        "text/csv",
-        key="txn_all_download"
-    )
+    # csv_all = filtered_df.to_csv(index=False).encode("utf-8")
+    # st.download_button(
+    #     "⬇️ Download All Filtered Transactions (CSV)",
+    #     csv_all,
+    #     f"transactions_all_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+    #     "text/csv",
+    #     key="txn_all_download"
+    # )
 
 # ==================== 💰 BROKERAGE REPORT ====================
 elif mode == "💰 Brokerage Report":
