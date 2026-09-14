@@ -5913,6 +5913,15 @@ elif mode == "📋 Transactions":
         )
         all_txn["amc_name"] = all_txn["amc_name"].fillna("⚠️ Unresolved")
 
+        # ══════════════════════════════════════════════════════════
+        # Normalize client_name so CAMS (Title Case) and KFinTech
+        # (UPPER CASE) rows for the same person group together in
+        # the Client-wise breakdown. Matches Dashboard's convention.
+        # ══════════════════════════════════════════════════════════
+        all_txn["client_name"] = (
+            all_txn["client_name"].astype(str).str.upper().str.strip()
+        )
+
         return all_txn
         
     all_txn_df = load_all_transactions(data_version())
