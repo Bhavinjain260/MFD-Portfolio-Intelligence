@@ -5421,7 +5421,7 @@ elif mode == "👥 Clients":
             with fc2:
                 date_filter = st.selectbox(
                     "Time Period",
-                    ["All Time", "Last 30 Days", "Last 90 Days",
+                    ["All Time", "Last 7 Days", "Last 30 Days", "Last 90 Days",
                      "Last 6 Months", "Last 1 Year", "Custom Range"],
                     key="txn_tab_date_filter"
                 )
@@ -5557,6 +5557,7 @@ elif mode == "👥 Clients":
                 elif date_filter != "All Time":
                     now = datetime.now()
                     deltas = {
+                        "Last 7 Days": 7,
                         "Last 30 Days": 30,
                         "Last 90 Days": 90,
                         "Last 6 Months": 180,
@@ -5930,10 +5931,20 @@ elif mode == "📋 Transactions":
         st.info("No transactions found in database.")
         st.stop()
 
+    # Single source of truth for Time Period presets
+    TIME_PERIOD_PRESETS = {
+        "Last 7 Days":  7,
+        "Last 30 Days": 30,
+        "Last 90 Days": 90,
+        "Last 6 Months": 180,
+        "Last 1 Year": 365,
+    }
+    TIME_PERIOD_OPTIONS = ["All Time"] + list(TIME_PERIOD_PRESETS.keys()) + ["Custom Range"]
+
     # ═══════════════════════════════════════════════════════════
     # SECTION 1: FILTER PANEL
     # ═══════════════════════════════════════════════════════════
-        st.subheader("🔍 Filters")
+    st.subheader("🔍 Filters")
 
     # ═══════════════════════════════════════════════════════════
     # ROW 1: RTA | AMC | Scheme | Txn Type | Time Period
@@ -5988,11 +5999,11 @@ elif mode == "📋 Transactions":
             key="txn_type_filter_v4",
         )
 
-    # ── Time Period: preset dropdown (same UX as Client tab) ──
+        # ── Time Period: preset dropdown (same UX as Client tab) ──
     with f5:
         date_filter = st.selectbox(
             "Time Period",
-            ["All Time", "Last 30 Days", "Last 90 Days",
+            ["All Time", "Last 7 Days", "Last 30 Days", "Last 90 Days",
              "Last 6 Months", "Last 1 Year", "Custom Range"],
             key="txn_period_filter_v4",
         )
@@ -6072,6 +6083,7 @@ elif mode == "📋 Transactions":
     elif date_filter != "All Time":
         _now = datetime.now()
         _deltas = {
+            "Last 7 Days": 7,
             "Last 30 Days": 30,
             "Last 90 Days": 90,
             "Last 6 Months": 180,
@@ -6105,7 +6117,7 @@ elif mode == "📋 Transactions":
                 & (scheme_stage["txn_date"].dt.date <= custom_to)
             ]
         elif date_filter != "All Time":
-            _deltas = {"Last 30 Days": 30, "Last 90 Days": 90,
+            _deltas = {"Last 7 Days": 7, "Last 30 Days": 30, "Last 90 Days": 90,
                        "Last 6 Months": 180, "Last 1 Year": 365}
             _days = _deltas.get(date_filter)
             if _days:
