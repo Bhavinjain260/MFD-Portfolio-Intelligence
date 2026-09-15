@@ -694,22 +694,22 @@ Edelweiss Mutual Fund
  
 Franklin Templeton Mutual Fund
  
-100541;-;INF090I01BA3;Franklin India Liquid Fund;Regular Plan;Daily IDCW;1508.9895;11-Sep-2026
-100538;INF090I01BB1;-;Franklin India Liquid Fund;Regular Plan;Growth;6318.6156;13-Sep-2026
-100537;INF090I01BL0;INF090I01BI6;Franklin India Liquid Fund;Regular Plan;Weekly IDCW;1244.9791;11-Sep-2026
-118577;INF090I01JV2;-;Franklin India Liquid Fund;Direct Plan;Super Institutional Growth;4272.9657;13-Sep-2026
-100547;-;INF090I01BF2;Franklin India Liquid Fund;Regular Plan;Super Institutional Daily IDCW;1000.0000;11-Sep-2026
-118578;INF090I01JW0;-;Franklin India Liquid Fund;Direct Plan;Super Institutional Daily IDCW;1002.8152;11-Sep-2026
-118579;INF090I01JX8;INF090I01JY6;Franklin India Liquid Fund;Direct Plan;Super Institutional Weekly IDCW;1022.6317;11-Sep-2026
-100546;INF090I01BG0;-;Franklin India Liquid Fund;Regular Plan;Super Institutional Growth;4234.7199;13-Sep-2026
-100548;INF090I01BM8;INF090I01BH8;Franklin India Liquid Fund;Regular Plan;Super Institutional Weekly IDCW;1039.1567;11-Sep-2026
-139892;INF090I01LR6;-;Franklin India Liquid Fund;Regular Plan;Unclaimed IDCW Investor Education Plan - Growth;10.0000;11-Sep-2026
-139890;INF090I01LP0;-;Franklin India Liquid Fund;Regular Plan;Unclaimed IDCW Plan - Growth;18.0254;11-Sep-2026
-139891;INF090I01LQ8;-;Franklin India Liquid Fund;Regular Plan;Unclaimed Redemption Investor Education Plan - Growth;10.0000;11-Sep-2026
-139889;INF090I01LO3;-;Franklin India Liquid Fund;Regular Plan;Unclaimed Redemption Plan - Growth;18.0254;11-Sep-2026
+100541;-;INF090I01BA3;Franklin India Liquid Fund;Regular Plan;Daily IDCW;1508.9895;14-Sep-2026
+100538;INF090I01BB1;-;Franklin India Liquid Fund;Regular Plan;Growth;6319.4562;14-Sep-2026
+100537;INF090I01BL0;INF090I01BI6;Franklin India Liquid Fund;Regular Plan;Weekly IDCW;1244.2967;14-Sep-2026
+118577;INF090I01JV2;-;Franklin India Liquid Fund;Direct Plan;Super Institutional Growth;4273.6190;14-Sep-2026
+100547;-;INF090I01BF2;Franklin India Liquid Fund;Regular Plan;Super Institutional Daily IDCW;1000.0000;14-Sep-2026
+118578;INF090I01JW0;-;Franklin India Liquid Fund;Direct Plan;Super Institutional Daily IDCW;1002.8152;14-Sep-2026
+118579;INF090I01JX8;INF090I01JY6;Franklin India Liquid Fund;Direct Plan;Super Institutional Weekly IDCW;1021.9698;14-Sep-2026
+100546;INF090I01BG0;-;Franklin India Liquid Fund;Regular Plan;Super Institutional Growth;4235.3606;14-Sep-2026
+100548;INF090I01BM8;INF090I01BH8;Franklin India Liquid Fund;Regular Plan;Super Institutional Weekly IDCW;1038.4924;14-Sep-2026
+139892;INF090I01LR6;-;Franklin India Liquid Fund;Regular Plan;Unclaimed IDCW Investor Education Plan - Growth;10.0000;14-Sep-2026
+139890;INF090I01LP0;-;Franklin India Liquid Fund;Regular Plan;Unclaimed IDCW Plan - Growth;18.0337;14-Sep-2026
+139891;INF090I01LQ8;-;Franklin India Liquid Fund;Regular Plan;Unclaimed Redemption Investor Education Plan - Growth;10.0000;14-Sep-2026
+139889;INF090I01LO3;-;Franklin India Liquid Fund;Regular Plan;Unclaimed Redemption Plan - Growth;18.0337;14-Sep-2026
 102441;INF090I01BD7;-;Franklin India Liquid Fund- Institution;Regular Plan;Institutional Growth;0.0000;08-Jul-2020
-102443;-;INF090I01BC9;Franklin India Liquid Fund- Institution;Regular Plan;Institutional Daily IDCW;1000.0000;11-Sep-2026
-102442;INF090I01BJ4;INF090I01BE5;Franklin India Liquid Fund- Institution;Regular Plan;Institutional Weekly IDCW;1055.3331;11-Sep-2026
+102443;-;INF090I01BC9;Franklin India Liquid Fund- Institution;Regular Plan;Institutional Daily IDCW;1000.0000;14-Sep-2026
+102442;INF090I01BJ4;INF090I01BE5;Franklin India Liquid Fund- Institution;Regular Plan;Institutional Weekly IDCW;1054.7184;14-Sep-2026
  
 HDFC Mutual Fund
  
@@ -914,16 +914,16 @@ Quantum Mutual Fund
  
 SBI Mutual Fund
  
-119804;INF200K01UR8;INF200K01US6;SBI LIQUID FUND;Direct Plan;IDCW;1450.5778;13-Sep-2026
-119805;-;INF200K01UQ0;SBI LIQUID FUND;Direct Plan;IDCW;1144.3908;13-Sep-2026
-119799;INF200K01UU2;INF200K01UV0;SBI LIQUID FUND;Direct Plan;IDCW;1385.9119;13-Sep-2026
-119800;INF200K01UT4;-;SBI LIQUID FUND;Direct Plan;Growth;4442.1270;13-Sep-2026
-105274;INF200K01LU1;-;SBI LIQUID FUND;Regular Plan;Growth;4433.3996;13-Sep-2026
-105275;-;INF200K01LR7;SBI LIQUID FUND;Regular Plan;IDCW;1424.2929;13-Sep-2026
-105281;-;INF200K01LX5;SBI LIQUID FUND;Regular Plan;IDCW;1141.0717;13-Sep-2026
-105283;INF200K01LY3;INF200K01LZ0;SBI LIQUID FUND;Regular Plan;IDCW;1441.3325;13-Sep-2026
-105282;INF200K01MB9;INF200K01MC7;SBI LIQUID FUND;Regular Plan;IDCW;1379.0078;13-Sep-2026
-105280;INF200K01MA1;-;SBI LIQUID FUND;Regular Plan;Growth;4391.8787;13-Sep-2026
+119804;INF200K01UR8;INF200K01US6;SBI LIQUID FUND;Direct Plan;IDCW;1450.7949;14-Sep-2026
+119805;-;INF200K01UQ0;SBI LIQUID FUND;Direct Plan;IDCW;1144.0484;14-Sep-2026
+119799;INF200K01UU2;INF200K01UV0;SBI LIQUID FUND;Direct Plan;IDCW;1386.1192;14-Sep-2026
+119800;INF200K01UT4;-;SBI LIQUID FUND;Direct Plan;Growth;4442.7917;14-Sep-2026
+105274;INF200K01LU1;-;SBI LIQUID FUND;Regular Plan;Growth;4434.0457;14-Sep-2026
+105275;-;INF200K01LR7;SBI LIQUID FUND;Regular Plan;IDCW;1424.5005;14-Sep-2026
+105281;-;INF200K01LX5;SBI LIQUID FUND;Regular Plan;IDCW;1140.7391;14-Sep-2026
+105283;INF200K01LY3;INF200K01LZ0;SBI LIQUID FUND;Regular Plan;IDCW;1441.5426;14-Sep-2026
+105282;INF200K01MB9;INF200K01MC7;SBI LIQUID FUND;Regular Plan;IDCW;1379.2088;14-Sep-2026
+105280;INF200K01MA1;-;SBI LIQUID FUND;Regular Plan;Growth;4392.5188;14-Sep-2026
  
 Sundaram Mutual Fund
  
@@ -1438,16 +1438,16 @@ Edelweiss Mutual Fund
  
 Franklin Templeton Mutual Fund
  
-147215;-;INF090I01SM2;Franklin India Overnight Fund;Regular Plan;Daily IDCW;1000.0001;11-Sep-2026
-147212;-;INF090I01ST7;Franklin India Overnight Fund;Direct Plan;Daily IDCW;1000.0007;11-Sep-2026
-147211;INF090I01SR1;INF090I01SQ3;Franklin India Overnight Fund;Direct Plan;Weekly IDCW;1000.6374;11-Sep-2026
-147216;INF090I01SN0;INF090I01SP5;Franklin India Overnight Fund;Regular Plan;Weekly IDCW;1000.6352;11-Sep-2026
-147213;INF090I01SO8;-;Franklin India Overnight Fund;Regular Plan;Growth;1432.8476;13-Sep-2026
-147214;INF090I01SS9;-;Franklin India Overnight Fund;Direct Plan;Growth;1437.9694;13-Sep-2026
-149445;-;-;Franklin India Overnight Fund;Regular Plan;Unclaimed IDCW Investor Education;10.0000;11-Sep-2026
-149443;-;-;Franklin India Overnight Fund;Regular Plan;Unclaimed IDCW;13.0478;11-Sep-2026
-149444;-;-;Franklin India Overnight Fund;Regular Plan;Unclaimed Redemption Investor Education;10.0000;11-Sep-2026
-149446;-;-;Franklin India Overnight Fund;Regular Plan;Unclaimed Redemption;13.0478;11-Sep-2026
+147215;-;INF090I01SM2;Franklin India Overnight Fund;Regular Plan;Daily IDCW;1000.0001;14-Sep-2026
+147212;-;INF090I01ST7;Franklin India Overnight Fund;Direct Plan;Daily IDCW;1000.0007;14-Sep-2026
+147211;INF090I01SR1;INF090I01SQ3;Franklin India Overnight Fund;Direct Plan;Weekly IDCW;1000.0026;14-Sep-2026
+147216;INF090I01SN0;INF090I01SP5;Franklin India Overnight Fund;Regular Plan;Weekly IDCW;1000.0066;14-Sep-2026
+147213;INF090I01SO8;-;Franklin India Overnight Fund;Regular Plan;Growth;1433.0325;14-Sep-2026
+147214;INF090I01SS9;-;Franklin India Overnight Fund;Direct Plan;Growth;1438.1566;14-Sep-2026
+149445;-;-;Franklin India Overnight Fund;Regular Plan;Unclaimed IDCW Investor Education;10.0000;14-Sep-2026
+149443;-;-;Franklin India Overnight Fund;Regular Plan;Unclaimed IDCW;13.0529;14-Sep-2026
+149444;-;-;Franklin India Overnight Fund;Regular Plan;Unclaimed Redemption Investor Education;10.0000;14-Sep-2026
+149446;-;-;Franklin India Overnight Fund;Regular Plan;Unclaimed Redemption;13.0529;14-Sep-2026
  
 HDFC Mutual Fund
  
@@ -1562,12 +1562,12 @@ Samco Mutual Fund
  
 SBI Mutual Fund
  
-119831;-;INF200K01TJ7;SBI OVERNIGHT FUND;Direct Plan;IDCW;1390.8349;13-Sep-2026
-119833;INF200K01TK5;-;SBI OVERNIGHT FUND;Direct Plan;Growth;4480.9525;13-Sep-2026
-119832;INF200K01TL3;INF200K01TM1;SBI OVERNIGHT FUND;Direct Plan;IDCW;1420.2390;13-Sep-2026
-114297;-;INF200K01LN6;SBI OVERNIGHT FUND;Regular Plan;IDCW;1384.2887;13-Sep-2026
-101206;INF200K01LQ9;-;SBI OVERNIGHT FUND;Regular Plan;Growth;4419.8515;13-Sep-2026
-103140;INF200K01LO4;INF200K01LP1;SBI OVERNIGHT FUND;Regular Plan;IDCW;1413.4525;13-Sep-2026
+119831;-;INF200K01TJ7;SBI OVERNIGHT FUND;Direct Plan;IDCW;1391.0141;14-Sep-2026
+119833;INF200K01TK5;-;SBI OVERNIGHT FUND;Direct Plan;Growth;4481.5298;14-Sep-2026
+119832;INF200K01TL3;INF200K01TM1;SBI OVERNIGHT FUND;Direct Plan;IDCW;1420.4219;14-Sep-2026
+114297;-;INF200K01LN6;SBI OVERNIGHT FUND;Regular Plan;IDCW;1384.4652;14-Sep-2026
+101206;INF200K01LQ9;-;SBI OVERNIGHT FUND;Regular Plan;Growth;4420.4152;14-Sep-2026
+103140;INF200K01LO4;INF200K01LP1;SBI OVERNIGHT FUND;Regular Plan;IDCW;1413.6328;14-Sep-2026
  
 Sundaram Mutual Fund
  
@@ -4103,10 +4103,10 @@ Baroda BNP Paribas Mutual Fund
  
 DSP Mutual Fund
  
-148595;INF740KA1PP3;-;DSP Value Fund;Direct Plan;Growth;24.2690;10-Sep-2026
-148596;INF740KA1PQ1;INF740KA1PR9;DSP Value Fund;Direct Plan;IDCW;18.3820;10-Sep-2026
-148594;INF740KA1PM0;-;DSP Value Fund;Regular Plan;Growth;23.2080;10-Sep-2026
-148597;INF740KA1PN8;INF740KA1PO6;DSP Value Fund;Regular Plan;IDCW;16.2210;10-Sep-2026
+148595;INF740KA1PP3;-;DSP Value Fund;Direct Plan;Growth;24.247;11-Sep-2026
+148596;INF740KA1PQ1;INF740KA1PR9;DSP Value Fund;Direct Plan;IDCW;18.365;11-Sep-2026
+148594;INF740KA1PM0;-;DSP Value Fund;Regular Plan;Growth;23.186;11-Sep-2026
+148597;INF740KA1PN8;INF740KA1PO6;DSP Value Fund;Regular Plan;IDCW;16.206;11-Sep-2026
  
 Franklin Templeton Mutual Fund
  
@@ -11291,10 +11291,10 @@ DSP Mutual Fund
 112126;INF740K01284;-;DSP Global Clean Energy Overseas Equity Omni FoF;Regular Plan;Growth;28.2263;11-Sep-2026
 112127;INF740K01292;INF740K01300;DSP Global Clean Energy Overseas Equity Omni FoF;Regular Plan;IDCW;19.6261;11-Sep-2026
 119275;INF740K01PC5;-;DSP Global Clean Energy Overseas Equity Omni FoF;Direct Plan;Growth;29.9161;11-Sep-2026
-149816;INF740KA1QP1;-;DSP Global Innovation Overseas Equity Omni FoF;Direct Plan;Growth;22.3815;10-Sep-2026
-149815;INF740KA1QQ9;INF740KA1QR7;DSP Global Innovation Overseas Equity Omni FoF;Direct Plan;IDCW;22.3815;10-Sep-2026
-149817;INF740KA1QM8;-;DSP Global Innovation Overseas Equity Omni FoF;Regular Plan;Growth;21.4737;10-Sep-2026
-149814;INF740KA1QN6;INF740KA1QO4;DSP Global Innovation Overseas Equity Omni FoF;Regular Plan;IDCW;21.4737;10-Sep-2026
+149816;INF740KA1QP1;-;DSP Global Innovation Overseas Equity Omni FoF;Direct Plan;Growth;22.6895;11-Sep-2026
+149815;INF740KA1QQ9;INF740KA1QR7;DSP Global Innovation Overseas Equity Omni FoF;Direct Plan;IDCW;22.6895;11-Sep-2026
+149817;INF740KA1QM8;-;DSP Global Innovation Overseas Equity Omni FoF;Regular Plan;Growth;21.7687;11-Sep-2026
+149814;INF740KA1QN6;INF740KA1QO4;DSP Global Innovation Overseas Equity Omni FoF;Regular Plan;IDCW;21.7687;11-Sep-2026
 152528;INF740KA1UJ6;-;DSP US Specific Debt Passive FoF;Direct Plan;Growth;12.4053;11-Sep-2026
 152529;INF740KA1UK4;INF740KA1UL2;DSP US Specific Debt Passive FoF;Direct Plan;IDCW;12.4053;11-Sep-2026
 152527;INF740KA1UG2;-;DSP US Specific Debt Passive FoF;Regular Plan;Growth;12.3899;11-Sep-2026
@@ -11336,8 +11336,8 @@ Franklin Templeton Mutual Fund
  
 HDFC Mutual Fund
  
-149180;INF179KC1BO4;-;HDFC Developed World Overseas Equity Passive FOF;;;21.862;10-Sep-2026
-149181;INF179KC1BP1;-;HDFC Developed World Overseas Equity Passive FOF;;;21.369;10-Sep-2026
+149180;INF179KC1BO4;-;HDFC Developed World Overseas Equity Passive FOF;;;22.072;11-Sep-2026
+149181;INF179KC1BP1;-;HDFC Developed World Overseas Equity Passive FOF;;;21.574;11-Sep-2026
  
 ICICI Prudential Mutual Fund
  
@@ -11407,10 +11407,10 @@ SBI Mutual Fund
  
 Sundaram Mutual Fund
  
-119602;INF903J01OB6;-;Sundaram Global Brand Theme-Equity Active FOF;Direct Plan;GROWTH;47.9421;10-Sep-2026
-119601;INF903J01NZ7;INF903J01OA8;Sundaram Global Brand Theme-Equity Active FOF;Direct Plan;IDCW (Income Distribution CUM Capital Withdrawal);40.2349;10-Sep-2026
-106370;INF903J01EX1;-;Sundaram Global Brand Theme-Equity Active FOF;Regular Plan;GROWTH;43.3165;10-Sep-2026
-106369;INF903J01EY9;INF903J01EZ6;Sundaram Global Brand Theme-Equity Active FOF;Regular Plan;IDCW (Income Distribution CUM Capital Withdrawal);35.0163;10-Sep-2026
+119602;INF903J01OB6;-;Sundaram Global Brand Theme-Equity Active FOF;Direct Plan;GROWTH;48.6767;11-Sep-2026
+119601;INF903J01NZ7;INF903J01OA8;Sundaram Global Brand Theme-Equity Active FOF;Direct Plan;IDCW (Income Distribution CUM Capital Withdrawal);40.8514;11-Sep-2026
+106370;INF903J01EX1;-;Sundaram Global Brand Theme-Equity Active FOF;Regular Plan;GROWTH;43.9791;11-Sep-2026
+106369;INF903J01EY9;INF903J01EZ6;Sundaram Global Brand Theme-Equity Active FOF;Regular Plan;IDCW (Income Distribution CUM Capital Withdrawal);35.5519;11-Sep-2026
  
 Open Ended Schemes(Other Scheme - Gold ETF)
  
@@ -12873,8 +12873,8 @@ SBI Mutual Fund
 121109;INF200K01VT2;-;SBI BSE SENSEX ETF;Regular Plan;IDCW;834.3942;11-Sep-2026
 144916;INF200KA1VQ2;-;SBI BSE Sensex Next 50 ETF;Regular Plan;IDCW;941.1322;11-Sep-2026
 139430;INF200KA1JT1;-;SBI Nifty 10 yr Benchmark G-Sec ETF;Regular Plan;IDCW;263.1479;11-Sep-2026
-153796;INF200KB1969;-;SBI NIFTY 1D Rate Liquid ETF - Growth;Regular Plan;Growth;1055.6830;13-Sep-2026
-152168;-;INF200KA13Z8;SBI NIFTY 1D Rate Liquid ETF - IDCW;Regular Plan;IDCW;1000.0000;13-Sep-2026
+153796;INF200KB1969;-;SBI NIFTY 1D Rate Liquid ETF - Growth;Regular Plan;Growth;1055.8145;14-Sep-2026
+152168;-;INF200KA13Z8;SBI NIFTY 1D Rate Liquid ETF - IDCW;Regular Plan;IDCW;1000.0000;14-Sep-2026
 145648;INF200KA1WX6;-;SBI Nifty 200 Quality 30 ETF;Regular Plan;IDCW;215.4146;11-Sep-2026
 135106;INF200KA1FS1;-;SBI Nifty 50 ETF;Regular Plan;IDCW;252.2157;11-Sep-2026
 134008;INF200KA1580;-;SBI Nifty Bank ETF;Regular Plan;IDCW;582.2590;11-Sep-2026
