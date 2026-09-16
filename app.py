@@ -36,6 +36,91 @@ import worker_launcher
 
 from xirr import compute_xirr_debug
 
+# ══════════════════════════════════════════════════════════════
+# NAV SERVICE — single source of truth for all NAV logic.
+# Parsing, snapshot management, AMFI fetches, and the in-memory
+# index all live there now. app.py only consumes them.
+# ══════════════════════════════════════════════════════════════
+import nav_service
+from nav_service import (
+    # Constants
+    AMFI_TEXT_URL,
+    NAV_HISTORY_URL,
+    NAV_TEXT_DIR,
+    # Snapshot file management
+    _ensure_text_dir,
+    _snapshot_path,
+    _latest_snapshot_path,
+    get_snapshot_status,
+    # Parsing
+    _extract_nav_date_from_text,
+    _parse_nav_text,
+    _get_file_nav_date,
+    _have_snapshot_for_date,
+    _looks_like_amfi_format,
+    _normalize_history_text_to_live_format,
+    _fmt_amfi_date,
+    # Downloads
+    download_and_save_nav,
+    download_and_save_nav_if_needed,
+    download_business_day_nav,
+    _save_nav_snapshot,
+    # Previous-day sync
+    get_last_business_day,
+    sync_previous_business_day_nav,
+    sync_previous_business_day_nav_if_needed,
+    _previous_snapshot_path,
+    load_previous_nav_map,
+    get_previous_nav_date,
+    # Historical lookup
+    get_or_fetch_nav_for_date,   # ← moved into nav_service; see Step 4
+    # DB fallback + diagnostics
+    get_nav_for_date_from_db,
+    diagnose_previous_day_coverage,
+    resolve_prev_nav_for_folios,
+    # In-memory index
+    AMFINavIndex,
+    _amfi,
+    fetch_nav_by_isin,
+    fetch_amc_by_isin,
+    load_nav_dataframe,
+)
+
+
+# ══════════════════════════════════════════════════════════════
+# Streamlit-cached wrappers around nav_service's pure functions.
+# The @st.cache_data decorator lives here; the real logic lives in
+# nav_service. This keeps nav_service importable from plain-Python
+# contexts (background_worker.py) without requiring Streamlit.
+# ══════════════════════════════════════════════════════════════
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def load_previous_nav_map_cached() -> dict:
+    return nav_service.load_previous_nav_map()
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def resolve_prev_nav_for_folios_cached(
+    current_date_iso: str,
+    isins_tuple: tuple,
+    max_lookback: int = 10,
+    min_overlap_pct: float = 0.5,
+):
+    """Cache wrapper — args must be hashable, so isins come in as a tuple."""
+    return nav_service.resolve_prev_nav_for_folios(
+        current_date_iso,          # ← pass the STRING through, don't convert
+        set(isins_tuple),
+        max_lookback=max_lookback,
+        min_overlap_pct=min_overlap_pct,
+    )
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_or_fetch_nav_for_date_cached(target_iso: str) -> dict:
+    """Cache wrapper around nav_service.get_or_fetch_nav_for_date.
+    Cached 24h — a given historical date's NAV never changes once settled."""
+    return nav_service.get_or_fetch_nav_for_date(target_iso)
+
+
 log = logging.getLogger(__name__)
 
 warnings.filterwarnings("ignore")
@@ -60,13 +145,6 @@ with get_conn() as conn:
 # Delay between successive lookback requests so we don't hammer AMFI.
 LOOKBACK_DELAY_SECONDS = 1.5
 
-_AMFI_SESSION = requests.Session()
-_AMFI_SESSION.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                  "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/plain,text/html,application/xhtml+xml,*/*",
-    "Referer": "https://www.amfiindia.com/",
-})
 
 
 # ==================== DB INIT (cached per session) ====================
@@ -726,41 +804,6 @@ def calc_invested_upto(txn_df: pd.DataFrame, product_code: str,
     return float(txn_df.loc[mask, 'amount'].sum())
 
 
-def get_or_fetch_nav_for_date(target_iso: str) -> dict:
-    iso = target_iso
-    if _have_snapshot_for_date(iso):
-        path = _snapshot_path(iso)
-        with open(path, 'r', encoding='utf-8') as f:
-            nav_map, _, _ = _parse_nav_text(f.read())
-        # Return {isin: float_nav} — never tuples. Tuples here force object
-        # dtype into every downstream diff column.
-        out = {}
-        for k, v in nav_map.items():
-            try:
-                nav = float(v[0]) if isinstance(v, (tuple, list)) else float(v)
-                if nav > 0:
-                    out[k] = nav
-            except (TypeError, ValueError, IndexError):
-                continue
-        return out
-
-    try:
-        target_d = datetime.strptime(iso, "%Y-%m-%d").date()
-        resp = download_business_day_nav(target_d, timeout=30)
-        actual = resp.get("actual_date")
-        if actual and resp.get("text"):
-            saved_res = _save_nav_snapshot(resp["text"], actual)
-            try:
-                nav_data_ingestion.ingest_nav_file_to_db(saved_res["path"])
-            except Exception as e:
-                log.exception("[NAV-DB] Ingestion error: %s", e)
-            with open(_snapshot_path(actual), 'r', encoding='utf-8') as f:
-                nav_map, _, _ = _parse_nav_text(f.read())
-            return {k: v[0] for k, v in nav_map.items() if v[0] > 0}
-    except Exception as e:
-        log.warning("[VALUATION] NAV fetch failed for %s: %s", iso, e)
-
-    return {}
 
 # ==================== PDF GENERATION ====================
 
@@ -1999,772 +2042,6 @@ def render_email_report_button(
             return True
     
     return False
-# ==================== AMFI NAV SERVICE ====================
-
-AMFI_TEXT_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
-NAV_HISTORY_URL = "https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx"
-
-NAV_TEXT_DIR = os.environ.get("NAV_TEXT_DIR", "nav_data")
-
-
-def _ensure_text_dir() -> None:
-    os.makedirs(NAV_TEXT_DIR, exist_ok=True)
-
-
-def _snapshot_path(date_str: str) -> str:
-    return os.path.join(NAV_TEXT_DIR, f"nav_{date_str}.txt")
-
-
-def _latest_snapshot_path() -> Optional[str]:
-    _ensure_text_dir()
-    available = sorted(f for f in os.listdir(NAV_TEXT_DIR) if f.startswith("nav_") and f.endswith(".txt"))
-    return os.path.join(NAV_TEXT_DIR, available[-1]) if available else None
-
-
-def get_snapshot_status() -> dict:
-    _ensure_text_dir()
-    today = datetime.now().strftime("%Y-%m-%d")
-    today_path = _snapshot_path(today)
-    latest_path = _latest_snapshot_path()
-    status = {
-        "has_today": os.path.exists(today_path),
-        "today_path": today_path if os.path.exists(today_path) else None,
-        "latest_path": latest_path,
-        "latest_date": None,
-        "latest_bytes": None,
-    }
-    if latest_path:
-        fname = os.path.basename(latest_path)
-        status["latest_date"] = fname.replace("nav_", "").replace(".txt", "")
-        status["latest_bytes"] = os.path.getsize(latest_path)
-    return status
-
-
-# ==================== THE LIVE-FILE DOWNLOAD ====================
-
-# ==================== PARSER (shared by live + history files) ====================
-
-def _extract_nav_date_from_text(text: str) -> Optional[str]:
-    """
-    Extract NAV date from the file. Handles both formats:
-    - Old (6 cols):  Code;ISIN1;ISIN2;Name;NAV;Date
-    - New (8 cols):  Code;ISIN1;ISIN2;Name;Plan;Option;NAV;Date
-    
-    Date is always the LAST column in both formats.
-    Returns date as YYYY-MM-DD or None if extraction fails.
-    """
-    for line in text.splitlines():
-        line = line.strip()
-        
-        # Skip empty lines and non-data lines
-        if not line or ";" not in line:
-            continue
-        
-        parts = line.split(";")
-        
-        # Skip header row and lines with insufficient columns
-        if len(parts) < 6 or parts[0].strip() == "Scheme Code":
-            continue
-        
-        # Date is ALWAYS the last column (works for both 6-col and 8-col formats)
-        date_field = parts[-1].strip()
-        
-        try:
-            # Try parsing with AMFI's date format (01-Jan-2026)
-            parsed_date = datetime.strptime(date_field, "%d-%b-%Y")
-            log.debug("[NAV-DATE-EXTRACT] Extracted NAV date: %s from line: %s", 
-                     parsed_date.strftime("%Y-%m-%d"), line[:80])
-            return parsed_date.strftime("%Y-%m-%d")
-        except ValueError:
-            # If parsing fails, skip this line and try next
-            continue
-    
-    # No valid date found
-    log.error("[NAV-DATE-EXTRACT] Could not extract NAV date from text")
-    return None
-
-
-def _parse_nav_text(text: str) -> tuple[dict, dict, list[dict]]:
-    """
-    Parses AMFI's raw text format. Returns:
-      nav_map:  {isin: (nav, nav_date)}
-      amc_map:  {isin: amc_name}
-      records:  list of {isin, scheme_code, isin_payout, scheme_name,
-                          amc_name, category, nav, nav_date}
-    
-    Handles both formats:
-    - Old (6 cols):  Code;ISIN1;ISIN2;Name;NAV;Date
-    - New (8 cols):  Code;ISIN1;ISIN2;Name;Plan;Option;NAV;Date
-    """
-    nav_map: dict[str, tuple[float, str]] = {}
-    amc_map: dict[str, str] = {}
-    records: list[dict] = []
-    current_amc = ""
-    current_category = ""
-    format_detected = None
-
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-
-        if ";" not in line:
-            if line.lower().endswith("mutual fund"):
-                current_amc = line
-            elif "(" in line and ")" in line:
-                current_category = line
-            continue
-
-        parts = line.split(";")
-        
-        # Skip header and lines with insufficient columns
-        if len(parts) < 6 or parts[0] == "Scheme Code":
-            continue
-
-        scheme_code = parts[0].strip()
-        isin_1 = parts[1].strip()
-        isin_2 = parts[2].strip()
-        scheme_name = parts[3].strip()
-
-        # Detect format and extract NAV + Date accordingly
-        # Old: Code;ISIN1;ISIN2;Name;NAV;Date (6 cols)
-        # New: Code;ISIN1;ISIN2;Name;Plan;Option;NAV;Date (8 cols)
-        if len(parts) >= 8:
-            # 8-column format: NAV at [6], Date at [7]
-            nav_str = parts[6].strip()
-            date_str = parts[7].strip()
-            if format_detected is None:
-                format_detected = "8-col"
-                log.info("[NAV-PARSE] Detected 8-column format (new AMFI format with Plan/Option)")
-        else:
-            # 6-column format: NAV at [4], Date at [5]
-            nav_str = parts[4].strip()
-            date_str = parts[5].strip()
-            if format_detected is None:
-                format_detected = "6-col"
-                log.info("[NAV-PARSE] Detected 6-column format (old AMFI format)")
-        
-        try:
-            nav = float(nav_str) if nav_str not in ("N.A.", "") else 0.0
-        except ValueError:
-            nav = 0.0
-
-        try:
-            nav_date = datetime.strptime(date_str, "%d-%b-%Y").strftime("%Y-%m-%d")
-        except ValueError:
-            nav_date = date_str
-
-        if nav <= 0:
-            continue
-
-        isin_clean = isin_1 if isin_1 and isin_1 != "-" else None
-        isin_payout_clean = isin_2 if isin_2 and isin_2 != "-" else None
-        primary_isin = isin_clean or isin_payout_clean
-
-        if primary_isin:
-            records.append({
-                "isin": primary_isin.upper(),
-                "scheme_code": scheme_code,
-                "isin_payout": isin_payout_clean.upper() if isin_payout_clean else None,
-                "scheme_name": scheme_name,
-                "amc_name": current_amc or None,
-                "category": current_category or None,
-                "nav": nav,
-                "nav_date": nav_date,
-            })
-
-        for isin in (isin_1, isin_2):
-            if isin and isin != "-":
-                isin_u = isin.upper()
-                nav_map[isin_u] = (nav, nav_date)
-                if current_amc:
-                    amc_map[isin_u] = current_amc
-
-    log.info("[NAV-PARSE] Parsed %d records using %s format", len(records), format_detected or "unknown")
-    return nav_map, amc_map, records
-
-
-# ==================== THE LIVE-FILE DOWNLOAD ====================
-
-def download_and_save_nav(timeout: int = 30) -> dict:
-    """
-    Downloads NAV from AMFI and saves with the ACTUAL NAV DATE from file content.
-    Overwrites if file for same date already exists.
-    
-    Returns:
-        {
-            "path": file_path or None,
-            "bytes": file_size or 0,
-            "date": nav_date (YYYY-MM-DD) or None
-        }
-    """
-    log.info("[AMFI] Downloading NAV file from %s", AMFI_TEXT_URL)
-    
-    try:
-        res = requests.get(AMFI_TEXT_URL, timeout=timeout)
-        res.raise_for_status()
-    except requests.RequestException as e:
-        log.error("[AMFI] Download failed: %s", e)
-        return {"path": None, "bytes": 0, "date": None}
-    
-    text = res.text
-    
-    if not text or not text.strip():
-        log.error("[AMFI] Downloaded file is empty")
-        return {"path": None, "bytes": 0, "date": None}
-
-    _ensure_text_dir()
-    
-    # ── EXTRACT ACTUAL NAV DATE FROM CONTENT ──
-    actual_nav_date = _extract_nav_date_from_text(text)
-    if not actual_nav_date:
-        log.error("[AMFI] Could not extract NAV date from downloaded file")
-        return {"path": None, "bytes": 0, "date": None}
-    
-    # ── USE ACTUAL NAV DATE FOR FILENAME ──
-    path = _snapshot_path(actual_nav_date)
-    
-    # ── CHECK IF FILE ALREADY EXISTS ──
-    file_exists = os.path.exists(path)
-    if file_exists:
-        old_size = os.path.getsize(path)
-        log.info("[AMFI] File already exists at %s (size: %s bytes) — overwriting with fresh data", 
-                 path, old_size)
-    
-    # ── WRITE FILE (OVERWRITES IF EXISTS) ──
-    try:
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(text)
-    except IOError as e:
-        log.error("[AMFI] Failed to write file %s: %s", path, e)
-        return {"path": None, "bytes": 0, "date": None}
-
-    size = os.path.getsize(path)
-    status = "overwritten" if file_exists else "created"
-    line_count = text.count("\n") + 1
-    
-    log.info("[AMFI] NAV file %s: %s (%s bytes, %s lines) | NAV Date: %s", 
-             status, path, size, line_count, actual_nav_date)
-    
-    return {"path": path, "bytes": size, "date": actual_nav_date}
-
-
-def download_and_save_nav_if_needed(force: bool = False) -> dict:
-    """
-    Re-fetches if:
-      - no file exists for today, OR
-      - today's file was saved BEFORE the most recent cutoff time that has
-        already passed (e.g. file saved at 9 AM, now it's 4 PM → 3 PM cutoff
-        already passed and file predates it → stale, refetch).
-    Otherwise skip — avoids hammering AMFI on every page load.
-    
-    Files are saved with their ACTUAL NAV DATE (from file content), not download date.
-    If file for same NAV date already exists, it will be overwritten.
-    """
-    now = datetime.now()
-    today = now.strftime("%Y-%m-%d")
-    today_path = _snapshot_path(today)
-
-    # 1. Check if we need to skip downloading
-    if not force and os.path.exists(today_path):
-        cutoff = _last_passed_cutoff_today(now)
-        if cutoff is None:
-            size = os.path.getsize(today_path)
-            log.info("[AMFI] Before first cutoff — keeping existing file for %s", today)
-            return {"ran": False, "ok": True, "reason": "before first cutoff, file is current", "bytes": size}
-
-        file_mtime = datetime.fromtimestamp(os.path.getmtime(today_path))
-        cutoff_dt = datetime.combine(now.date(), cutoff)
-        if file_mtime >= cutoff_dt:
-            size = os.path.getsize(today_path)
-            log.info("[AMFI] File already fresh for cutoff %s (saved %s)", cutoff, file_mtime.time())
-            return {"ran": False, "ok": True, "reason": f"already fresh past {cutoff} cutoff", "bytes": size}
-
-        log.info("[AMFI] File saved at %s predates %s cutoff — redownloading", file_mtime.time(), cutoff)
-
-    # 2. Download the file
-    try:
-        result = download_and_save_nav()
-        
-        # ── Handle case where extraction failed ──
-        if result.get("date") is None:
-            return {"ran": True, "ok": False, "reason": "NAV date extraction failed", "bytes": None}
-        
-        # 3. ▼▼▼ TRIGGER DATABASE INGESTION ▼▼▼
-        if os.path.exists(result["path"]):
-            log.info("[NAV-DB] File ready. Starting database ingestion for %s...", result["path"])
-            try:
-                ingest_result = nav_data_ingestion.ingest_nav_file_to_db(result["path"])
-                if ingest_result.get('ok'):
-                    log.info("[NAV-DB] Success: %s", ingest_result.get('reason'))
-                else:
-                    log.error("[NAV-DB] Failed: %s", ingest_result.get('reason'))
-            except Exception as e:
-                log.exception("[NAV-DB] Ingestion error: %s", e)
-        else:
-            log.error("[NAV-DB] File path %s does not exist after download. Skipping ingestion.", result["path"])
-            
-        return {"ran": True, "ok": True, "reason": "downloaded and ingested", "bytes": result.get("bytes")}
-        
-    except Exception as e:
-        log.exception("[AMFI] Download failed with exception")
-        return {"ran": True, "ok": False, "reason": f"download failed: {e}", "bytes": None}
-
-
-
-# NAV re-publish cutoffs during the day. Domestic NAVs settle ~3 PM,
-# foreign/international scheme NAVs land later, ~11 PM.
-NAV_REDOWNLOAD_TIMES = [time_cls(15, 0), time_cls(23, 0)]
-
-def _last_passed_cutoff_today(now: datetime) -> Optional[time_cls]:
-    """Latest cutoff time that has already passed today, or None if before all of them."""
-    passed = [t for t in NAV_REDOWNLOAD_TIMES if now.time() >= t]
-    return max(passed) if passed else None
-
-
-# ==================== BUSINESS DAY LOGIC (needs _parse_nav_text above) ====================
-
-def get_last_business_day(from_date: date_cls | None = None) -> date_cls:
-    """Most recent business day BEFORE from_date. Weekend-only rollback (no holiday calendar)."""
-    from_date = from_date or datetime.now().date()
-    candidate = from_date - timedelta(days=1)
-    while candidate.weekday() >= 5:
-        candidate -= timedelta(days=1)
-    return candidate
-
-
-def _fmt_amfi_date(d) -> str:
-    return d.strftime("%d-%b-%Y")
-
-
-def _get_file_nav_date(path: str) -> Optional[str]:
-    """Actual NAV date embedded in a saved file's data (not filename)."""
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if ";" not in line:
-                    continue
-                parts = line.split(";")
-                if len(parts) < 6 or parts[0] == "Scheme Code":
-                    continue
-                date_str = parts[7].strip() if len(parts) >= 8 else parts[5].strip()
-                try:
-                    return datetime.strptime(date_str, "%d-%b-%Y").strftime("%Y-%m-%d")
-                except ValueError:
-                    continue
-    except Exception:
-        pass
-    return None
-
-def _have_snapshot_for_date(iso_date: str) -> bool:
-    _ensure_text_dir()
-    for fname in os.listdir(NAV_TEXT_DIR):
-        if not (fname.startswith("nav_") and fname.endswith(".txt")):
-            continue
-        if _get_file_nav_date(os.path.join(NAV_TEXT_DIR, fname)) == iso_date:
-            return True
-    return False
-
-
-def _looks_like_amfi_format(text: str) -> bool:
-    """
-    True if the response has AMFI's recognizable header/shape at all
-    (even with zero data rows, e.g. a genuine holiday). False means it's
-    an error/captcha/HTML page — a blocked request, not a holiday.
-    """
-    if not text or not text.strip():
-        return False
-    lowered = text.lower()
-    if "<html" in lowered or "captcha" in lowered:
-        return False
-    return "scheme code" in lowered and ";" in text
-
-def _normalize_history_text_to_live_format(text: str) -> str:
-    """
-    Rewrites DownloadNAVHistoryReport_Po.aspx's 8-column rows:
-        Scheme Code;NAV Name;Plan;Option;ISIN Div Payout/ISIN Growth;
-        ISIN Div Reinvestment;Net Asset Value;Date
-    into the SAME 6-column layout as the live NAVAll.txt file:
-        Scheme Code;ISIN Payout;ISIN Reinvest;Scheme Name;NAV;Date
-
-    This lets every downstream reader — _parse_nav_text, _get_file_nav_date,
-    the whole AMFINavIndex — stay untouched: saved historical snapshots look
-    exactly like a live snapshot, just for a past date. Non-data lines
-    (section headers, AMC name lines, blank lines) are passed through as-is.
-    """
-    out_lines = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if ";" not in stripped:
-            out_lines.append(line)
-            continue
-        parts = stripped.split(";")
-        if len(parts) < 8 or parts[0].strip() == "Scheme Code":
-            if parts and parts[0].strip() == "Scheme Code":
-                out_lines.append(
-                    "Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;"
-                    "Scheme Name;Net Asset Value;Date"
-                )
-            else:
-                out_lines.append(line)
-            continue
-        scheme_code, scheme_name, _plan, _option, isin_payout, isin_reinvest, nav, date_field = parts[:8]
-        out_lines.append(
-            f"{scheme_code};{isin_payout};{isin_reinvest};{scheme_name};{nav};{date_field}"
-        )
-    return "\n".join(out_lines)
-
-
-
-def download_business_day_nav(target_date, timeout: int = 30) -> dict:
-    """
-    Fetches AMFI history for one exact calendar date and verifies the date
-    embedded in the response actually matches what we asked for.
-
-    Returns dict with an extra "actual_date" key. Caller (the lookback loop)
-    is responsible for comparing requested vs actual and stepping back if
-    they differ — this function itself just fetches + reports, it does not
-    guess "holiday" vs "blocked".
-
-    Raises ValueError if the response doesn't parse as AMFI's format at all
-    (e.g. blocked/error page) — that's a hard failure, not a date mismatch.
-    """
-    date_str = _fmt_amfi_date(target_date)
-    log.info("[AMFI-HIST] Requesting NAV history for %s", date_str)
-
-    res = _AMFI_SESSION.get(
-        NAV_HISTORY_URL,
-        params={"tp": 1, "frmdt": date_str, "todt": date_str},
-        timeout=timeout,
-    )
-    log.info("[AMFI-HIST] Request URL: %s", res.url)
-    res.raise_for_status()
-    text = res.text
-
-    if not _looks_like_amfi_format(text):
-        # Doesn't even have AMFI's shape at all — blocked/error/captcha page,
-        # NOT a holiday. Hard failure, caller should stop, not step back.
-        snippet = text.strip()[:200].replace("\n", " ")
-        log.error(
-            "[AMFI-HIST] Response for %s doesn't look like AMFI data at all "
-            "(status=%s, len=%s). Snippet: %r — likely blocked/error page.",
-            date_str, res.status_code, len(text), snippet
-        )
-        raise ValueError(f"blocked_or_invalid_response for {date_str}: {snippet!r}")
-
-    # Normalize to the live file's 6-column layout BEFORE saving, so every
-    # downstream reader (_parse_nav_text, _get_file_nav_date, AMFINavIndex)
-    # works on historical snapshots exactly like it does on live ones.
-    text = _normalize_history_text_to_live_format(text)
-
-    actual_date = _extract_nav_date_from_text(text)
-    if actual_date is None:
-        # Not expected in practice — AMFI has always returned the last
-        # working day's data rather than a truly empty body for a holiday.
-        # If this ever fires, treat it as a hard failure rather than
-        # silently guessing, since we have no real date to trust.
-        snippet = text.strip()[:200].replace("\n", " ")
-        log.error(
-            "[AMFI-HIST] %s: response has AMFI's shape but zero parseable "
-            "date rows — unexpected. Snippet: %r", date_str, snippet
-        )
-        raise ValueError(f"no_date_in_response for {date_str}: {snippet!r}")
-
-    log.info("[AMFI-HIST] Requested %s, file actually dated %s", date_str, actual_date)
-
-    return {
-        "text": text,
-        "requested_date": target_date.strftime("%Y-%m-%d"),
-        "actual_date": actual_date,
-    }
-
-
-def _save_nav_snapshot(text: str, iso_date: str) -> dict:
-    _ensure_text_dir()
-    path = _snapshot_path(iso_date)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
-    nav_map, _, _ = _parse_nav_text(text)
-    size = os.path.getsize(path)
-    log.info("[AMFI-HIST] Saved %s: %s bytes, %s ISINs", path, size, len(nav_map))
-    return {"path": path, "bytes": size, "date": iso_date, "record_count": len(nav_map)}
-
-
-def sync_previous_business_day_nav(force: bool = False, timeout: int = 30, max_lookback: int = 10) -> dict:
-    """
-    Call AFTER today's live NAV file is downloaded. Reads the actual NAV date
-    of the latest snapshot, computes target = last business day before that,
-    then fetches it via the history endpoint and checks the date embedded
-    in the response:
-      - matches target      -> save it, done.
-      - earlier than target -> AMFI has confirmed (via its own data, not a
-                                guess) that target was a holiday/weekend —
-                                it returns the last working day's NAVs
-                                instead of an empty body. We save that date
-                                and stop; no further lookback needed.
-
-    This replaces the old "empty response = holiday" heuristic, which
-    misfired when AMFI blocked/rate-limited several requests in a row.
-    """
-    latest_path = _latest_snapshot_path()
-    if latest_path is None:
-        return {"ran": False, "ok": False, "reason": "no live snapshot yet"}
-
-    latest_nav_date_str = _get_file_nav_date(latest_path)
-    if not latest_nav_date_str:
-        return {"ran": False, "ok": False, "reason": "could not read NAV date from latest snapshot"}
-
-    latest_nav_date = datetime.strptime(latest_nav_date_str, "%Y-%m-%d").date()
-    target = get_last_business_day(latest_nav_date)
-
-    for i in range(max_lookback):
-        iso_date = target.strftime("%Y-%m-%d")
-
-        if not force and _have_snapshot_for_date(iso_date):
-            log.info("[AMFI-HIST] Already have %s — skipping fetch", iso_date)
-            return {"ran": False, "ok": True, "reason": f"already have {iso_date}", "date": iso_date}
-
-        if i > 0:
-            time.sleep(LOOKBACK_DELAY_SECONDS)
-
-        try:
-            result = download_business_day_nav(target, timeout=timeout)
-        except ValueError as e:
-            # Genuinely blocked/error response (not AMFI's format at all).
-            # Don't misread this as a holiday — stop and surface it.
-            log.error("[AMFI-HIST] Stopping lookback — %s", e)
-            return {"ran": True, "ok": False, "reason": str(e), "date": iso_date}
-        except requests.RequestException:
-            log.exception("[AMFI-HIST] Network error for %s", iso_date)
-            return {"ran": True, "ok": False, "reason": "network error", "date": iso_date}
-
-        actual_date = result["actual_date"]
-
-        if actual_date == iso_date:
-            # AMFI genuinely has data for the exact date we asked for.
-            saved = _save_nav_snapshot(result["text"], actual_date)
-            try:
-                nav_data_ingestion.ingest_nav_file_to_db(saved["path"])
-            except Exception as e:
-                log.exception("[NAV-DB] Ingestion error: %s", e)
-            return {"ran": True, "ok": True, "reason": "downloaded", **saved}
-
-        # AMFI returned real data, but dated earlier than requested — this
-        # is how AMFI signals "that date was a holiday/weekend": it just
-        # gives back the last working day's NAVs instead of an empty body.
-        # Trust their date and stop; no need to loop further ourselves.
-        log.info(
-            "[AMFI-HIST] Requested %s but AMFI returned data dated %s instead (holiday/weekend)",
-            iso_date, actual_date
-        )
-        if not force and _have_snapshot_for_date(actual_date):
-            log.info("[AMFI-HIST] Already have %s — skipping save", actual_date)
-            return {"ran": False, "ok": True, "reason": f"already have {actual_date}", "date": actual_date}
-
-        saved = _save_nav_snapshot(result["text"], actual_date)
-        try:
-            nav_data_ingestion.ingest_nav_file_to_db(saved["path"])
-        except Exception as e:
-            log.exception("[NAV-DB] Ingestion error: %s", e)
-        return {"ran": True, "ok": True, "reason": f"requested {iso_date}, saved actual {actual_date}", **saved}
-
-    return {"ran": True, "ok": False, "reason": f"no business day found within {max_lookback} days"}
-
-
-def sync_previous_business_day_nav_if_needed(force: bool = False) -> dict:
-    """
-    Runs at most once per calendar day — but ONLY skips if the previous
-    attempt actually succeeded (i.e. we now hold a snapshot for the
-    business day just before today's live NAV date). A failed attempt
-    (blocked response, network error, etc.) does NOT set the "done" flag,
-    so the very next rerun/page load retries automatically instead of
-    silently going dark until tomorrow — which is what was happening
-    before: the old gate latched on "did we try", not "did it work".
-    """
-    key = "prev_nav_done_for"
-    today = datetime.now().strftime("%Y-%m-%d")
-
-    if not force and st.session_state.get(key) == today:
-        return {"ran": False, "ok": True, "reason": "already synced successfully today"}
-
-    result = sync_previous_business_day_nav(force=force)
-
-    if result.get("ok"):
-        st.session_state[key] = today
-    else:
-        log.warning(
-            "[AMFI-HIST] Previous-day sync did not succeed (%s) — will retry on next rerun",
-            result.get("reason")
-        )
-
-    return result
-
-
-# ==================== PREVIOUS NAV MAP (single definition) ====================
-
-def _previous_snapshot_path(current_nav_date: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
-    _ensure_text_dir()
-    available = sorted(f for f in os.listdir(NAV_TEXT_DIR) if f.startswith("nav_") and f.endswith(".txt"))
-
-
-
-    if not available:
-        return None, None
-
-    if current_nav_date is None:
-        latest_path = os.path.join(NAV_TEXT_DIR, available[-1])
-        current_nav_date = _get_file_nav_date(latest_path)
-    if current_nav_date is None:
-        return None, None
-
-    for fname in reversed(available):
-        path = os.path.join(NAV_TEXT_DIR, fname)
-        file_nav_date = _get_file_nav_date(path)
-        if file_nav_date and file_nav_date < current_nav_date:
-            return path, file_nav_date
-    return None, None
-
-
-@st.cache_data(ttl=86400, show_spinner=False)
-def load_previous_nav_map() -> dict:
-    path, _ = _previous_snapshot_path()
-    if not path:
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            text = f.read()
-    except Exception:
-        return {}
-    nav_map, _, _ = _parse_nav_text(text)
-    # Flatten {isin: (nav, date)} -> {isin: nav_float}. Returning tuples here
-    # pollutes downstream diff columns with object dtype and crashes
-    # .nlargest()/.nsmallest() on the Dashboard.
-    flat = {}
-    for isin, val in nav_map.items():
-        try:
-            nav = float(val[0]) if isinstance(val, (tuple, list)) else float(val)
-            flat[isin] = nav
-        except (TypeError, ValueError, IndexError):
-            continue
-    return flat
-
-
-def get_previous_nav_date() -> Optional[str]:
-    _, date_str = _previous_snapshot_path()
-    return date_str
-
-
-# ==================== IN-MEMORY INDEX (loaded from file, not network) ====================
-
-class AMFINavIndex:
-    """
-    In-memory ISIN-keyed index, loaded from the saved file. Loaded once per
-    process (TTL-cached so repeated calls within the same run are free) and
-    NEVER triggers a network call itself — only reads NAV_TEXT_DIR.
-    """
-
-    _nav_by_isin: dict[str, tuple[float, str]] = {}
-    _amc_by_isin: dict[str, str] = {}
-    _records: list[dict] = []
-    _loaded_from: Optional[str] = None
-    _last_load: Optional[datetime] = None
-    _ttl_seconds: int = 3600  # re-read the file at most once/hour within a run
-
-    def _is_fresh(self) -> bool:
-        if not self._nav_by_isin or self._last_load is None:
-            return False
-        age = (datetime.now() - self._last_load).total_seconds()
-        return age < self._ttl_seconds
-
-    def load(self, force: bool = False) -> dict[str, tuple[float, str]]:
-        """Loads (or reloads) the index from the latest saved file on disk."""
-        if not force and self._is_fresh():
-            log.debug("[AMFI] In-memory index fresh (loaded from %s) — reusing", self._loaded_from)
-            return self._nav_by_isin
-
-        path = _latest_snapshot_path()
-        if path is None:
-            log.error("[AMFI] No saved NAV file found in '%s' (abs: %s). "
-                      "Run download_and_save_nav_if_needed() first, or check NAV_TEXT_DIR.",
-                      NAV_TEXT_DIR, os.path.abspath(NAV_TEXT_DIR))
-            return {}
-
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                text = f.read()
-        except Exception:
-            log.exception("[AMFI] Failed to read saved NAV file '%s'", path)
-            return {}
-
-        if not text.strip():
-            log.error("[AMFI] Saved NAV file '%s' is empty", path)
-            return {}
-
-        nav_map, amc_map, records = _parse_nav_text(text)
-        self._nav_by_isin = nav_map
-        self._amc_by_isin = amc_map
-        self._records = records
-        self._loaded_from = path
-        self._last_load = datetime.now()
-
-        log.info("[AMFI] Loaded index from '%s': %s ISINs (NAV), %s ISINs (AMC), %s records",
-                 path, len(nav_map), len(amc_map), len(records))
-        return nav_map
-
-    def get_nav(self, isin: str) -> Optional[tuple[float, str]]:
-        if not self._nav_by_isin:
-            self.load()
-        if not isin:
-            return None
-        return self._nav_by_isin.get(isin.strip().upper())
-
-    def get_amc(self, isin: str) -> str:
-        if not self._amc_by_isin:
-            self.load()
-        if not isin:
-            return ""
-        return self._amc_by_isin.get(isin.strip().upper(), "")
-
-    def get_records(self) -> list[dict]:
-        if not self._records:
-            self.load()
-        return self._records
-
-
-_amfi = AMFINavIndex()
-
-
-# ==================== PUBLIC LOOKUP API ====================
-
-def fetch_nav_by_isin(isin: str) -> Optional[tuple[float, str]]:
-    """Single ISIN → (nav, nav_date) lookup, reading from the file-backed index."""
-    isin = isin.strip().upper()
-    result = _amfi.get_nav(isin)
-    if result:
-        nav, nav_date = result
-        log.debug("ISIN %s | NAV: %s | Date: %s", isin, nav, nav_date)
-        return nav, nav_date
-    log.debug("No NAV found for ISIN: %s", isin)
-    return None
-
-
-def fetch_amc_by_isin(isin: str) -> str:
-    """Single ISIN → canonical AMC name lookup, reading from the file-backed index."""
-    return _amfi.get_amc(isin)
-
-
-def load_nav_dataframe() -> pd.DataFrame:
-    """
-    Full NAV+AMC table as a DataFrame with just isin, nav, nav_date, amc_name —
-    reads from the saved file via the in-memory index, no network call.
-    """
-    _amfi.load()
-    records = _amfi.get_records()
-    df = pd.DataFrame(records, columns=["isin", "scheme_code", "isin_payout",
-                                        "scheme_name", "amc_name", "category",
-                                        "nav", "nav_date"])
-    return df
 
 
 # ==================== FOLIO JOIN (CAMS/KFin × BSE × AMFI) ====================
@@ -3683,7 +2960,7 @@ def _warm_caches_once() -> bool:
     except Exception as e:
         log.warning("[WARMUP] clients warmup failed: %s", e)
     try:
-        _ = load_previous_nav_map()
+        _ = load_previous_nav_map_cached()
     except Exception as e:
         log.warning("[WARMUP] prev nav warmup failed: %s", e)
     log.info("[WARMUP] Done")
@@ -3802,7 +3079,8 @@ if mode == "📊 Dashboard":
             get_enriched_folio_nav_df.clear()
             get_folio_nav_summary_cached.clear()
             get_all_folios_with_isin_and_nav.clear()
-            load_previous_nav_map.clear()
+            load_previous_nav_map_cached.clear()
+            get_or_fetch_nav_for_date_cached.clear()
             _amfi.load(force=True)
             download_and_save_nav_if_needed(force=True)
             st.rerun()
@@ -3876,13 +3154,60 @@ if mode == "📊 Dashboard":
     if nav_ready and not folio_nav_df.empty:
         df_nav = folio_nav_df.copy()
         df_nav["investor_name"] = df_nav["investor_name"].str.upper().str.strip()
-        
+
+        # Debug toggle — body is evaluated later, once diff values exist
+        show_nav_debug = st.toggle(
+            "🐞 Debug: 1-Day Diff Diagnosis",
+            value=False,
+            key="nav_1d_debug_toggle",
+            help="Show diagnostics if 'Folios with NAV data' shows 0.",
+        )
+
         # Load previous day and week NAV data
-        prev_nav_map = load_previous_nav_map()
+        prev_nav_map = load_previous_nav_map_cached()
         prev_nav_date = get_previous_nav_date()
         
+        # ── Resolve the "previous NAV date" the same way the 1-week block does:
+        #    pick the date, then call get_or_fetch_nav_for_date() which handles
+        #    both local snapshots AND live AMFI fetches. This avoids the
+        #    _previous_snapshot_path() filename-vs-content sort bug entirely.
+        _current_date_str = (
+            df_nav["nav_date"].iloc[0]
+            if not df_nav.empty and "nav_date" in df_nav.columns
+            and not df_nav["nav_date"].empty
+            else None
+        )
+        if _current_date_str:
+            _current_date = pd.to_datetime(_current_date_str).date()
+        else:
+            _current_date = dt.now().date()
+
+        _prev_day = get_last_business_day(_current_date)
+        _prev_day_iso = _prev_day.strftime("%Y-%m-%d")
+
+        # ── Skip-back resolver: walks backward until a date covers our folios ──
+        _our_isins = set(
+            df_nav["isin"].dropna().astype(str).str.strip().str.upper().unique()
+        )
+        _baseline_iso, prev_nav_map, _skipback_diag = resolve_prev_nav_for_folios_cached(
+            _current_date.isoformat(),
+            tuple(sorted(_our_isins)),
+        )
+        prev_nav_date = _baseline_iso or "Unknown"
+
+        # Notify user if we had to skip past the immediate previous day
+        if _baseline_iso and _baseline_iso != _prev_day_iso:
+            st.info(
+                f"ℹ️ {_prev_day_iso} snapshot was incomplete for your folios — "
+                f"using **{_baseline_iso}** as the previous baseline "
+                f"({_skipback_diag['overlap']}/{len(_our_isins)} folio ISINs covered)."
+            )
+
         if not prev_nav_map:
-            st.warning("⚠️ Previous NAV snapshot not available for 1-day diff. Use Admin → Sync Previous Business Day NAV.")
+            st.warning(
+                f"⚠️ Could not load previous business day NAV for {_prev_day_iso}. "
+                "Use Admin → Sync Previous Business Day NAV."
+            )
         else:
             # ── Coerce all numeric inputs first. SQLite returns TEXT for any
             #    column that ever held a non-numeric value, which silently
@@ -3910,6 +3235,221 @@ if mode == "📊 Dashboard":
             ).astype("float64").fillna(0.0)
 
             total_1d_diff = df_nav["diff_1d_value"].sum()
+
+            # ═══════════════════════════════════════════════════════════════
+            # 🐞 DEBUG: 1-Day Diff Diagnosis
+            # ═══════════════════════════════════════════════════════════════
+            if show_nav_debug:
+                with st.expander("🐞 1-Day Diff Diagnostics", expanded=True):
+
+                    # ── Snapshot files on disk ──
+                    st.markdown("### 📁 Snapshot Files on Disk")
+                    _ensure_text_dir()
+                    _all_files = sorted(
+                        f for f in os.listdir(NAV_TEXT_DIR)
+                        if f.startswith("nav_") and f.endswith(".txt")
+                    )
+                    if not _all_files:
+                        st.error(f"❌ No snapshot files in `{NAV_TEXT_DIR}`. "
+                                 "Use Admin → Redownload NAV or "
+                                 "Admin → Sync Previous Business Day NAV.")
+                    else:
+                        _rows = []
+                        for _fn in _all_files:
+                            _fp = os.path.join(NAV_TEXT_DIR, _fn)
+                            _rows.append({
+                                "filename": _fn,
+                                "actual_nav_date": _get_file_nav_date(_fp),
+                                "size_kb": round(os.path.getsize(_fp) / 1024, 1),
+                            })
+                        st.dataframe(pd.DataFrame(_rows), hide_index=True)
+
+                    # ── Date resolution ──
+                    st.markdown("### 🎯 Date Resolution")
+                    st.write(f"**Current NAV date (from current file):** `{_current_date_str}`")
+                    st.write(f"**Previous business day computed:** `{_prev_day_iso}`")
+                    _p, _pd = _previous_snapshot_path()
+                    st.write(f"**`_previous_snapshot_path()` picked:** `{_p}`")
+                    st.write(f"**  → its actual NAV date:** `{_pd}`")
+
+                    # ── prev_nav_map contents ──
+                    st.markdown("### 📊 `prev_nav_map`")
+                    st.write(f"**Size:** {len(prev_nav_map)} ISINs")
+                    if prev_nav_map:
+                        st.write("**Sample:**", dict(list(prev_nav_map.items())[:5]))
+                    else:
+                        st.error("❌ `prev_nav_map` is EMPTY — this is why 1D diff = 0.")
+
+                    # ── Per-row lookup status ──
+                    st.markdown("### 🔍 Per-Row Lookup")
+                    _dbg = df_nav.copy()
+                    _dbg["isin_clean"] = _dbg["isin"].apply(
+                        lambda x: str(x).strip().upper() if pd.notna(x) else None
+                    )
+                    _dbg["lookup_status"] = _dbg["isin_clean"].apply(
+                        lambda i: "missing ISIN" if not i
+                        else ("not in prev_nav_map" if i not in prev_nav_map else "OK")
+                    )
+                    st.write("**Breakdown:**", _dbg["lookup_status"].value_counts().to_dict())
+
+                    _misses = _dbg[_dbg["lookup_status"] != "OK"]
+                    if not _misses.empty:
+                        st.write(f"**{len(_misses)} folio(s) failed:**")
+                        st.dataframe(
+                            _misses[["folio_id", "rta", "scheme_name",
+                                     "isin_clean", "lookup_status"]].head(30),
+                            hide_index=True,
+                        )
+
+                    # ── ISIN overlap analysis ──
+                    st.markdown("### 🎯 ISIN Overlap")
+                    _cur = set(_dbg["isin_clean"].dropna().unique())
+                    _prev = set(prev_nav_map.keys())
+                    _ov = _cur & _prev
+                    st.write(f"- Current unique ISINs: **{len(_cur)}**")
+                    st.write(f"- Previous map ISINs: **{len(_prev)}**")
+                    st.write(f"- **Overlap: {len(_ov)}**")
+
+                    if not _ov:
+                        st.error("❌ ZERO overlap between current ISINs and previous map.")
+                        st.write("**First 5 current ISINs:**", list(_cur)[:5])
+                        st.write("**First 5 previous ISINs:**", list(_prev)[:5])
+                        st.info(
+                            "Common causes:\n"
+                            "• Previous snapshot was fetched from the *history endpoint* "
+                            "and contains fewer schemes than the live file.\n"
+                            "• The prior-day file is only a partial AMFI file (check size — "
+                            "a full file is ~2-3 MB).\n"
+                            "• The stored `isin` in folio_nav_df comes from BSE scheme "
+                            "master but the previous AMFI file doesn't have that ISIN."
+                        )
+                    else:
+                        st.success(f"✅ {len(_ov)} ISINs matched — lookup is fine.")
+
+                    # ── Diff arithmetic check ──
+                    st.markdown("### 🧮 Diff Arithmetic")
+                    st.write(f"- Rows with `prev_nav_1d` populated: "
+                             f"**{df_nav['prev_nav_1d'].notna().sum()}**")
+                    st.write(f"- Rows with non-zero `diff_1d_value`: "
+                             f"**{(df_nav['diff_1d_value'].abs() > 0.01).sum()}**")
+                    st.write(f"- Sum of `diff_1d_value`: **{df_nav['diff_1d_value'].sum():.2f}**")
+
+                    # ── Today vs yesterday coverage (three-source diagnostic) ──
+                    st.markdown("### 📊 Today vs Yesterday File Coverage")
+                    try:
+                        _diag = diagnose_previous_day_coverage(
+                            _current_date_str, _prev_day_iso
+                        )
+                        st.dataframe(
+                            pd.DataFrame([
+                                {"Metric": "Today file exists",
+                                 "Value": str(_diag["today_file_exists"])},
+                                {"Metric": "Yesterday file exists",
+                                 "Value": str(_diag["prev_file_exists"])},
+                                {"Metric": "Today row count",
+                                 "Value": f"{_diag['today_count']:,}"},
+                                {"Metric": "Yesterday row count",
+                                 "Value": f"{_diag['prev_count']:,}"},
+                                {"Metric": "Coverage threshold",
+                                 "Value": f"{_diag['coverage_threshold']:,}"},
+                                {"Metric": "Yesterday is partial",
+                                 "Value": "⚠️ YES" if _diag["prev_is_partial"] else "✅ No"},
+                                {"Metric": "Today unique ISINs",
+                                 "Value": f"{_diag['today_isins']:,}"},
+                                {"Metric": "Yesterday unique ISINs",
+                                 "Value": f"{_diag['prev_isins']:,}"},
+                                {"Metric": "ISIN overlap",
+                                 "Value": f"{_diag['overlap']:,}"},
+                                {"Metric": "Missing from yesterday",
+                                 "Value": f"{_diag['missing_from_prev']:,}"},
+                                {"Metric": "DB fallback has data for yesterday",
+                                 "Value": "✅ Yes" if _diag["has_db_fallback"] else "❌ No"},
+                            ]),
+                            hide_index=True,
+                            width="stretch",
+                        )
+
+                        if _diag["prev_is_partial"]:
+                            st.error(
+                                f"⚠️ Yesterday's snapshot is PARTIAL "
+                                f"({_diag['prev_count']:,} rows vs today's "
+                                f"{_diag['today_count']:,}). This is the root "
+                                f"cause of the 0-diff issue."
+                            )
+                            st.info(
+                                "**Why this happens:** AMFI's history endpoint "
+                                "(`DownloadNAVHistoryReport_Po.aspx`) returns "
+                                "only ~900-1000 rows for any given date, while "
+                                "the live `NAVAll.txt` has ~18,000. When the "
+                                "cron job fetches yesterday's file from the "
+                                "history endpoint, it overwrites the full "
+                                "snapshot with a partial one.\n\n"
+                                "**How the fix handles it:**\n"
+                                "1. The `_save_nav_snapshot` guard now refuses "
+                                "to overwrite a richer existing file.\n"
+                                "2. `get_or_fetch_nav_for_date` checks coverage; "
+                                "if the disk file is partial, it tries AMFI "
+                                "history, then the DB.\n"
+                                "3. The DB fallback reads `nav_history` for "
+                                "the date directly — full coverage guaranteed "
+                                "if the date was ever ingested."
+                            )
+
+                            # Manual retry button
+                            if st.button(
+                                "🔁 Force refetch previous-day from DB fallback",
+                                key="force_refetch_prev_db",
+                                type="primary",
+                            ):
+                                get_or_fetch_nav_for_date_cached.clear()
+                                load_previous_nav_map_cached.clear()
+
+                                _fresh = nav_service.get_nav_for_date_from_db(_prev_day_iso)
+                                if _fresh:
+                                    st.success(
+                                        f"✅ Loaded {len(_fresh)} ISINs from DB for "
+                                        f"{_prev_day_iso}. Reloading dashboard…"
+                                    )
+                                    get_enriched_folio_nav_df.clear()
+                                    get_folio_nav_summary_cached.clear()
+                                    st.rerun()
+                                else:
+                                    st.error(
+                                        f"❌ No DB data for {_prev_day_iso} either. "
+                                        "The date may never have been ingested. "
+                                        "Check `sync_failures.log` or manually "
+                                        "run Admin → Sync Previous Business Day NAV."
+                                    )
+                    # ── Skip-back baseline candidates ──
+                    except Exception as _e:
+                        st.warning(f"Diagnostic failed: {_e}")
+
+                # ── Skip-back baseline candidates ──
+                st.markdown("### 🔄 Skip-Back Baseline Selection")
+                _sb = _skipback_diag if "_skipback_diag" in dir() else {}
+                _cands = _sb.get("candidates", [])
+                if _cands:
+                    st.dataframe(
+                        pd.DataFrame(_cands).rename(columns={
+                            "date": "Date",
+                            "rows": "Rows in Snapshot",
+                            "folio_overlap": "Folio ISINs Found",
+                            "needed": "Min Needed",
+                        }),
+                        hide_index=True,
+                        width="stretch",
+                    )
+                    if _sb.get("chosen"):
+                        st.success(
+                            f"✅ Baseline: **{_sb['chosen']}** "
+                            f"({_sb['overlap']}/{len(_our_isins)} folio ISINs)"
+                        )
+                    else:
+                        st.error(
+                            "❌ No date within lookback covered enough of your folios."
+                        )
+            # ═══════════════════════════════════════════════════════════════
+
             top_gainers_1d = df_nav[df_nav["diff_1d_value"] > 0].nlargest(5, "diff_1d_value")[
                 ["folio_id", "scheme_name", "current_nav", "prev_nav_1d", "units", "diff_1d_value", "rta"]
             ].copy()
@@ -3986,7 +3526,7 @@ if mode == "📊 Dashboard":
             seven_days_ago_iso = seven_days_ago.strftime("%Y-%m-%d")
             
             # Use their existing function - it handles local cache + AMFI fetch
-            nav_1wk_map = get_or_fetch_nav_for_date(seven_days_ago_iso)
+            nav_1wk_map = get_or_fetch_nav_for_date_cached(seven_days_ago_iso)
             
             if nav_1wk_map:
                 df_nav["prev_nav_1w"] = pd.to_numeric(
@@ -4926,85 +4466,112 @@ elif mode == "👥 Clients":
                 # Clean up temp column
                 holdings = holdings.drop(columns=['product_code_norm'], errors='ignore')
 
-                prev_nav_map = load_previous_nav_map()
+                # ═══════════════════════════════════════════════════════════
+                # 1-DAY DIFF — same skip-back + fallback logic as Dashboard
+                # ═══════════════════════════════════════════════════════════
 
-                # ── DEBUG: 1D Diff diagnosis (hidden behind toggle) ──
+                # ── Coerce numerics FIRST so nothing downstream sees TEXT ──
+                holdings["units"]       = pd.to_numeric(holdings["units"],       errors="coerce")
+                holdings["current_nav"] = pd.to_numeric(holdings["current_nav"], errors="coerce")
+
+                # ── Resolve the "previous" baseline the same way Dashboard does ──
+                _current_date_str = (
+                    holdings["nav_date"].iloc[0]
+                    if not holdings.empty and "nav_date" in holdings.columns
+                    and not holdings["nav_date"].empty
+                    else None
+                )
+                _current_date = (
+                    pd.to_datetime(_current_date_str).date()
+                    if _current_date_str else dt.now().date()
+                )
+                _prev_day_iso = get_last_business_day(_current_date).strftime("%Y-%m-%d")
+
+                _client_isins = set(
+                    holdings["isin"].dropna().astype(str).str.strip().str.upper().unique()
+                )
+                _baseline_iso, prev_nav_map, _skipback_diag = resolve_prev_nav_for_folios_cached(
+                    _current_date.isoformat(),
+                    tuple(sorted(_client_isins)),
+                )
+                prev_nav_date = _baseline_iso or "Unknown"
+
+                if _baseline_iso and _baseline_iso != _prev_day_iso:
+                    st.info(
+                        f"ℹ️ {_prev_day_iso} snapshot was incomplete for this client's folios — "
+                        f"using **{_baseline_iso}** as the previous baseline "
+                        f"({_skipback_diag['overlap']}/{len(_client_isins)} folio ISINs covered)."
+                    )
+                elif not _baseline_iso:
+                    st.warning(
+                        "⚠️ Could not resolve a previous-day baseline for this client's "
+                        "folios. 1-Day Diff will show 0. Use Admin → Sync Previous "
+                        "Business Day NAV."
+                    )
+
+                # ── Compute prev_nav per row ──
+                holdings["prev_nav"] = pd.to_numeric(
+                    holdings["isin"].apply(
+                        lambda i: prev_nav_map.get(str(i).strip().upper())
+                        if pd.notna(i) else None
+                    ),
+                    errors="coerce",
+                )
+                holdings["one_day_diff"] = (
+                    (holdings["current_nav"] - holdings["prev_nav"]) * holdings["units"]
+                ).astype("float64").fillna(0.0)
+
+                # ── Debug: same diagnostic layers as Dashboard ──
                 if show_debug:
                     with st.expander("🐞 DEBUG: 1-Day Diff", expanded=False):
-                        # Show which file was actually used
-                        path_used, date_used = _previous_snapshot_path()
-                        st.write(f"**Previous snapshot file:** `{path_used}`")
-                        st.write(f"**Previous NAV date:** {date_used or 'None'}")
-                        st.write(f"**Previous NAV map size:** {len(prev_nav_map)} ISINs")
 
-                        if not prev_nav_map:
-                            st.error("❌ prev_nav_map is EMPTY")
-                        else:
-                            sample = dict(list(prev_nav_map.items())[:3])
-                            st.write("**Sample prev_nav_map:**", sample)
-
-                        def _lookup_prev(isin):
-                            if pd.isna(isin):
-                                return None, "ISIN is NaN"
-                            s = str(isin).strip().upper()
-                            if not s:
-                                return None, "ISIN is empty string"
-                            val = prev_nav_map.get(s)
-                            if val is None:
-                                return None, f"ISIN {s} not in prev map"
-                            return val, "OK"
-
-                        prev_info = holdings["isin"].apply(_lookup_prev)
-                        holdings["_prev_nav"] = prev_info.apply(lambda x: x[0])
-                        holdings["_prev_reason"] = prev_info.apply(lambda x: x[1])
-
-                        reason_counts = holdings["_prev_reason"].value_counts().to_dict()
-                        st.write("**Prev NAV lookup reasons:**", reason_counts)
-
-                        missing_prev = holdings[
-                            holdings["current_nav"].notna() & holdings["_prev_nav"].isna()
-                        ]
-                        st.write(f"**Rows with current_nav but NO prev_nav:** {len(missing_prev)}")
-
-                        if not missing_prev.empty:
+                        # Layer 1: per-row lookup status
+                        holdings["_prev_reason"] = holdings.apply(
+                            lambda r:
+                                "missing ISIN" if pd.isna(r["isin"])
+                                else ("not in prev_nav_map"
+                                      if str(r["isin"]).strip().upper() not in prev_nav_map
+                                      else "OK"),
+                            axis=1,
+                        )
+                        st.write("**Lookup breakdown:**",
+                                 holdings["_prev_reason"].value_counts().to_dict())
+                        _misses = holdings[holdings["_prev_reason"] != "OK"]
+                        if not _misses.empty:
                             st.dataframe(
-                                missing_prev[["folio_id", "rta", "scheme_name", "isin", "current_nav", "_prev_reason"]]
-                                .head(20),
-                                hide_index=True
+                                _misses[["folio_id", "rta", "scheme_name",
+                                         "isin", "current_nav", "_prev_reason"]].head(20),
+                                hide_index=True,
                             )
 
-                        holdings["prev_nav"] = holdings["_prev_nav"]
-                        holdings["one_day_diff"] = (
-                            (holdings["current_nav"] - holdings["prev_nav"]) * holdings["units"]
-                        ).fillna(0.0)
+                        # Layer 2: ISIN overlap
+                        _cur = set(holdings["isin"].dropna().astype(str)
+                                                .str.strip().str.upper())
+                        _prev = set(prev_nav_map.keys())
+                        _ov = _cur & _prev
+                        st.write(f"- Client ISINs: **{len(_cur)}** | "
+                                 f"prev map ISINs: **{len(_prev)}** | "
+                                 f"**Overlap: {len(_ov)}**")
 
-                        holdings["_diff_reason"] = holdings.apply(lambda r:
-                            "missing prev_nav" if pd.isna(r["_prev_nav"]) and pd.notna(r["current_nav"])
-                            else ("zero units" if pd.isna(r.get("units")) or r.get("units", 0) == 0
-                            else ("nav unchanged" if r["current_nav"] == r["_prev_nav"]
-                            else "calculated")),
-                            axis=1
+                        # Layer 3: skip-back candidates
+                        st.markdown("**Skip-back candidates tried:**")
+                        st.dataframe(
+                            pd.DataFrame(_skipback_diag.get("candidates", []))
+                              .rename(columns={"date": "Date", "rows": "Rows",
+                                               "folio_overlap": "Client ISINs Found",
+                                               "needed": "Min Needed"}),
+                            hide_index=True,
                         )
 
-                        zero_diff = holdings[holdings["one_day_diff"].fillna(0) == 0]
-                        if not zero_diff.empty:
-                            st.write("**Why 1D Diff = 0:**", zero_diff["_diff_reason"].value_counts().to_dict())
-                            st.dataframe(
-                                zero_diff[["folio_id", "rta", "scheme_name", "isin", "current_nav", "prev_nav", "units",
-                                           "_diff_reason"]]
-                                .head(20),
-                                hide_index=True
-                            )
+                        # Layer 4: diff arithmetic
+                        st.write(f"- Rows with `prev_nav` populated: "
+                                 f"**{holdings['prev_nav'].notna().sum()}**")
+                        st.write(f"- Rows with non-zero `one_day_diff`: "
+                                 f"**{(holdings['one_day_diff'].abs() > 0.01).sum()}**")
+                        st.write(f"- Sum of `one_day_diff`: "
+                                 f"**{holdings['one_day_diff'].sum():.2f}**")
 
-                        holdings = holdings.drop(columns=["_prev_nav", "_prev_reason", "_diff_reason"], errors="ignore")
-                else:
-                    # Normal path: no debug prints, just compute silently
-                    holdings["prev_nav"] = holdings["isin"].apply(
-                        lambda i: prev_nav_map.get(str(i).strip().upper()) if pd.notna(i) else None
-                    )
-                    holdings["one_day_diff"] = (
-                        (holdings["current_nav"] - holdings["prev_nav"]) * holdings["units"]
-                    ).fillna(0.0)
+                        holdings = holdings.drop(columns=["_prev_reason"], errors="ignore")
 
 
 
@@ -5021,6 +4588,8 @@ elif mode == "👥 Clients":
                 h4, h5 = st.columns(2)
                 h4.metric("Total Folios", len(all_folios))
                 h5.metric("1-Day Diff", format_aum(total_one_day_diff))
+                if prev_nav_date and prev_nav_date != "Unknown":
+                    h5.caption(f"vs {prev_nav_date}")
 
                 holdings["gain_loss"] = holdings["nav_based_aum"] - holdings["file_aum"]
 
@@ -7009,7 +6578,7 @@ elif mode == "📊 Reports":
                 raw_nav_map = _amfi.load()
                 nav_map = {k: v[0] for k, v in raw_nav_map.items() if v[0] > 0}
             else:
-                nav_map = get_or_fetch_nav_for_date(val_iso)
+                nav_map = get_or_fetch_nav_for_date_cached(val_iso)
 
         if not nav_map:
             st.warning(
@@ -7848,7 +7417,7 @@ elif mode == "⚙️ Admin Panel":
             if result["ok"]:
                 get_enriched_folio_nav_df.clear()
                 get_folio_nav_summary_cached.clear()
-                load_previous_nav_map.clear()
+                load_previous_nav_map_cached.clear()
                 _amfi.load(force=True)
                 st.success(f"✅ {result['reason']}")
                 st.rerun()
@@ -7868,7 +7437,9 @@ elif mode == "⚙️ Admin Panel":
                   result = sync_previous_business_day_nav_if_needed(force=True)
               if result["ok"]:
                   get_enriched_folio_nav_df.clear()
-                  load_previous_nav_map.clear()
+                  load_previous_nav_map_cached.clear()
+                  get_or_fetch_nav_for_date_cached.clear()
+
                   st.success(f"✅ {result['reason']}")
                   st.rerun()
               else:
@@ -7919,7 +7490,8 @@ elif mode == "⚙️ Admin Panel":
         # Always clear data caches — even a partial run may have added rows
         get_enriched_folio_nav_df.clear()
         get_folio_nav_summary_cached.clear()
-        load_previous_nav_map.clear()
+        load_previous_nav_map_cached.clear()
+        get_or_fetch_nav_for_date_cached.clear()
         get_all_folios_with_isin_and_nav.clear()
         _amfi.load(force=True)
 

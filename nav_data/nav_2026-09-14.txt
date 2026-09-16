@@ -52,18 +52,6 @@ Bank of India Mutual Fund
 149415;;;BANK OF INDIA Overnight Fund Unclaimed Redemption Plan - Greater than 3 Years;1000.0000;14-Sep-2026
 149413;;;BANK OF INDIA Overnight Fund Unclaimed Redemption Plan - Upto 3 Years;1318.7656;14-Sep-2026
 
-Baroda BNP Paribas Mutual Fund
-147197;;INF955L01HW2;Baroda BNP Paribas Overnight Fund - Direct Plan - Daily IDCW;1000.0028;14-Sep-2026
-147196;INF955L01HV4;;Baroda BNP Paribas Overnight Fund - Direct Plan - Growth;1447.9900;14-Sep-2026
-147195;;INF955L01HX0;Baroda BNP Paribas Overnight Fund - Direct Plan - Weekly IDCW;1000.8943;14-Sep-2026
-149988;;;Baroda BNP Paribas Overnight Fund - Plan C - Unclaimed IDCW - Greater than 3 years;1000.0000;14-Sep-2026
-149991;;;Baroda BNP Paribas Overnight Fund - Plan C - Unclaimed IDCW - Up to 3 years;1299.1760;14-Sep-2026
-149990;;;Baroda BNP Paribas Overnight Fund - Plan C - Unclaimed Redemption - Greater than 3 years;1000.0000;14-Sep-2026
-149989;;;Baroda BNP Paribas Overnight Fund - Plan C - Unclaimed Redemption - Up to 3 years;1299.1456;14-Sep-2026
-147194;;INF955L01HT8;Baroda BNP Paribas Overnight Fund - Regular Plan - Daily IDCW;1000.0018;14-Sep-2026
-147193;INF955L01HS0;;Baroda BNP Paribas Overnight Fund - Regular Plan - Growth;1441.0174;14-Sep-2026
-147198;;INF955L01HU6;Baroda BNP Paribas Overnight Fund - Regular Plan - Weekly IDCW;1001.3734;14-Sep-2026
-
 DSP Mutual Fund
 146062;INF740KA1MC8;;DSP Overnight Fund - Direct Plan - Growth;1476.5153;14-Sep-2026
 146065;;INF740KA1OR2;DSP Overnight Fund - Direct Plan - IDCW - Daily;1000.0099;14-Sep-2026
@@ -293,16 +281,6 @@ Bank of India Mutual Fund
 111971;;INF761K01CO4;BANK OF INDIA Liquid Fund- Regular Plan- Daily IDCW;1005.0000;14-Sep-2026
 109254;INF761K01306;;BANK OF INDIA Liquid Fund- Regular Plan- Growth;3240.1183;14-Sep-2026
 109255;;INF761K01CP1;BANK OF INDIA Liquid Fund- Regular Plan- Weekly IDCW;1006.0770;14-Sep-2026
-
-Baroda BNP Paribas Mutual Fund
-119414;INF955L01AK2;;Baroda BNP Paribas LIQUID FUND - DIRECT PLAN - DAILY IDCW OPTION;1002.0849;14-Sep-2026
-119415;INF955L01AL0;;Baroda BNP Paribas LIQUID FUND - DIRECT PLAN - GROWTH OPTION;3275.1383;14-Sep-2026
-119416;INF251K01SL8;;Baroda BNP Paribas LIQUID FUND - DIRECT PLAN - WEEKLY IDCW OPTION;1221.6409;14-Sep-2026
-111707;INF955L01468;INF955L01476;Baroda BNP Paribas LIQUID FUND - Regular Plan - DAILY IDCW OPTION;1001.1996;14-Sep-2026
-111704;INF955L01484;;Baroda BNP Paribas LIQUID FUND - Regular Plan - GROWTH OPTION;3230.1522;14-Sep-2026
-111705;INF251K01SK0;INF955L01500;Baroda BNP Paribas LIQUID FUND - Regular Plan - WEEKLY IDCW OPTION;1001.5399;14-Sep-2026
-101408;INF955L01575;;Baroda BNP Paribas LIQUID FUND- Defunct Plan -Growth Option;4755.5373;14-Sep-2026
-101407;INF955L01559;INF955L01567;Baroda BNP Paribas LIQUID FUND-Defunct Plan- IDCW Option;3923.7322;14-Sep-2026
 
 Capitalmind Mutual Fund
 154011;INF226401034;;Capitalmind Liquid Fund - Direct-Growth;1053.7826;14-Sep-2026
@@ -601,6 +579,18 @@ Axis Mutual Fund
 146681;INF846K01O31;INF846K01O49;Axis Overnight Fund - Regular Plan - Monthly IDCW;1003.4487;14-Sep-2026
 146680;INF846K01O07;INF846K01O15;Axis Overnight Fund - Regular Plan - Weekly IDCW;1001.5725;14-Sep-2026
 
+Baroda BNP Paribas Mutual Fund
+147197;;INF955L01HW2;Baroda BNP Paribas Overnight Fund - Direct Plan - Daily IDCW;1000.0028;14-Sep-2026
+147196;INF955L01HV4;;Baroda BNP Paribas Overnight Fund - Direct Plan - Growth;1447.9900;14-Sep-2026
+147195;;INF955L01HX0;Baroda BNP Paribas Overnight Fund - Direct Plan - Weekly IDCW;1000.8943;14-Sep-2026
+149988;;;Baroda BNP Paribas Overnight Fund - Plan C - Unclaimed IDCW - Greater than 3 years;1000.0000;14-Sep-2026
+149991;;;Baroda BNP Paribas Overnight Fund - Plan C - Unclaimed IDCW - Up to 3 years;1299.1760;14-Sep-2026
+149990;;;Baroda BNP Paribas Overnight Fund - Plan C - Unclaimed Redemption - Greater than 3 years;1000.0000;14-Sep-2026
+149989;;;Baroda BNP Paribas Overnight Fund - Plan C - Unclaimed Redemption - Up to 3 years;1299.1456;14-Sep-2026
+147194;;INF955L01HT8;Baroda BNP Paribas Overnight Fund - Regular Plan - Daily IDCW;1000.0018;14-Sep-2026
+147193;INF955L01HS0;;Baroda BNP Paribas Overnight Fund - Regular Plan - Growth;1441.0174;14-Sep-2026
+147198;;INF955L01HU6;Baroda BNP Paribas Overnight Fund - Regular Plan - Weekly IDCW;1001.3734;14-Sep-2026
+
 Canara Robeco Mutual Fund
 147532;;INF760K01JN3;CANARA ROBECO OVERNIGHT FUND - DIRECT PLAN - DAILY IDCW (Reinvestment);1001.0012;14-Sep-2026
 147531;INF760K01JM5;;CANARA ROBECO OVERNIGHT FUND - DIRECT PLAN - GROWTH OPTION;1422.8395;14-Sep-2026
@@ -750,6 +740,16 @@ Axis Mutual Fund
 112713;INF846K01354;;Axis Liquid Fund - Retail Plan - Growth Option;2851.4615;14-Sep-2026
 112714;INF846K01396;INF846K01404;Axis Liquid Fund - Retail Plan - Monthly IDCW;1004.0093;14-Sep-2026
 112715;INF846K01370;INF846K01388;Axis Liquid Fund - Retail Plan - Weekly IDCW;1002.1569;14-Sep-2026
+
+Baroda BNP Paribas Mutual Fund
+119414;INF955L01AK2;;Baroda BNP Paribas LIQUID FUND - DIRECT PLAN - DAILY IDCW OPTION;1002.0849;14-Sep-2026
+119415;INF955L01AL0;;Baroda BNP Paribas LIQUID FUND - DIRECT PLAN - GROWTH OPTION;3275.1383;14-Sep-2026
+119416;INF251K01SL8;;Baroda BNP Paribas LIQUID FUND - DIRECT PLAN - WEEKLY IDCW OPTION;1221.6409;14-Sep-2026
+111707;INF955L01468;INF955L01476;Baroda BNP Paribas LIQUID FUND - Regular Plan - DAILY IDCW OPTION;1001.1996;14-Sep-2026
+111704;INF955L01484;;Baroda BNP Paribas LIQUID FUND - Regular Plan - GROWTH OPTION;3230.1522;14-Sep-2026
+111705;INF251K01SK0;INF955L01500;Baroda BNP Paribas LIQUID FUND - Regular Plan - WEEKLY IDCW OPTION;1001.5399;14-Sep-2026
+101408;INF955L01575;;Baroda BNP Paribas LIQUID FUND- Defunct Plan -Growth Option;4755.5373;14-Sep-2026
+101407;INF955L01559;INF955L01567;Baroda BNP Paribas LIQUID FUND-Defunct Plan- IDCW Option;3923.7322;14-Sep-2026
 
 Canara Robeco Mutual Fund
 118307;;INF760K01FS0;CANARA ROBECO LIQUID FUND - DIRECT PLAN - DAILY IDCW (Reinvestment);1005.5000;14-Sep-2026
