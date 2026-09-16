@@ -217,10 +217,10 @@ Tata Mutual Fund
  
 Trust Mutual Fund
  
-151320;INF0GCD01560;-;TRUSTMF CORPORATE BOND FUND;Direct Plan;Growth;1277.3075;11-Sep-2026
-151321;INF0GCD01586;INF0GCD01578;TRUSTMF CORPORATE BOND FUND;Direct Plan;Monthly IDCW;1188.1741;11-Sep-2026
-151322;INF0GCD01537;-;TRUSTMF CORPORATE BOND FUND;Regular Plan;Growth;1258.8691;11-Sep-2026
-151319;INF0GCD01552;INF0GCD01545;TRUSTMF CORPORATE BOND FUND;Regular Plan;Monthly IDCW;1167.8445;11-Sep-2026
+151320;INF0GCD01560;-;TRUSTMF CORPORATE BOND FUND;Direct Plan;Growth;1276.0027;15-Sep-2026
+151321;INF0GCD01586;INF0GCD01578;TRUSTMF CORPORATE BOND FUND;Direct Plan;Monthly IDCW;1186.9604;15-Sep-2026
+151322;INF0GCD01537;-;TRUSTMF CORPORATE BOND FUND;Regular Plan;Growth;1257.5321;15-Sep-2026
+151319;INF0GCD01552;INF0GCD01545;TRUSTMF CORPORATE BOND FUND;Regular Plan;Monthly IDCW;1166.6042;15-Sep-2026
  
 Union Mutual Fund
  
@@ -776,8 +776,8 @@ ITI Mutual Fund
  
 JM Financial Mutual Fund
  
-101549;INF192K01890;-;JM Liquid Fund - Bonus Option;Regular Plan;Bonus Option - Principal Units;24.5325;14-Sep-2026
-101078;-;INF192K01833;JM Liquid Fund - Daily Dividend Option;Regular Plan;Daily IDCW Option;10.4302;14-Sep-2026
+101549;INF192K01890;-;JM Liquid Fund - Bonus Option;Regular Plan;Bonus Option - Principal Units;24.5334;15-Sep-2026
+101078;-;INF192K01833;JM Liquid Fund - Daily Dividend Option;Regular Plan;Daily IDCW Option;10.4302;15-Sep-2026
  
 LIC Mutual Fund
  
@@ -811,16 +811,16 @@ Motilal Oswal Mutual Fund
  
 Navi Mutual Fund
  
-119163;-;INF959L01GK1;Navi Liquid Fund;Direct Plan;Daily IDCW - ReInvestment	;10.0129;14-Sep-2026
-119161;INF959L01GG9;INF959L01GH7;Navi Liquid Fund;Direct Plan;Monthly IDCW - Payout;10.0381;14-Sep-2026
-119162;INF959L01GI5;INF959L01GJ3;Navi Liquid Fund;Direct Plan;Weekly IDCW - Payout;10.0141;14-Sep-2026
-112645;-;INF959L01GM7;Navi Liquid Fund;Regular Plan;Daily IDCW;10.1153;14-Sep-2026
-112647;INF959L01GN5;INF959L01GO3;Navi Liquid Fund;Regular Plan;Monthly IDCW;10.0378;14-Sep-2026
-112646;INF959L01GP0;INF959L01GQ8;Navi Liquid Fund;Regular Plan;Weekly IDCW;10.0145;14-Sep-2026
-119164;INF959L01GF1;-;Navi Liquid Fund;;;30.6447;14-Sep-2026
-112636;INF959L01GL9;-;Navi Liquid Fund;Regular Plan;Growth Option;30.3547;14-Sep-2026
-140437;INF959L01CO2;-;Navi Liquid Fund;Direct Plan;Unclaimed Redemption and Dividend Plan less than 3 years;10;14-Sep-2026
-139386;INF959L01CN4;-;Navi Liquid Fund;Regular Plan;Unclaimed Redemption and Dividend Plan less than 3 years;30.5426;14-Sep-2026
+119163;-;INF959L01GK1;Navi Liquid Fund;Direct Plan;Daily IDCW - ReInvestment	;10.0129;15-Sep-2026
+119161;INF959L01GG9;INF959L01GH7;Navi Liquid Fund;Direct Plan;Monthly IDCW - Payout;10.0386;15-Sep-2026
+119162;INF959L01GI5;INF959L01GJ3;Navi Liquid Fund;Direct Plan;Weekly IDCW - Payout;10.0046;15-Sep-2026
+112645;-;INF959L01GM7;Navi Liquid Fund;Regular Plan;Daily IDCW;10.0129;15-Sep-2026
+112647;INF959L01GN5;INF959L01GO3;Navi Liquid Fund;Regular Plan;Monthly IDCW;10.0382;15-Sep-2026
+112646;INF959L01GP0;INF959L01GQ8;Navi Liquid Fund;Regular Plan;Weekly IDCW;10.005;15-Sep-2026
+119164;INF959L01GF1;-;Navi Liquid Fund;;;30.646;15-Sep-2026
+112636;INF959L01GL9;-;Navi Liquid Fund;Regular Plan;Growth Option;30.356;15-Sep-2026
+140437;INF959L01CO2;-;Navi Liquid Fund;Direct Plan;Unclaimed Redemption and Dividend Plan less than 3 years;10;15-Sep-2026
+139386;INF959L01CN4;-;Navi Liquid Fund;Regular Plan;Unclaimed Redemption and Dividend Plan less than 3 years;30.544;15-Sep-2026
  
 Nippon India Mutual Fund
  
@@ -970,14 +970,14 @@ The Wealth Company Mutual Fund
  
 Trust Mutual Fund
  
-148842;-;INF0GCD01263;TRUSTMF Liquid Fund;Direct Plan;Daily Income Distribution cum Capital Withdrawal;1296.8167;14-Sep-2026
-148841;INF0GCD01255;-;TRUSTMF Liquid Fund;Direct Plan;Growth;1375.6451;14-Sep-2026
-148839;INF0GCD01305;INF0GCD01297;TRUSTMF Liquid Fund;Direct Plan;Monthly Income Distribution cum Capital Withdrawal;1225.1813;14-Sep-2026
-148837;INF0GCD01271;INF0GCD01289;TRUSTMF Liquid Fund;Direct Plan;Weekly Income Distribution cum Capital Withdrawal;1251.9019;14-Sep-2026
-148834;-;INF0GCD01206;TRUSTMF Liquid Fund;Regular Plan;Daily Income Distribution cum Capital Withdrawal;1223.6016;14-Sep-2026
-148833;INF0GCD01198;-;TRUSTMF Liquid Fund;Regular Plan;Growth;1364.4489;14-Sep-2026
-148843;INF0GCD01248;INF0GCD01230;TRUSTMF Liquid Fund;Regular Plan;Monthly Income Distribution cum Capital Withdrawal;1215.1744;14-Sep-2026
-148836;INF0GCD01214;INF0GCD01222;TRUSTMF Liquid Fund;Regular Plan;Weekly Income Distribution cum Capital Withdrawal;1198.2414;14-Sep-2026
+148842;-;INF0GCD01263;TRUSTMF Liquid Fund;Direct Plan;Daily Income Distribution cum Capital Withdrawal;1296.8560;15-Sep-2026
+148841;INF0GCD01255;-;TRUSTMF Liquid Fund;Direct Plan;Growth;1375.7381;15-Sep-2026
+148839;INF0GCD01305;INF0GCD01297;TRUSTMF Liquid Fund;Direct Plan;Monthly Income Distribution cum Capital Withdrawal;1225.2641;15-Sep-2026
+148837;INF0GCD01271;INF0GCD01289;TRUSTMF Liquid Fund;Direct Plan;Weekly Income Distribution cum Capital Withdrawal;1251.9622;15-Sep-2026
+148834;-;INF0GCD01206;TRUSTMF Liquid Fund;Regular Plan;Daily Income Distribution cum Capital Withdrawal;1223.6096;15-Sep-2026
+148833;INF0GCD01198;-;TRUSTMF Liquid Fund;Regular Plan;Growth;1364.5355;15-Sep-2026
+148843;INF0GCD01248;INF0GCD01230;TRUSTMF Liquid Fund;Regular Plan;Monthly Income Distribution cum Capital Withdrawal;1215.2516;15-Sep-2026
+148836;INF0GCD01214;INF0GCD01222;TRUSTMF Liquid Fund;Regular Plan;Weekly Income Distribution cum Capital Withdrawal;1198.3732;15-Sep-2026
  
 Unifi Mutual Fund
  
@@ -1295,10 +1295,10 @@ Tata Mutual Fund
  
 Trust Mutual Fund
  
-150513;INF0GCD01503;-;TRUSTMF Money Market Fund;Direct Plan;Growth;1323.0409;11-Sep-2026
-150514;INF0GCD01529;INF0GCD01511;TRUSTMF Money Market Fund;Direct Plan;Monthly IDCW;1169.3807;11-Sep-2026
-150511;INF0GCD01479;-;TRUSTMF Money Market Fund;Regular Plan;Growth;1311.6831;11-Sep-2026
-150512;INF0GCD01495;INF0GCD01487;TRUSTMF Money Market Fund;Regular Plan;Monthly IDCW;1158.8497;11-Sep-2026
+150513;INF0GCD01503;-;TRUSTMF Money Market Fund;Direct Plan;Growth;1323.3025;15-Sep-2026
+150514;INF0GCD01529;INF0GCD01511;TRUSTMF Money Market Fund;Direct Plan;Monthly IDCW;1169.6125;15-Sep-2026
+150511;INF0GCD01479;-;TRUSTMF Money Market Fund;Regular Plan;Growth;1311.9004;15-Sep-2026
+150512;INF0GCD01495;INF0GCD01487;TRUSTMF Money Market Fund;Regular Plan;Monthly IDCW;1159.0422;15-Sep-2026
  
 Union Mutual Fund
  
@@ -1593,11 +1593,11 @@ Tata Mutual Fund
  
 Trust Mutual Fund
  
-149796;-;INF0GCD01461;TRUSTMF Overnight Fund;Direct Plan;Daily IDCW Reinvestment;1274.7810;14-Sep-2026
-149797;INF0GCD01453;-;TRUSTMF Overnight Fund;Direct Plan;Growth;1302.8728;14-Sep-2026
-149798;-;INF0GCD01446;TRUSTMF Overnight Fund;Regular Plan;Daily IDCW Reinvestment;1259.9771;14-Sep-2026
-149795;INF0GCD01438;-;TRUSTMF Overnight Fund;Regular Plan;Growth;1299.8146;14-Sep-2026
-153520;-;-;TRUSTMF Overnight Fund;Direct Plan;Unclaimed Redemption Plan Growth;1006.0288;14-Sep-2026
+149796;-;INF0GCD01461;TRUSTMF Overnight Fund;Direct Plan;Daily IDCW Reinvestment;1275.1010;15-Sep-2026
+149797;INF0GCD01453;-;TRUSTMF Overnight Fund;Direct Plan;Growth;1303.0352;15-Sep-2026
+149798;-;INF0GCD01446;TRUSTMF Overnight Fund;Regular Plan;Daily IDCW Reinvestment;1260.0642;15-Sep-2026
+149795;INF0GCD01438;-;TRUSTMF Overnight Fund;Regular Plan;Growth;1299.9747;15-Sep-2026
+153520;-;-;TRUSTMF Overnight Fund;Direct Plan;Unclaimed Redemption Plan Growth;1006.1544;15-Sep-2026
  
 Union Mutual Fund
  
@@ -2003,10 +2003,10 @@ Navi Mutual Fund
 135652;INF959L01CG8;-;Navi ELSS Tax Saver Fund;;;27.3012;10-Apr-2026
 135654;INF959L01CD5;-;Navi ELSS Tax Saver Fund;;;32.8119;10-Apr-2026
 135655;INF959L01CF0;-;Navi ELSS Tax Saver Fund;;;27.3039;10-Apr-2026
-151471;INF959L01GR6;-;NAVI ELSS TAX SAVER NIFTY50 INDEX FUND;Direct Plan;GROWTH;14.2417;11-Sep-2026
-151473;INF959L01GT2;-;NAVI ELSS TAX SAVER NIFTY50 INDEX FUND;Direct Plan;IDCW PAYOUT;14.248;11-Sep-2026
-151472;INF959L01GS4;-;NAVI ELSS TAX SAVER NIFTY50 INDEX FUND;Regular Plan;GROWTH;13.7831;11-Sep-2026
-151474;INF959L01GU0;-;NAVI ELSS TAX SAVER NIFTY50 INDEX FUND;Regular Plan;IDCW PAYOUT;13.8376;11-Sep-2026
+151471;INF959L01GR6;-;NAVI ELSS TAX SAVER NIFTY50 INDEX FUND;Direct Plan;GROWTH;14.0712;15-Sep-2026
+151473;INF959L01GT2;-;NAVI ELSS TAX SAVER NIFTY50 INDEX FUND;Direct Plan;IDCW PAYOUT;14.0775;15-Sep-2026
+151472;INF959L01GS4;-;NAVI ELSS TAX SAVER NIFTY50 INDEX FUND;Regular Plan;GROWTH;13.6169;15-Sep-2026
+151474;INF959L01GU0;-;NAVI ELSS TAX SAVER NIFTY50 INDEX FUND;Regular Plan;IDCW PAYOUT;13.6708;15-Sep-2026
  
 PGIM India Mutual Fund
  
@@ -2062,10 +2062,10 @@ Sundaram Mutual Fund
  
 Taurus Mutual Fund
  
-118866;INF044D01CG6;INF044D01AA3;Taurus ELSS Tax Saver Fund;Direct Plan;Growth;200.84;11-Sep-2026
-118867;INF044D01CH4;INF044D01CI2;Taurus ELSS Tax Saver Fund;Direct Plan;Income Distribution cum Capital Withdrawal;92.56;11-Sep-2026
-100480;INF044D01AC9;-;Taurus ELSS Tax Saver Fund;Regular Plan;Growth;182.95;11-Sep-2026
-108402;INF044D01997;-;Taurus ELSS Tax Saver Fund;Regular Plan;Income Distribution cum Capital Withdrawal;85.70;11-Sep-2026
+118866;INF044D01CG6;INF044D01AA3;Taurus ELSS Tax Saver Fund;Direct Plan;Growth;198.89;15-Sep-2026
+118867;INF044D01CH4;INF044D01CI2;Taurus ELSS Tax Saver Fund;Direct Plan;Income Distribution cum Capital Withdrawal;91.66;15-Sep-2026
+100480;INF044D01AC9;-;Taurus ELSS Tax Saver Fund;Regular Plan;Growth;181.16;15-Sep-2026
+108402;INF044D01997;-;Taurus ELSS Tax Saver Fund;Regular Plan;Income Distribution cum Capital Withdrawal;84.87;15-Sep-2026
  
 Union Mutual Fund
  
@@ -2085,10 +2085,10 @@ Open Ended Schemes(Equity Scheme - Flexi Cap Fund)
  
 Abakkus Mutual Fund
  
-154043;INF2JJD01136;-;Abakkus Flexi Cap Fund;Direct Plan;Growth;11.2630;11-Sep-2026
-154045;INF2JJD01128;INF2JJD01110;Abakkus Flexi Cap Fund;Direct Plan;IDCW;11.2680;11-Sep-2026
-154041;INF2JJD01169;-;Abakkus Flexi Cap Fund;Regular Plan;Growth;11.1520;11-Sep-2026
-154042;INF2JJD01151;INF2JJD01144;Abakkus Flexi Cap Fund;Regular Plan;IDCW;11.1530;11-Sep-2026
+154043;INF2JJD01136;-;Abakkus Flexi Cap Fund;Direct Plan;Growth;10.9980;15-Sep-2026
+154045;INF2JJD01128;INF2JJD01110;Abakkus Flexi Cap Fund;Direct Plan;IDCW;11.0020;15-Sep-2026
+154041;INF2JJD01169;-;Abakkus Flexi Cap Fund;Regular Plan;Growth;10.8880;15-Sep-2026
+154042;INF2JJD01151;INF2JJD01144;Abakkus Flexi Cap Fund;Regular Plan;IDCW;10.8880;15-Sep-2026
  
 Aditya Birla Sun Life Mutual Fund
  
@@ -2181,18 +2181,18 @@ Motilal Oswal Mutual Fund
  
 Navi Mutual Fund
  
-143793;INF959L01DT9;-;Navi Flexi Cap Fund;Direct Plan;Growth;29.0493;11-Sep-2026
-143798;INF959L01EC3;INF959L01ED1;Navi Flexi Cap Fund;Direct Plan;IDCW PAYOUT;28.8254;11-Sep-2026
-143797;INF959L01EA7;INF959L01EB5;Navi Flexi Cap Fund;Direct Plan;IDCW PAYOUT;28.8262;11-Sep-2026
-143796;INF959L01DW3;INF959L01DX1;Navi Flexi Cap Fund;Direct Plan;IDCW PAYOUT;28.8201;11-Sep-2026
-143792;INF959L01DU7;INF959L01DV5;Navi Flexi Cap Fund;Direct Plan;IDCW PAYOUT;28.7886;11-Sep-2026
-143791;INF959L01DY9;INF959L01DZ6;Navi Flexi Cap Fund;Direct Plan;IDCW PAYOUT;28.849;11-Sep-2026
-143787;INF959L01EE9;-;Navi Flexi Cap Fund;Regular Plan;Growth;24.7772;11-Sep-2026
-143795;INF959L01EN0;INF959L01EO8;Navi Flexi Cap Fund;Regular Plan;IDCW PAYOUT;24.7779;11-Sep-2026
-143794;INF959L01EL4;INF959L01EM2;Navi Flexi Cap Fund;Regular Plan;IDCW PAYOUT;24.7812;11-Sep-2026
-143790;INF959L01EH2;INF959L01EI0;Navi Flexi Cap Fund;Regular Plan;IDCW PAYOUT;24.7871;11-Sep-2026
-143789;INF959L01EF6;INF959L01EG4;Navi Flexi Cap Fund;Regular Plan;IDCW PAYOUT;24.7809;11-Sep-2026
-143788;INF959L01EJ8;INF959L01EK6;Navi Flexi Cap Fund;Regular Plan;DCW PAYOUT;24.7746;11-Sep-2026
+143793;INF959L01DT9;-;Navi Flexi Cap Fund;Direct Plan;Growth;28.4882;15-Sep-2026
+143798;INF959L01EC3;INF959L01ED1;Navi Flexi Cap Fund;Direct Plan;IDCW PAYOUT;28.2686;15-Sep-2026
+143797;INF959L01EA7;INF959L01EB5;Navi Flexi Cap Fund;Direct Plan;IDCW PAYOUT;28.2694;15-Sep-2026
+143796;INF959L01DW3;INF959L01DX1;Navi Flexi Cap Fund;Direct Plan;IDCW PAYOUT;28.2634;15-Sep-2026
+143792;INF959L01DU7;INF959L01DV5;Navi Flexi Cap Fund;Direct Plan;IDCW PAYOUT;28.2325;15-Sep-2026
+143791;INF959L01DY9;INF959L01DZ6;Navi Flexi Cap Fund;Direct Plan;IDCW PAYOUT;28.2917;15-Sep-2026
+143787;INF959L01EE9;-;Navi Flexi Cap Fund;Regular Plan;Growth;24.2936;15-Sep-2026
+143795;INF959L01EN0;INF959L01EO8;Navi Flexi Cap Fund;Regular Plan;IDCW PAYOUT;24.2943;15-Sep-2026
+143794;INF959L01EL4;INF959L01EM2;Navi Flexi Cap Fund;Regular Plan;IDCW PAYOUT;24.2976;15-Sep-2026
+143790;INF959L01EH2;INF959L01EI0;Navi Flexi Cap Fund;Regular Plan;IDCW PAYOUT;24.3033;15-Sep-2026
+143789;INF959L01EF6;INF959L01EG4;Navi Flexi Cap Fund;Regular Plan;IDCW PAYOUT;24.2972;15-Sep-2026
+143788;INF959L01EJ8;INF959L01EK6;Navi Flexi Cap Fund;Regular Plan;DCW PAYOUT;24.291;15-Sep-2026
  
 Nippon India Mutual Fund
  
@@ -2268,10 +2268,10 @@ Tata Mutual Fund
  
 Taurus Mutual Fund
  
-118884;INF044D01BV7;INF044D01BW5;Taurus Flexi Cap Fund;Direct Plan;Income Distribution cum Capital Withdrawal;126.11;11-Sep-2026
-118883;INF044D01BU9;-;Taurus Flexi Cap Fund;Direct Plan;Growth;249.96;11-Sep-2026
-100476;INF044D01989;-;Taurus Flexi Cap Fund;Regular Plan;Growth;240.08;11-Sep-2026
-111640;INF044D01955;INF044D01963;Taurus Flexi Cap Fund;Regular Plan;Income Distribution cum Capital Withdrawal;116.50;11-Sep-2026
+118884;INF044D01BV7;INF044D01BW5;Taurus Flexi Cap Fund;Direct Plan;Income Distribution cum Capital Withdrawal;124.06;15-Sep-2026
+118883;INF044D01BU9;-;Taurus Flexi Cap Fund;Direct Plan;Growth;245.89;15-Sep-2026
+100476;INF044D01989;-;Taurus Flexi Cap Fund;Regular Plan;Growth;236.17;15-Sep-2026
+111640;INF044D01955;INF044D01963;Taurus Flexi Cap Fund;Regular Plan;Income Distribution cum Capital Withdrawal;114.61;15-Sep-2026
  
 The Wealth Company Mutual Fund
  
@@ -2282,10 +2282,10 @@ The Wealth Company Mutual Fund
  
 Trust Mutual Fund
  
-152584;INF0GCD01743;-;TRUSTMF Flexi Cap Fund;Direct Plan;Growth;12.94;11-Sep-2026
-152585;INF0GCD01750;INF0GCD01768;TRUSTMF Flexi Cap Fund;Direct Plan;IDCW;12.93;11-Sep-2026
-152582;INF0GCD01719;-;TRUSTMF Flexi Cap Fund;Regular Plan;Growth;12.44;11-Sep-2026
-152583;INF0GCD01727;INF0GCD01735;TRUSTMF Flexi Cap Fund;Regular Plan;IDCW;12.44;11-Sep-2026
+152584;INF0GCD01743;-;TRUSTMF Flexi Cap Fund;Direct Plan;Growth;12.58;15-Sep-2026
+152585;INF0GCD01750;INF0GCD01768;TRUSTMF Flexi Cap Fund;Direct Plan;IDCW;12.56;15-Sep-2026
+152582;INF0GCD01719;-;TRUSTMF Flexi Cap Fund;Regular Plan;Growth;12.09;15-Sep-2026
+152583;INF0GCD01727;INF0GCD01735;TRUSTMF Flexi Cap Fund;Regular Plan;IDCW;12.09;15-Sep-2026
  
 Unifi Mutual Fund
  
@@ -2440,8 +2440,8 @@ Open Ended Schemes(Equity Scheme - Large & Mid Cap Fund)
  
 Abakkus Mutual Fund
  
-154477;INF2JJD01193;-;Abakkus Large & Mid Cap Fund;Direct Plan;Growth;9.8760;11-Sep-2026
-154478;INF2JJD01201;-;Abakkus Large & Mid Cap Fund;Regular Plan;Growth;9.8590;11-Sep-2026
+154477;INF2JJD01193;-;Abakkus Large & Mid Cap Fund;Direct Plan;Growth;9.6700;15-Sep-2026
+154478;INF2JJD01201;-;Abakkus Large & Mid Cap Fund;Regular Plan;Growth;9.6530;15-Sep-2026
  
 Aditya Birla Sun Life Mutual Fund
  
@@ -2530,14 +2530,14 @@ Motilal Oswal Mutual Fund
  
 Navi Mutual Fund
  
-141414;INF959L01CR5;INF959L01CS3;Navi Large & Midcap Fund;Direct Plan;Annual IDCW Payout;43.5438;11-Sep-2026
-141415;INF959L01CP9;INF959L01CQ7;Navi Large & Midcap Fund;Direct Plan;Half Yearly IDCW Payout;43.5823;11-Sep-2026
-135679;INF959L01CI4;INF959L01CJ2;Navi Large & Midcap Fund;Direct Plan;IDCW Payout;43.6937;11-Sep-2026
-141411;INF959L01CV7;INF959L01CW5;Navi Large & Midcap Fund;Regular Plan;Annual IDCW payout;37.2567;11-Sep-2026
-141410;INF959L01CT1;INF959L01CU9;Navi Large & Midcap Fund;Regular Plan;Half Yearly IDCW Payout	;36.2334;11-Sep-2026
-135680;INF959L01CL8;INF959L01CM6;Navi Large & Midcap Fund;Regular Plan;Normal IDCW Payout;36.2201;11-Sep-2026
-135677;INF959L01CH6;-;Navi Large & Midcap Fund;Direct Plan;Growth;44.2272;11-Sep-2026
-135678;INF959L01CK0;-;Navi Large & Midcap Fund;Regular Plan;Growth;36.2243;11-Sep-2026
+141414;INF959L01CR5;INF959L01CS3;Navi Large & Midcap Fund;Direct Plan;Annual IDCW Payout;42.7531;15-Sep-2026
+141415;INF959L01CP9;INF959L01CQ7;Navi Large & Midcap Fund;Direct Plan;Half Yearly IDCW Payout;42.7909;15-Sep-2026
+135679;INF959L01CI4;INF959L01CJ2;Navi Large & Midcap Fund;Direct Plan;IDCW Payout;42.9002;15-Sep-2026
+141411;INF959L01CV7;INF959L01CW5;Navi Large & Midcap Fund;Regular Plan;Annual IDCW payout;36.5725;15-Sep-2026
+141410;INF959L01CT1;INF959L01CU9;Navi Large & Midcap Fund;Regular Plan;Half Yearly IDCW Payout	;35.568;15-Sep-2026
+135680;INF959L01CL8;INF959L01CM6;Navi Large & Midcap Fund;Regular Plan;Normal IDCW Payout;35.5549;15-Sep-2026
+135677;INF959L01CH6;-;Navi Large & Midcap Fund;Direct Plan;Growth;43.424;15-Sep-2026
+135678;INF959L01CK0;-;Navi Large & Midcap Fund;Regular Plan;Growth;35.5591;15-Sep-2026
  
 Nippon India Mutual Fund
  
@@ -2780,10 +2780,10 @@ Tata Mutual Fund
  
 Taurus Mutual Fund
  
-118870;INF044D01BX3;-;Taurus Large Cap Fund;Direct Plan;Growth;177.42;11-Sep-2026
-118871;INF044D01BY1;INF044D01BZ8;Taurus Large Cap Fund;Direct Plan;Income Distribution cum Capital Withdrawal;78.14;11-Sep-2026
-101209;INF044D01773;-;Taurus Large Cap Fund;Regular Plan;Growth;167.30;11-Sep-2026
-108403;INF044D01740;INF044D01757;Taurus Large Cap Fund;Regular Plan;Income Distribution cum Capital Withdrawal;73.29;11-Sep-2026
+118870;INF044D01BX3;-;Taurus Large Cap Fund;Direct Plan;Growth;174.44;15-Sep-2026
+118871;INF044D01BY1;INF044D01BZ8;Taurus Large Cap Fund;Direct Plan;Income Distribution cum Capital Withdrawal;76.83;15-Sep-2026
+101209;INF044D01773;-;Taurus Large Cap Fund;Regular Plan;Growth;164.49;15-Sep-2026
+108403;INF044D01740;INF044D01757;Taurus Large Cap Fund;Regular Plan;Income Distribution cum Capital Withdrawal;72.06;15-Sep-2026
  
 Union Mutual Fund
  
@@ -2923,15 +2923,15 @@ Tata Mutual Fund
  
 Taurus Mutual Fund
  
-118872;INF044D01CA9;-;Taurus Mid Cap Fund;Direct Plan;Growth;135.98;11-Sep-2026
-118873;INF044D01CB7;INF044D01CC5;Taurus Mid Cap Fund;Direct Plan;Income Distribution cum Capital Withdrawal;120.79;11-Sep-2026
-100477;INF044D01815;-;Taurus Mid Cap Fund;Regular Plan;Growth;128.13;11-Sep-2026
-111642;INF044D01781;INF044D01799;Taurus Mid Cap Fund;Regular Plan;Income Distribution cum Capital Withdrawal;114.21;11-Sep-2026
+118872;INF044D01CA9;-;Taurus Mid Cap Fund;Direct Plan;Growth;133.26;15-Sep-2026
+118873;INF044D01CB7;INF044D01CC5;Taurus Mid Cap Fund;Direct Plan;Income Distribution cum Capital Withdrawal;118.38;15-Sep-2026
+100477;INF044D01815;-;Taurus Mid Cap Fund;Regular Plan;Growth;125.56;15-Sep-2026
+111642;INF044D01781;INF044D01799;Taurus Mid Cap Fund;Regular Plan;Income Distribution cum Capital Withdrawal;111.92;15-Sep-2026
  
 Trust Mutual Fund
  
-154210;INF0GCD01875;-;TRUSTMF MID CAP FUND;Direct Plan;Growth;12.39;11-Sep-2026
-154211;INF0GCD01883;-;TRUSTMF MID CAP FUND;Regular Plan;Growth;12.28;11-Sep-2026
+154210;INF0GCD01875;-;TRUSTMF MID CAP FUND;Direct Plan;Growth;12.04;15-Sep-2026
+154211;INF0GCD01883;-;TRUSTMF MID CAP FUND;Regular Plan;Growth;11.93;15-Sep-2026
  
 Union Mutual Fund
  
@@ -3081,8 +3081,8 @@ Tata Mutual Fund
  
 Trust Mutual Fund
  
-153644;INF0GCD01834;-;TRUSTMF MULTI CAP FUND;Direct Plan;Growth;12.19;11-Sep-2026
-153645;INF0GCD01842;-;TRUSTMF MULTI CAP FUND;Regular Plan;Growth;11.94;11-Sep-2026
+153644;INF0GCD01834;-;TRUSTMF MULTI CAP FUND;Direct Plan;Growth;11.83;15-Sep-2026
+153645;INF0GCD01842;-;TRUSTMF MULTI CAP FUND;Regular Plan;Growth;11.58;15-Sep-2026
  
 Union Mutual Fund
  
@@ -3843,20 +3843,20 @@ Tata Mutual Fund
  
 Taurus Mutual Fund
  
-118868;INF044D01CN2;-;Taurus Banking & Financial Services Fund;Direct Plan;Growth;58.87;11-Sep-2026
-118869;INF044D01CO0;INF044D01CP7;Taurus Banking & Financial Services Fund;Direct Plan;Income Distribution cum Capital Withdrawal;58.19;11-Sep-2026
-117312;INF044D01BI4;-;Taurus Banking & Financial Services Fund;Regular Plan;Growth;52.23;11-Sep-2026
-117313;INF044D01BJ2;INF044D01BK0;Taurus Banking & Financial Services Fund;Regular Plan;Income Distribution cum Capital Withdrawal;46.76;11-Sep-2026
-111903;INF044D01823;-;Taurus Ethical Fund;Regular Plan;Bonus;124.61;11-Sep-2026
-118876;INF044D01CJ0;-;Taurus Ethical Fund;Direct Plan;Growth;142.70;11-Sep-2026
-118877;INF044D01CK8;INF044D01CL6;Taurus Ethical Fund;Direct Plan;Income Distribution cum Capital Withdrawal;95.79;11-Sep-2026
-111787;INF044D01864;-;Taurus Ethical Fund;Regular Plan;Growth;124.63;11-Sep-2026
-111788;INF044D01831;INF044D01849;Taurus Ethical Fund;Regular Plan;Income Distribution cum Capital Withdrawal;84.25;11-Sep-2026
-118878;INF044D01CM4;-;Taurus Ethical Fund;Direct Plan;Bonus;46.76;11-Sep-2026
-118879;INF044D01CD3;-;Taurus Infrastructure Fund;Direct Plan;Growth;66.36;11-Sep-2026
-118880;INF044D01CE1;INF044D01CF8;Taurus Infrastructure Fund;Direct Plan;Income Distribution cum Capital Withdrawal;61.81;11-Sep-2026
-105417;INF044D01906;-;Taurus Infrastructure Fund;Regular Plan;Growth;61.46;11-Sep-2026
-105418;INF044D01872;INF044D01880;Taurus Infrastructure Fund;Regular Plan;Income Distribution cum Capital Withdrawal;57.72;11-Sep-2026
+118868;INF044D01CN2;-;Taurus Banking & Financial Services Fund;Direct Plan;Growth;57.79;15-Sep-2026
+118869;INF044D01CO0;INF044D01CP7;Taurus Banking & Financial Services Fund;Direct Plan;Income Distribution cum Capital Withdrawal;57.13;15-Sep-2026
+117312;INF044D01BI4;-;Taurus Banking & Financial Services Fund;Regular Plan;Growth;51.27;15-Sep-2026
+117313;INF044D01BJ2;INF044D01BK0;Taurus Banking & Financial Services Fund;Regular Plan;Income Distribution cum Capital Withdrawal;45.90;15-Sep-2026
+111903;INF044D01823;-;Taurus Ethical Fund;Regular Plan;Bonus;122.97;15-Sep-2026
+118876;INF044D01CJ0;-;Taurus Ethical Fund;Direct Plan;Growth;140.84;15-Sep-2026
+118877;INF044D01CK8;INF044D01CL6;Taurus Ethical Fund;Direct Plan;Income Distribution cum Capital Withdrawal;94.54;15-Sep-2026
+111787;INF044D01864;-;Taurus Ethical Fund;Regular Plan;Growth;122.99;15-Sep-2026
+111788;INF044D01831;INF044D01849;Taurus Ethical Fund;Regular Plan;Income Distribution cum Capital Withdrawal;83.14;15-Sep-2026
+118878;INF044D01CM4;-;Taurus Ethical Fund;Direct Plan;Bonus;46.16;15-Sep-2026
+118879;INF044D01CD3;-;Taurus Infrastructure Fund;Direct Plan;Growth;65.28;15-Sep-2026
+118880;INF044D01CE1;INF044D01CF8;Taurus Infrastructure Fund;Direct Plan;Income Distribution cum Capital Withdrawal;60.80;15-Sep-2026
+105417;INF044D01906;-;Taurus Infrastructure Fund;Regular Plan;Growth;60.45;15-Sep-2026
+105418;INF044D01872;INF044D01880;Taurus Infrastructure Fund;Regular Plan;Income Distribution cum Capital Withdrawal;56.78;15-Sep-2026
  
 The Wealth Company Mutual Fund
  
@@ -3907,8 +3907,8 @@ Open Ended Schemes(Equity Scheme - Small Cap Fund)
  
 Abakkus Mutual Fund
  
-154215;INF2JJD01177;-;Abakkus Small Cap Fund;Direct Plan;Growth;12.6980;11-Sep-2026
-154214;INF2JJD01185;-;Abakkus Small Cap Fund;Regular Plan;Growth;12.6140;11-Sep-2026
+154215;INF2JJD01177;-;Abakkus Small Cap Fund;Direct Plan;Growth;12.3390;15-Sep-2026
+154214;INF2JJD01185;-;Abakkus Small Cap Fund;Regular Plan;Growth;12.2570;15-Sep-2026
  
 Aditya Birla Sun Life Mutual Fund
  
@@ -4066,10 +4066,10 @@ The Wealth Company Mutual Fund
  
 Trust Mutual Fund
  
-152939;INF0GCD01800;-;TRUSTMF SMALL CAP FUND;Direct Plan;Growth;14.24;11-Sep-2026
-152937;INF0GCD01826;INF0GCD01818;TRUSTMF SMALL CAP FUND;Direct Plan;IDCW;14.24;11-Sep-2026
-152938;INF0GCD01792;INF0GCD01784;TRUSTMF SMALL CAP FUND;Regular Plan;IDCW;13.81;11-Sep-2026
-152940;INF0GCD01776;-;TRUSTMF SMALL CAP FUND;Regular Plan;Growth;13.81;11-Sep-2026
+152939;INF0GCD01800;-;TRUSTMF SMALL CAP FUND;Direct Plan;Growth;13.69;15-Sep-2026
+152937;INF0GCD01826;INF0GCD01818;TRUSTMF SMALL CAP FUND;Direct Plan;IDCW;13.69;15-Sep-2026
+152938;INF0GCD01792;INF0GCD01784;TRUSTMF SMALL CAP FUND;Regular Plan;IDCW;13.28;15-Sep-2026
+152940;INF0GCD01776;-;TRUSTMF SMALL CAP FUND;Regular Plan;Growth;13.27;15-Sep-2026
  
 Union Mutual Fund
  
@@ -4260,10 +4260,10 @@ Bank of India Mutual Fund
  
 Canara Robeco Mutual Fund
  
-100593;INF760K01084;INF760K01092;Canara Robeco ELSS - Tax Saver Fund;Regular Plan;IDCW (Payout);46.9600;11-Sep-2026
-118285;INF760K01EL8;-;Canara Robeco ELSS - Tax Saver Fund;Direct Plan;GROWTH OPTION;198.7600;11-Sep-2026
-118286;INF760K01EJ2;INF760K01EK0;Canara Robeco ELSS - Tax Saver Fund;Direct Plan;IDCW (Payout);77.0700;11-Sep-2026
-111722;INF760K01100;-;Canara Robeco ELSS - Tax Saver Fund;Regular Plan;GROWTH OPTION;175.5600;11-Sep-2026
+100593;INF760K01084;INF760K01092;Canara Robeco ELSS - Tax Saver Fund;Regular Plan;IDCW (Payout);46.0800;15-Sep-2026
+118285;INF760K01EL8;-;Canara Robeco ELSS - Tax Saver Fund;Direct Plan;GROWTH OPTION;195.0700;15-Sep-2026
+118286;INF760K01EJ2;INF760K01EK0;Canara Robeco ELSS - Tax Saver Fund;Direct Plan;IDCW (Payout);75.6400;15-Sep-2026
+111722;INF760K01100;-;Canara Robeco ELSS - Tax Saver Fund;Regular Plan;GROWTH OPTION;172.2800;15-Sep-2026
  
 DSP Mutual Fund
  
@@ -4281,10 +4281,10 @@ Edelweiss Mutual Fund
  
 Groww Mutual Fund
  
-141807;INF666M01DL5;-;Groww ELSS Tax Saver Fund;Direct Plan;Income Distribution cum capital withdrawal;21.6;11-Sep-2026
-141808;INF666M01DK7;-;Groww ELSS Tax Saver Fund;Direct Plan;Growth;21.64;11-Sep-2026
-141810;INF666M01DO9;-;Groww ELSS Tax Saver Fund;Regular Plan;Income Distribution cum capital withdrawal;18.75;11-Sep-2026
-141862;INF666M01DN1;-;Groww ELSS Tax Saver Fund;Regular Plan;Growth;18.75;11-Sep-2026
+141807;INF666M01DL5;-;Groww ELSS Tax Saver Fund;Direct Plan;Income Distribution cum capital withdrawal;21.21;15-Sep-2026
+141808;INF666M01DK7;-;Groww ELSS Tax Saver Fund;Direct Plan;Growth;21.25;15-Sep-2026
+141810;INF666M01DO9;-;Groww ELSS Tax Saver Fund;Regular Plan;Income Distribution cum capital withdrawal;18.42;15-Sep-2026
+141862;INF666M01DN1;-;Groww ELSS Tax Saver Fund;Regular Plan;Growth;18.41;15-Sep-2026
  
 HDFC Mutual Fund
  
@@ -4316,10 +4316,10 @@ Invesco Mutual Fund
  
 JM Financial Mutual Fund
  
-120494;INF192K01CE3;-;JM ELSS - Tax Saver Fund;Direct Plan;Growth Option;60.9888;11-Sep-2026
-120493;INF192K01CD5;-;JM ELSS - Tax Saver Fund;Direct Plan;IDCW Option;59.4851;11-Sep-2026
-107288;INF192K01650;-;JM ELSS - Tax Saver Fund;Regular Plan;Growth Option;52.5942;11-Sep-2026
-107287;INF192K01643;-;JM ELSS - Tax Saver Fund;Regular Plan;IDCW Option;52.5934;11-Sep-2026
+120494;INF192K01CE3;-;JM ELSS - Tax Saver Fund;Direct Plan;Growth Option;59.5553;15-Sep-2026
+120493;INF192K01CD5;-;JM ELSS - Tax Saver Fund;Direct Plan;IDCW Option;58.087;15-Sep-2026
+107288;INF192K01650;-;JM ELSS - Tax Saver Fund;Regular Plan;Growth Option;51.3505;15-Sep-2026
+107287;INF192K01643;-;JM ELSS - Tax Saver Fund;Regular Plan;IDCW Option;51.3498;15-Sep-2026
  
 LIC Mutual Fund
  
@@ -4376,10 +4376,10 @@ Open Ended Schemes(Equity Schemes - Flexi Cap Fund)
  
 360 ONE Mutual Fund
  
-151796;INF579M01AS1;-;360 ONE Flexicap Fund;Direct Plan;GROWTH Option;17.2219;11-Sep-2026
-151798;INF579M01AT9;INF579M01AU7;360 ONE Flexicap Fund;Direct Plan;IDCW Option;17.2219;11-Sep-2026
-151799;INF579M01AP7;-;360 ONE Flexicap Fund;Regular Plan;GROWTH Option;16.3865;11-Sep-2026
-151797;INF579M01AQ5;INF579M01AR3;360 ONE Flexicap Fund;Regular Plan;IDCW Option;16.3865;11-Sep-2026
+151796;INF579M01AS1;-;360 ONE Flexicap Fund;Direct Plan;GROWTH Option;16.8258;15-Sep-2026
+151798;INF579M01AT9;INF579M01AU7;360 ONE Flexicap Fund;Direct Plan;IDCW Option;16.8258;15-Sep-2026
+151799;INF579M01AP7;-;360 ONE Flexicap Fund;Regular Plan;GROWTH Option;16.0071;15-Sep-2026
+151797;INF579M01AQ5;INF579M01AR3;360 ONE Flexicap Fund;Regular Plan;IDCW Option;16.0071;15-Sep-2026
  
 AlphaGrep Mutual Fund
  
@@ -4397,17 +4397,17 @@ Axis Mutual Fund
  
 Canara Robeco Mutual Fund
  
-118275;INF760K01EF0;-;Canara Robeco Flexi Cap Fund;Direct Plan;GROWTH OPTION;384.1300;11-Sep-2026
-118276;INF760K01ED5;INF760K01EE3;Canara Robeco Flexi Cap Fund;Direct Plan;IDCW (Payout/Reinvestment);90.6700;11-Sep-2026
-101922;INF760K01019;-;Canara Robeco Flexi Cap Fund;Regular Plan;GROWTH OPTION;338.0600;11-Sep-2026
-101923;INF760K01027;INF760K01035;Canara Robeco Flexi Cap Fund;Regular Plan;IDCW (Payout/Reinvestment);58.8700;11-Sep-2026
+118275;INF760K01EF0;-;Canara Robeco Flexi Cap Fund;Direct Plan;GROWTH OPTION;377.7000;15-Sep-2026
+118276;INF760K01ED5;INF760K01EE3;Canara Robeco Flexi Cap Fund;Direct Plan;IDCW (Payout/Reinvestment);89.1500;15-Sep-2026
+101922;INF760K01019;-;Canara Robeco Flexi Cap Fund;Regular Plan;GROWTH OPTION;332.3600;15-Sep-2026
+101923;INF760K01027;INF760K01035;Canara Robeco Flexi Cap Fund;Regular Plan;IDCW (Payout/Reinvestment);57.8800;15-Sep-2026
  
 Helios Mutual Fund
  
-152135;INF0R8701046;-;Helios Flexi Cap Fund;Direct Plan;Growth;16.23;11-Sep-2026
-152138;INF0R8701053;INF0R8701061;Helios Flexi Cap Fund;Direct Plan;IDCW;16.24;11-Sep-2026
-152136;INF0R8701012;-;Helios Flexi Cap Fund;Regular Plan;Growth;15.60;11-Sep-2026
-152137;INF0R8701020;INF0R8701038;Helios Flexi Cap Fund;Regular Plan;IDCW;15.60;11-Sep-2026
+152135;INF0R8701046;-;Helios Flexi Cap Fund;Direct Plan;Growth;15.75;15-Sep-2026
+152138;INF0R8701053;INF0R8701061;Helios Flexi Cap Fund;Direct Plan;IDCW;15.75;15-Sep-2026
+152136;INF0R8701012;-;Helios Flexi Cap Fund;Regular Plan;Growth;15.13;15-Sep-2026
+152137;INF0R8701020;INF0R8701038;Helios Flexi Cap Fund;Regular Plan;IDCW;15.13;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -4432,15 +4432,15 @@ Invesco Mutual Fund
  
 Jio BlackRock Mutual Fund
  
-153859;INF22M001093;-;JioBlackRock Flexi Cap Fund;Direct Plan;Growth Option;9.8830;11-Sep-2026
-154641;INF22M001325;-;JioBlackRock Flexi Cap Fund;Regular Plan;Growth Option;9.7252;11-Sep-2026
+153859;INF22M001093;-;JioBlackRock Flexi Cap Fund;Direct Plan;Growth Option;9.7218;15-Sep-2026
+154641;INF22M001325;-;JioBlackRock Flexi Cap Fund;Regular Plan;Growth Option;9.5654;15-Sep-2026
  
 JM Financial Mutual Fund
  
-120492;INF192K01CC7;-;JM Flexi Cap Fund;Direct Plan;Growth Option;115.3291;11-Sep-2026
-120491;INF192K01CA1;INF192K01CB9;JM Flexi Cap Fund;Direct Plan;IDCW Option;104.8284;11-Sep-2026
-109522;INF192K01635;-;JM Flexi Cap Fund;Regular Plan;Growth Option;99.9415;11-Sep-2026
-109523;INF192K01619;INF192K01627;JM Flexi Cap Fund;Regular Plan;IDCW Option;77.0126;11-Sep-2026
+120492;INF192K01CC7;-;JM Flexi Cap Fund;Direct Plan;Growth Option;112.9;15-Sep-2026
+120491;INF192K01CA1;INF192K01CB9;JM Flexi Cap Fund;Direct Plan;IDCW Option;102.6205;15-Sep-2026
+109522;INF192K01635;-;JM Flexi Cap Fund;Regular Plan;Growth Option;97.8235;15-Sep-2026
+109523;INF192K01619;INF192K01627;JM Flexi Cap Fund;Regular Plan;IDCW Option;75.3805;15-Sep-2026
  
 Kotak Mahindra Mutual Fund
  
@@ -4486,10 +4486,10 @@ Open Ended Schemes(Equity Schemes - Focused Fund)
  
 360 ONE Mutual Fund
  
-131581;INF579M01910;INF579M01928;360 ONE Focused Fund;Direct Plan;IDCW Option;55.4791;11-Sep-2026
-131579;INF579M01886;INF579M01894;360 ONE Focused Fund;Regular Plan;IDCW Option;43.2599;11-Sep-2026
-131578;INF579M01878;-;360 ONE Focused Fund;Regular Plan;GROWTH Option;48.8924;11-Sep-2026
-131580;INF579M01902;-;360 ONE Focused Fund;Direct Plan;GROWTH Option;56.0508;11-Sep-2026
+131581;INF579M01910;INF579M01928;360 ONE Focused Fund;Direct Plan;IDCW Option;54.3021;15-Sep-2026
+131579;INF579M01886;INF579M01894;360 ONE Focused Fund;Regular Plan;IDCW Option;42.3379;15-Sep-2026
+131578;INF579M01878;-;360 ONE Focused Fund;Regular Plan;GROWTH Option;47.8503;15-Sep-2026
+131580;INF579M01902;-;360 ONE Focused Fund;Direct Plan;GROWTH Option;54.8617;15-Sep-2026
  
 Axis Mutual Fund
  
@@ -4500,10 +4500,10 @@ Axis Mutual Fund
  
 Canara Robeco Mutual Fund
  
-148883;INF760K01JQ6;-;Canara Robeco Focused Fund;Direct Plan;Growth Option;21.2800;11-Sep-2026
-148882;INF760K01JS2;INF760K01JR4;Canara Robeco Focused Fund;Direct Plan;IDCW (Payout/Reinvestment);18.0900;11-Sep-2026
-148884;INF760K01JT0;-;Canara Robeco Focused Fund;Regular Plan;Growth Option;19.6000;11-Sep-2026
-148885;INF760K01JV6;INF760K01JU8;Canara Robeco Focused Fund;Regular Plan;IDCW (Payout/Reinvestment);16.6000;11-Sep-2026
+148883;INF760K01JQ6;-;Canara Robeco Focused Fund;Direct Plan;Growth Option;20.9300;15-Sep-2026
+148882;INF760K01JS2;INF760K01JR4;Canara Robeco Focused Fund;Direct Plan;IDCW (Payout/Reinvestment);17.8000;15-Sep-2026
+148884;INF760K01JT0;-;Canara Robeco Focused Fund;Regular Plan;Growth Option;19.2800;15-Sep-2026
+148885;INF760K01JV6;INF760K01JU8;Canara Robeco Focused Fund;Regular Plan;IDCW (Payout/Reinvestment);16.3300;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -4528,10 +4528,10 @@ Invesco Mutual Fund
  
 JM Financial Mutual Fund
  
-120488;INF192K01BW7;-;JM Focused Fund;Direct Plan;Growth Option;24.1443;11-Sep-2026
-120487;INF192K01BU1;INF192K01BV9;JM Focused Fund;Direct Plan;IDCW Option;23.6621;11-Sep-2026
-107410;INF192K01577;-;JM Focused Fund;Regular Plan;Growth Option;20.3096;11-Sep-2026
-107409;INF192K01551;INF192K01569;JM Focused Fund;Regular Plan;IDCW Option;20.3088;11-Sep-2026
+120488;INF192K01BW7;-;JM Focused Fund;Direct Plan;Growth Option;23.607;15-Sep-2026
+120487;INF192K01BU1;INF192K01BV9;JM Focused Fund;Direct Plan;IDCW Option;23.1356;15-Sep-2026
+107410;INF192K01577;-;JM Focused Fund;Regular Plan;Growth Option;19.8542;15-Sep-2026
+107409;INF192K01551;INF192K01569;JM Focused Fund;Regular Plan;IDCW Option;19.8534;15-Sep-2026
  
 Mahindra Manulife Mutual Fund
  
@@ -4572,10 +4572,10 @@ Bajaj Finserv Mutual Fund
  
 Canara Robeco Mutual Fund
  
-118278;INF760K01EI4;-;Canara Robeco Large and Mid Cap Fund;Direct Plan;GROWTH OPTION;295.4500;11-Sep-2026
-118277;INF760K01EG8;INF760K01EH6;Canara Robeco Large and Mid Cap Fund;Direct Plan;IDCW (Payout/Reinvestment);127.5000;11-Sep-2026
-102920;INF760K01167;-;Canara Robeco Large and Mid Cap Fund;Regular Plan;GROWTH OPTION;255.0100;11-Sep-2026
-102921;INF760K01175;INF760K01183;Canara Robeco Large and Mid Cap Fund;Regular Plan;IDCW (Payout/Reinvestment);82.8200;11-Sep-2026
+118278;INF760K01EI4;-;Canara Robeco Large and Mid Cap Fund;Direct Plan;GROWTH OPTION;290.0200;15-Sep-2026
+118277;INF760K01EG8;INF760K01EH6;Canara Robeco Large and Mid Cap Fund;Direct Plan;IDCW (Payout/Reinvestment);125.1600;15-Sep-2026
+102920;INF760K01167;-;Canara Robeco Large and Mid Cap Fund;Regular Plan;GROWTH OPTION;250.3000;15-Sep-2026
+102921;INF760K01175;INF760K01183;Canara Robeco Large and Mid Cap Fund;Regular Plan;IDCW (Payout/Reinvestment);81.2900;15-Sep-2026
  
 HDFC Mutual Fund
  
@@ -4586,10 +4586,10 @@ HDFC Mutual Fund
  
 Helios Mutual Fund
  
-152941;INF0R8701269;-;Helios Large & Mid Cap Fund;Direct Plan;Growth;11.68;11-Sep-2026
-152942;INF0R8701277;INF0R8701285;Helios Large & Mid Cap Fund;Direct Plan;IDCW;11.68;11-Sep-2026
-152943;INF0R8701236;-;Helios Large & Mid Cap Fund;Regular Plan;Growth;11.33;11-Sep-2026
-152944;INF0R8701244;INF0R8701251;Helios Large & Mid Cap Fund;Regular Plan;IDCW;11.33;11-Sep-2026
+152941;INF0R8701269;-;Helios Large & Mid Cap Fund;Direct Plan;Growth;11.36;15-Sep-2026
+152942;INF0R8701277;INF0R8701285;Helios Large & Mid Cap Fund;Direct Plan;IDCW;11.36;15-Sep-2026
+152943;INF0R8701236;-;Helios Large & Mid Cap Fund;Regular Plan;Growth;11.02;15-Sep-2026
+152944;INF0R8701244;INF0R8701251;Helios Large & Mid Cap Fund;Regular Plan;IDCW;11.02;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -4607,10 +4607,10 @@ Invesco Mutual Fund
  
 JM Financial Mutual Fund
  
-153629;INF192K01NK7;-;JM Large & Mid Cap Fund;Direct Plan;Growth Option;10.842;11-Sep-2026
-153630;INF192K01NP6;INF192K01NL5;JM Large & Mid Cap Fund;Direct Plan;IDCW Option;10.842;11-Sep-2026
-153627;INF192K01NM3;-;JM Large & Mid Cap Fund;Regular Plan;Growth Option;10.6345;11-Sep-2026
-153628;INF192K01NO9;INF192K01NN1;JM Large & Mid Cap Fund;Regular Plan;IDCW Option;10.6345;11-Sep-2026
+153629;INF192K01NK7;-;JM Large & Mid Cap Fund;Direct Plan;Growth Option;10.5884;15-Sep-2026
+153630;INF192K01NP6;INF192K01NL5;JM Large & Mid Cap Fund;Direct Plan;IDCW Option;10.5884;15-Sep-2026
+153627;INF192K01NM3;-;JM Large & Mid Cap Fund;Regular Plan;Growth Option;10.3839;15-Sep-2026
+153628;INF192K01NO9;INF192K01NN1;JM Large & Mid Cap Fund;Regular Plan;IDCW Option;10.3839;15-Sep-2026
  
 Kotak Mahindra Mutual Fund
  
@@ -4635,8 +4635,8 @@ Mirae Asset Mutual Fund
  
 Trust Mutual Fund
  
-154433;INF0GCD01891;-;TRUSTMF LARGE & MIDCAP FUND;Direct Plan;Growth;10.18;11-Sep-2026
-154434;INF0GCD01909;-;TRUSTMF LARGE & MIDCAP FUND;Regular Plan;Growth;10.15;11-Sep-2026
+154433;INF0GCD01891;-;TRUSTMF LARGE & MIDCAP FUND;Direct Plan;Growth;9.91;15-Sep-2026
+154434;INF0GCD01909;-;TRUSTMF LARGE & MIDCAP FUND;Regular Plan;Growth;9.89;15-Sep-2026
  
 WhiteOak Capital Mutual Fund
  
@@ -4654,23 +4654,23 @@ Axis Mutual Fund
  
 Canara Robeco Mutual Fund
  
-118269;INF760K01FR2;-;Canara Robeco Large Cap Fund;Direct Plan;GROWTH OPTION;70.7100;11-Sep-2026
-118270;INF760K01FP6;INF760K01FQ4;Canara Robeco Large Cap Fund;Direct Plan;IDCW (Payout/Reinvestment);51.5400;11-Sep-2026
-113221;INF760K01AR3;-;Canara Robeco Large Cap Fund;Regular Plan;GROWTH OPTION;60.4000;11-Sep-2026
-113222;INF760K01AS1;INF760K01AT9;Canara Robeco Large Cap Fund;Regular Plan;IDCW (Payout/Reinvestment);27.9000;11-Sep-2026
+118269;INF760K01FR2;-;Canara Robeco Large Cap Fund;Direct Plan;GROWTH OPTION;69.7500;15-Sep-2026
+118270;INF760K01FP6;INF760K01FQ4;Canara Robeco Large Cap Fund;Direct Plan;IDCW (Payout/Reinvestment);50.8400;15-Sep-2026
+113221;INF760K01AR3;-;Canara Robeco Large Cap Fund;Regular Plan;GROWTH OPTION;59.5700;15-Sep-2026
+113222;INF760K01AS1;INF760K01AT9;Canara Robeco Large Cap Fund;Regular Plan;IDCW (Payout/Reinvestment);27.5100;15-Sep-2026
  
 Groww Mutual Fund
  
-119133;INF666M01600;-;Groww Large Cap Fund;Direct Plan;Growth;51.37;11-Sep-2026
-116547;INF666M01162;-;Groww Large Cap Fund;Regular Plan;Growth;42.2;11-Sep-2026
-119134;INF666M01626;INF666M01618;Groww Large Cap Fund;Direct Plan;Income Distribution cum capital withdrawal;29.75;11-Sep-2026
-140814;INF666M01CQ6;INF666M01CR4;Groww Large Cap Fund;Direct Plan;Half Yearly -Income Distribution cum capital withdrawal;28.87;11-Sep-2026
-140809;INF666M01CM5;INF666M01CN3;Groww Large Cap Fund;Direct Plan;Monthly - Income Distribution cum capital withdrawal;22.94;11-Sep-2026
-140811;INF666M01CO1;INF666M01CP8;Groww Large Cap Fund;Direct Plan;Quarterly - Income Distribution cum capital withdrawal;28.66;11-Sep-2026
-116548;INF666M01188;INF666M01170;Groww Large Cap Fund;Regular Plan;Income Distribution cum capital withdrawal;23.78;11-Sep-2026
-140813;INF666M01CW4;INF666M01CX2;Groww Large Cap Fund;Regular Plan;Half Yearly - Income Distribution cum capital withdrawal;25.34;11-Sep-2026
-140810;INF666M01CS2;INF666M01CT0;Groww Large Cap Fund;Regular Plan;Monthly - Income Distribution cum capital withdrawal;24.3;11-Sep-2026
-140812;INF666M01CU8;INF666M01CV6;Groww Large Cap Fund;Regular Plan;Quarterly - Income Distribution cum capital withdrawal;25.2;11-Sep-2026
+119133;INF666M01600;-;Groww Large Cap Fund;Direct Plan;Growth;50.49;15-Sep-2026
+116547;INF666M01162;-;Groww Large Cap Fund;Regular Plan;Growth;41.47;15-Sep-2026
+119134;INF666M01626;INF666M01618;Groww Large Cap Fund;Direct Plan;Income Distribution cum capital withdrawal;29.24;15-Sep-2026
+140814;INF666M01CQ6;INF666M01CR4;Groww Large Cap Fund;Direct Plan;Half Yearly -Income Distribution cum capital withdrawal;28.38;15-Sep-2026
+140809;INF666M01CM5;INF666M01CN3;Groww Large Cap Fund;Direct Plan;Monthly - Income Distribution cum capital withdrawal;22.55;15-Sep-2026
+140811;INF666M01CO1;INF666M01CP8;Groww Large Cap Fund;Direct Plan;Quarterly - Income Distribution cum capital withdrawal;28.17;15-Sep-2026
+116548;INF666M01188;INF666M01170;Groww Large Cap Fund;Regular Plan;Income Distribution cum capital withdrawal;23.37;15-Sep-2026
+140813;INF666M01CW4;INF666M01CX2;Groww Large Cap Fund;Regular Plan;Half Yearly - Income Distribution cum capital withdrawal;24.9;15-Sep-2026
+140810;INF666M01CS2;INF666M01CT0;Groww Large Cap Fund;Regular Plan;Monthly - Income Distribution cum capital withdrawal;23.88;15-Sep-2026
+140812;INF666M01CU8;INF666M01CV6;Groww Large Cap Fund;Regular Plan;Quarterly - Income Distribution cum capital withdrawal;24.76;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -4688,23 +4688,23 @@ Invesco Mutual Fund
  
 Jio BlackRock Mutual Fund
  
-154307;INF22M001176;-;JioBlackRock Large Cap Fund;Direct Plan;Growth Option;9.7643;11-Sep-2026
-154632;INF22M001192;-;JioBlackRock Large Cap Fund;Regular Plan;Growth Option;9.6219;11-Sep-2026
+154307;INF22M001176;-;JioBlackRock Large Cap Fund;Direct Plan;Growth Option;9.6409;15-Sep-2026
+154632;INF22M001192;-;JioBlackRock Large Cap Fund;Regular Plan;Growth Option;9.4990;15-Sep-2026
  
 JM Financial Mutual Fund
  
-134958;INF192K01JU4;INF192K01JV2;JM Large Cap Fund;Direct Plan;Annual IDCW Option;72.9835;11-Sep-2026
-120490;INF192K01BZ0;-;JM Large Cap Fund;Direct Plan;Growth Option;177.1796;11-Sep-2026
-134957;INF192K01JR0;INF192K01JZ3;JM Large Cap Fund;Direct Plan;Half Yearly IDCW Option;72.4734;11-Sep-2026
-120489;INF192K01BX5;INF192K01BY3;JM Large Cap Fund;Direct Plan;IDCW Option;71.1356;11-Sep-2026
-134956;INF192K01JJ7;INF192K01JK5;JM Large Cap Fund;Direct Plan;Monthly IDCW Option;72.3222;11-Sep-2026
-134960;INF192K01JN9;INF192K01JO7;JM Large Cap Fund;Direct Plan;Quarterly IDCW Option;72.9965;11-Sep-2026
-134961;INF192K01JS8;INF192K01JT6;JM Large Cap Fund;Regular Plan;Annual IDCW Option;30.3735;11-Sep-2026
-100219;INF192K01601;-;JM Large Cap Fund;Regular Plan;Growth Option;152.1549;11-Sep-2026
-134955;INF192K01JP4;INF192K01JQ2;JM Large Cap Fund;Regular Plan;Half Yearly IDCW Option;24.943;11-Sep-2026
-100218;INF192K01585;INF192K01593;JM Large Cap Fund;Regular Plan;IDCW Option;29.5369;11-Sep-2026
-134959;INF192K01JH1;INF192K01JI9;JM Large Cap Fund;Regular Plan;Monthly IDCW Option;23.642;11-Sep-2026
-134954;INF192K01JL3;INF192K01JM1;JM Large Cap Fund;Regular Plan;Quarterly IDCW Option;34.3372;11-Sep-2026
+134958;INF192K01JU4;INF192K01JV2;JM Large Cap Fund;Direct Plan;Annual IDCW Option;71.4288;15-Sep-2026
+120490;INF192K01BZ0;-;JM Large Cap Fund;Direct Plan;Growth Option;173.4053;15-Sep-2026
+134957;INF192K01JR0;INF192K01JZ3;JM Large Cap Fund;Direct Plan;Half Yearly IDCW Option;70.9295;15-Sep-2026
+120489;INF192K01BX5;INF192K01BY3;JM Large Cap Fund;Direct Plan;IDCW Option;69.6202;15-Sep-2026
+134956;INF192K01JJ7;INF192K01JK5;JM Large Cap Fund;Direct Plan;Monthly IDCW Option;70.7815;15-Sep-2026
+134960;INF192K01JN9;INF192K01JO7;JM Large Cap Fund;Direct Plan;Quarterly IDCW Option;71.4415;15-Sep-2026
+134961;INF192K01JS8;INF192K01JT6;JM Large Cap Fund;Regular Plan;Annual IDCW Option;29.7217;15-Sep-2026
+100219;INF192K01601;-;JM Large Cap Fund;Regular Plan;Growth Option;148.8895;15-Sep-2026
+134955;INF192K01JP4;INF192K01JQ2;JM Large Cap Fund;Regular Plan;Half Yearly IDCW Option;24.4076;15-Sep-2026
+100218;INF192K01585;INF192K01593;JM Large Cap Fund;Regular Plan;IDCW Option;28.903;15-Sep-2026
+134959;INF192K01JH1;INF192K01JI9;JM Large Cap Fund;Regular Plan;Monthly IDCW Option;23.1346;15-Sep-2026
+134954;INF192K01JL3;INF192K01JM1;JM Large Cap Fund;Regular Plan;Quarterly IDCW Option;33.6003;15-Sep-2026
  
 Mahindra Manulife Mutual Fund
  
@@ -4745,17 +4745,17 @@ Bank of India Mutual Fund
  
 Canara Robeco Mutual Fund
  
-150817;INF760K01KI1;-;Canara Robeco Mid Cap Fund;Direct Plan;Growth Option;19.4000;11-Sep-2026
-150818;INF760K01KK7;INF760K01KJ9;Canara Robeco Mid Cap Fund;Direct Plan;IDCW;17.8700;11-Sep-2026
-150816;INF760K01KL5;-;Canara Robeco Mid Cap Fund;Regular Plan;Growth Option;18.4200;11-Sep-2026
-150819;INF760K01KN1;INF760K01KM3;Canara Robeco Mid Cap Fund;Regular Plan;IDCW;16.9400;11-Sep-2026
+150817;INF760K01KI1;-;Canara Robeco Mid Cap Fund;Direct Plan;Growth Option;18.8900;15-Sep-2026
+150818;INF760K01KK7;INF760K01KJ9;Canara Robeco Mid Cap Fund;Direct Plan;IDCW;17.4000;15-Sep-2026
+150816;INF760K01KL5;-;Canara Robeco Mid Cap Fund;Regular Plan;Growth Option;17.9300;15-Sep-2026
+150819;INF760K01KN1;INF760K01KM3;Canara Robeco Mid Cap Fund;Regular Plan;IDCW;16.4900;15-Sep-2026
  
 Helios Mutual Fund
  
-153326;INF0R8701327;-;Helios Mid Cap Fund;Direct Plan;Growth;14.28;11-Sep-2026
-153324;INF0R8701335;INF0R8701343;Helios Mid Cap Fund;Direct Plan;IDCW;14.28;11-Sep-2026
-153327;INF0R8701293;-;Helios Mid Cap Fund;Regular Plan;Growth;13.96;11-Sep-2026
-153325;INF0R8701301;INF0R8701319;Helios Mid Cap Fund;Regular Plan;IDCW;13.97;11-Sep-2026
+153326;INF0R8701327;-;Helios Mid Cap Fund;Direct Plan;Growth;13.89;15-Sep-2026
+153324;INF0R8701335;INF0R8701343;Helios Mid Cap Fund;Direct Plan;IDCW;13.90;15-Sep-2026
+153327;INF0R8701293;-;Helios Mid Cap Fund;Regular Plan;Growth;13.58;15-Sep-2026
+153325;INF0R8701301;INF0R8701319;Helios Mid Cap Fund;Regular Plan;IDCW;13.59;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -4780,10 +4780,10 @@ Invesco Mutual Fund
  
 JM Financial Mutual Fund
  
-150815;INF192K01MV6;-;JM Mid Cap Fund;Direct Plan;Growth Option;22.5823;11-Sep-2026
-150814;INF192K01MW4;INF192K01MX2;JM Mid Cap Fund;Direct Plan;IDCW Option;22.5822;11-Sep-2026
-150812;INF192K01MS2;-;JM Mid Cap Fund;Regular Plan;Growth Option;21.1537;11-Sep-2026
-150813;INF192K01MT0;INF192K01MU8;JM Mid Cap Fund;Regular Plan;IDCW Option;21.1537;11-Sep-2026
+150815;INF192K01MV6;-;JM Mid Cap Fund;Direct Plan;Growth Option;22.0022;15-Sep-2026
+150814;INF192K01MW4;INF192K01MX2;JM Mid Cap Fund;Direct Plan;IDCW Option;22.0021;15-Sep-2026
+150812;INF192K01MS2;-;JM Mid Cap Fund;Regular Plan;Growth Option;20.6069;15-Sep-2026
+150813;INF192K01MT0;INF192K01MU8;JM Mid Cap Fund;Regular Plan;IDCW Option;20.6068;15-Sep-2026
  
 Kotak Mahindra Mutual Fund
  
@@ -4831,10 +4831,10 @@ Axis Mutual Fund
  
 Canara Robeco Mutual Fund
  
-151824;INF760K01KO9;-;Canara Robeco Multi Cap Fund;Direct Plan;Growth Option;15.5200;11-Sep-2026
-151822;INF760K01KQ4;INF760K01KP6;Canara Robeco Multi Cap Fund;Direct Plan;IDCW Option;13.8700;11-Sep-2026
-151821;INF760K01KR2;-;Canara Robeco Multi Cap Fund;Regular Plan;Growth Option;14.8400;11-Sep-2026
-151823;INF760K01KT8;INF760K01KS0;Canara Robeco Multi Cap Fund;Regular Plan;IDCW Option;13.2600;11-Sep-2026
+151824;INF760K01KO9;-;Canara Robeco Multi Cap Fund;Direct Plan;Growth Option;15.2500;15-Sep-2026
+151822;INF760K01KQ4;INF760K01KP6;Canara Robeco Multi Cap Fund;Direct Plan;IDCW Option;13.6300;15-Sep-2026
+151821;INF760K01KR2;-;Canara Robeco Multi Cap Fund;Regular Plan;Growth Option;14.5800;15-Sep-2026
+151823;INF760K01KT8;INF760K01KS0;Canara Robeco Multi Cap Fund;Regular Plan;IDCW Option;13.0300;15-Sep-2026
  
 DSP Mutual Fund
  
@@ -4845,10 +4845,10 @@ DSP Mutual Fund
  
 Groww Mutual Fund
  
-153034;INF666M01JD9;-;Groww Multicap Fund;Direct Plan;Growth;12.602;11-Sep-2026
-153098;INF666M01JE7;INF666M01JF4;Groww Multicap Fund;Direct Plan;Income Distribution cum capital withdrawal;12.6019;11-Sep-2026
-153100;INF666M01JG2;-;Groww Multicap Fund;Regular Plan;Growth;12.2052;11-Sep-2026
-153099;INF666M01JH0;INF666M01JI8;Groww Multicap Fund;Regular Plan;Income Distribution cum capital withdrawal;12.2136;11-Sep-2026
+153034;INF666M01JD9;-;Groww Multicap Fund;Direct Plan;Growth;12.2875;15-Sep-2026
+153098;INF666M01JE7;INF666M01JF4;Groww Multicap Fund;Direct Plan;Income Distribution cum capital withdrawal;12.2875;15-Sep-2026
+153100;INF666M01JG2;-;Groww Multicap Fund;Regular Plan;Growth;11.8985;15-Sep-2026
+153099;INF666M01JH0;INF666M01JI8;Groww Multicap Fund;Regular Plan;Income Distribution cum capital withdrawal;11.9066;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -4925,10 +4925,10 @@ Bandhan Mutual Fund
  
 Canara Robeco Mutual Fund
  
-154250;INF760K01LN9;-;Canara Robeco Banking and Financial Services Fund;Direct Plan;Growth;10.9700;11-Sep-2026
-154251;INF760K01LP4;INF760K01LR0;Canara Robeco Banking and Financial Services Fund;Direct Plan;IDCW;10.9700;11-Sep-2026
-154248;INF760K01LM1;-;Canara Robeco Banking and Financial Services Fund;Regular Plan;Growth;10.8800;11-Sep-2026
-154249;INF760K01LO7;INF760K01LQ2;Canara Robeco Banking and Financial Services Fund;Regular Plan;IDCW;10.8800;11-Sep-2026
+154250;INF760K01LN9;-;Canara Robeco Banking and Financial Services Fund;Direct Plan;Growth;10.7400;15-Sep-2026
+154251;INF760K01LP4;INF760K01LR0;Canara Robeco Banking and Financial Services Fund;Direct Plan;IDCW;10.7400;15-Sep-2026
+154248;INF760K01LM1;-;Canara Robeco Banking and Financial Services Fund;Regular Plan;Growth;10.6500;15-Sep-2026
+154249;INF760K01LO7;INF760K01LQ2;Canara Robeco Banking and Financial Services Fund;Regular Plan;IDCW;10.6500;15-Sep-2026
  
 DSP Mutual Fund
  
@@ -4943,17 +4943,17 @@ DSP Mutual Fund
  
 Groww Mutual Fund
  
-152254;INF666M01HS1;-;Groww Banking & Financial Services Fund;Direct Plan;Growth;13.7981;11-Sep-2026
-152274;INF666M01HP7;-;Groww Banking & Financial Services Fund;Regular Plan;Growth;13.1251;11-Sep-2026
-152276;INF666M01HQ5;INF666M01HR3;Groww Banking & Financial Services Fund;Regular Plan;Income Distribution cum capital withdrawal;13.1251;11-Sep-2026
-152273;INF666M01HT9;INF666M01HU7;Groww Banking & Financial Services Fund;Direct Plan;Income Distribution cum capital withdrawal;13.7971;11-Sep-2026
+152254;INF666M01HS1;-;Groww Banking & Financial Services Fund;Direct Plan;Growth;13.495;15-Sep-2026
+152274;INF666M01HP7;-;Groww Banking & Financial Services Fund;Regular Plan;Growth;12.8343;15-Sep-2026
+152276;INF666M01HQ5;INF666M01HR3;Groww Banking & Financial Services Fund;Regular Plan;Income Distribution cum capital withdrawal;12.8343;15-Sep-2026
+152273;INF666M01HT9;INF666M01HU7;Groww Banking & Financial Services Fund;Direct Plan;Income Distribution cum capital withdrawal;13.4941;15-Sep-2026
  
 Helios Mutual Fund
  
-152679;INF0R8701202;-;Helios Financial Services Fund;Direct Plan;Growth;11.99;11-Sep-2026
-152680;INF0R8701210;INF0R8701228;Helios Financial Services Fund;Direct Plan;IDCW;11.99;11-Sep-2026
-152682;INF0R8701178;-;Helios Financial Services Fund;Regular Plan;Growth;11.58;11-Sep-2026
-152681;INF0R8701186;INF0R8701194;Helios Financial Services Fund;Regular Plan;IDCW;11.58;11-Sep-2026
+152679;INF0R8701202;-;Helios Financial Services Fund;Direct Plan;Growth;11.73;15-Sep-2026
+152680;INF0R8701210;INF0R8701228;Helios Financial Services Fund;Direct Plan;IDCW;11.73;15-Sep-2026
+152682;INF0R8701178;-;Helios Financial Services Fund;Regular Plan;Growth;11.32;15-Sep-2026
+152681;INF0R8701186;INF0R8701194;Helios Financial Services Fund;Regular Plan;IDCW;11.32;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -5025,24 +5025,24 @@ Axis Mutual Fund
  
 Canara Robeco Mutual Fund
  
-146130;INF760K01JC6;-;Canara Robeco Small Cap Fund;Direct Plan;GROWTH OPTION;45.9200;11-Sep-2026
-146131;INF760K01JD4;INF760K01JE2;Canara Robeco Small Cap Fund;Direct Plan;IDCW (Payout/Reinvestment);37.7800;11-Sep-2026
-146127;INF760K01JF9;-;Canara Robeco Small Cap Fund;Regular Plan;GROWTH OPTION;41.0000;11-Sep-2026
-146128;INF760K01JG7;INF760K01JH5;Canara Robeco Small Cap Fund;Regular Plan;IDCW (Payout/Reinvestment);33.3400;11-Sep-2026
+146130;INF760K01JC6;-;Canara Robeco Small Cap Fund;Direct Plan;GROWTH OPTION;44.9400;15-Sep-2026
+146131;INF760K01JD4;INF760K01JE2;Canara Robeco Small Cap Fund;Direct Plan;IDCW (Payout/Reinvestment);36.9800;15-Sep-2026
+146127;INF760K01JF9;-;Canara Robeco Small Cap Fund;Regular Plan;GROWTH OPTION;40.1200;15-Sep-2026
+146128;INF760K01JG7;INF760K01JH5;Canara Robeco Small Cap Fund;Regular Plan;IDCW (Payout/Reinvestment);32.6300;15-Sep-2026
  
 Groww Mutual Fund
  
-154104;INF666M01NK6;INF666M01NL4;Groww Small Cap Fund;Direct Plan;Income Distribution cum capital withdrawal;12.9769;11-Sep-2026
-154063;INF666M01NJ8;-;Groww Small Cap Fund;Direct Plan;Growth;12.977;11-Sep-2026
-154102;INF666M01NM2;-;Groww Small Cap Fund;Regular Plan;Growth;12.8343;11-Sep-2026
-154103;INF666M01NN0;INF666M01NO8;Groww Small Cap Fund;Regular Plan;Income Distribution cum capital withdrawal;12.8344;11-Sep-2026
+154104;INF666M01NK6;INF666M01NL4;Groww Small Cap Fund;Direct Plan;Income Distribution cum capital withdrawal;12.6845;15-Sep-2026
+154063;INF666M01NJ8;-;Groww Small Cap Fund;Direct Plan;Growth;12.6846;15-Sep-2026
+154102;INF666M01NM2;-;Groww Small Cap Fund;Regular Plan;Growth;12.5427;15-Sep-2026
+154103;INF666M01NN0;INF666M01NO8;Groww Small Cap Fund;Regular Plan;Income Distribution cum capital withdrawal;12.5428;15-Sep-2026
  
 Helios Mutual Fund
  
-153912;INF0R8701384;-;Helios Small Cap Fund;Direct Plan;Growth;11.80;11-Sep-2026
-153910;INF0R8701392;INF0R8701400;Helios Small Cap Fund;Direct Plan;IDCW;11.80;11-Sep-2026
-153909;INF0R8701350;-;Helios Small Cap Fund;Regular Plan;Growth;11.66;11-Sep-2026
-153911;INF0R8701368;INF0R8701376;Helios Small Cap Fund;Regular Plan;IDCW;11.66;11-Sep-2026
+153912;INF0R8701384;-;Helios Small Cap Fund;Direct Plan;Growth;11.41;15-Sep-2026
+153910;INF0R8701392;INF0R8701400;Helios Small Cap Fund;Direct Plan;IDCW;11.41;15-Sep-2026
+153909;INF0R8701350;-;Helios Small Cap Fund;Regular Plan;Growth;11.27;15-Sep-2026
+153911;INF0R8701368;INF0R8701376;Helios Small Cap Fund;Regular Plan;IDCW;11.27;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -5068,10 +5068,10 @@ Invesco Mutual Fund
  
 JM Financial Mutual Fund
  
-152614;INF192K01NH3;-;JM Small Cap Fund;Direct Plan;Growth Option;12.1831;11-Sep-2026
-152615;INF192K01NI1;INF192K01NJ9;JM Small Cap Fund;Direct Plan;IDCW Option;12.1834;11-Sep-2026
-152612;INF192K01NE0;-;JM Small Cap Fund;Regular Plan;Growth Option;11.7394;11-Sep-2026
-152613;INF192K01NF7;INF192K01NG5;JM Small Cap Fund;Regular Plan;IDCW Option;11.7394;11-Sep-2026
+152614;INF192K01NH3;-;JM Small Cap Fund;Direct Plan;Growth Option;11.8248;15-Sep-2026
+152615;INF192K01NI1;INF192K01NJ9;JM Small Cap Fund;Direct Plan;IDCW Option;11.825;15-Sep-2026
+152612;INF192K01NE0;-;JM Small Cap Fund;Regular Plan;Growth Option;11.3921;15-Sep-2026
+152613;INF192K01NF7;INF192K01NG5;JM Small Cap Fund;Regular Plan;IDCW Option;11.3921;15-Sep-2026
  
 Mahindra Manulife Mutual Fund
  
@@ -5098,10 +5098,10 @@ Open Ended Schemes(Equity Schemes - Thematic Fund)
  
 360 ONE Mutual Fund
  
-149318;INF579M01AI2;-;360 ONE QUANT FUND;Direct Plan;GROWTH Option;19.8698;11-Sep-2026
-149319;INF579M01AJ0;INF579M01AK8;360 ONE QUANT FUND;Direct Plan;IDCW Option;19.8698;11-Sep-2026
-149317;INF579M01AF8;-;360 ONE QUANT FUND;Regular Plan;GROWTH Option;18.7021;11-Sep-2026
-149316;INF579M01AG6;INF579M01AH4;360 ONE QUANT FUND;Regular Plan;IDCW Option;18.7021;11-Sep-2026
+149318;INF579M01AI2;-;360 ONE QUANT FUND;Direct Plan;GROWTH Option;19.4045;15-Sep-2026
+149319;INF579M01AJ0;INF579M01AK8;360 ONE QUANT FUND;Direct Plan;IDCW Option;19.4045;15-Sep-2026
+149317;INF579M01AF8;-;360 ONE QUANT FUND;Regular Plan;GROWTH Option;18.2614;15-Sep-2026
+149316;INF579M01AG6;INF579M01AH4;360 ONE QUANT FUND;Regular Plan;IDCW Option;18.2614;15-Sep-2026
  
 Axis Mutual Fund
  
@@ -5158,18 +5158,18 @@ Baroda BNP Paribas Mutual Fund
  
 Canara Robeco Mutual Fund
  
-118273;INF760K01DU1;-;Canara Robeco Consumption Fund;Direct Plan;GROWTH OPTION;123.6300;11-Sep-2026
-118274;INF760K01DS5;INF760K01DT3;Canara Robeco Consumption Fund;Direct Plan;IDCW (Payout/Reinvestment);80.2400;11-Sep-2026
-112152;INF760K01241;-;Canara Robeco Consumption Fund;Regular Plan;GROWTH OPTION;106.0000;11-Sep-2026
-112153;INF760K01225;INF760K01233;Canara Robeco Consumption Fund;Regular Plan;IDCW (Payout/Reinvestment);43.3100;11-Sep-2026
-118267;INF760K01FO9;-;Canara Robeco Infrastructure Fund;Direct Plan;GROWTH OPTION;189.1400;11-Sep-2026
-118268;INF760K01FM3;INF760K01FN1;Canara Robeco Infrastructure Fund;Direct Plan;IDCW (Payout/Reinvestment);85.7700;11-Sep-2026
-103390;INF760K01274;-;Canara Robeco Infrastructure Fund;Regular Plan;GROWTH OPTION;165.8000;11-Sep-2026
-103389;INF760K01258;INF760K01266;Canara Robeco Infrastructure Fund;Regular Plan;IDCW (Payout/Reinvestment);60.4400;11-Sep-2026
-152450;INF760K01KZ5;-;Canara Robeco Manufacturing Fund;Direct Plan;Growth Option;14.6300;11-Sep-2026
-152449;INF760K01KY8;INF760K01KX0;Canara Robeco Manufacturing Fund;Direct Plan;IDWC Option;14.6200;11-Sep-2026
-152447;INF760K01KU6;-;Canara Robeco Manufacturing Fund;Regular Plan;Growth Option;14.1400;11-Sep-2026
-152448;INF760K01KW2;INF760K01KV4;Canara Robeco Manufacturing Fund;Regular Plan;IDWC Option;14.1200;11-Sep-2026
+118273;INF760K01DU1;-;Canara Robeco Consumption Fund;Direct Plan;GROWTH OPTION;121.5000;15-Sep-2026
+118274;INF760K01DS5;INF760K01DT3;Canara Robeco Consumption Fund;Direct Plan;IDCW (Payout/Reinvestment);78.8600;15-Sep-2026
+112152;INF760K01241;-;Canara Robeco Consumption Fund;Regular Plan;GROWTH OPTION;104.1600;15-Sep-2026
+112153;INF760K01225;INF760K01233;Canara Robeco Consumption Fund;Regular Plan;IDCW (Payout/Reinvestment);42.5500;15-Sep-2026
+118267;INF760K01FO9;-;Canara Robeco Infrastructure Fund;Direct Plan;GROWTH OPTION;183.4200;15-Sep-2026
+118268;INF760K01FM3;INF760K01FN1;Canara Robeco Infrastructure Fund;Direct Plan;IDCW (Payout/Reinvestment);83.1800;15-Sep-2026
+103390;INF760K01274;-;Canara Robeco Infrastructure Fund;Regular Plan;GROWTH OPTION;160.7600;15-Sep-2026
+103389;INF760K01258;INF760K01266;Canara Robeco Infrastructure Fund;Regular Plan;IDCW (Payout/Reinvestment);58.6100;15-Sep-2026
+152450;INF760K01KZ5;-;Canara Robeco Manufacturing Fund;Direct Plan;Growth Option;14.1700;15-Sep-2026
+152449;INF760K01KY8;INF760K01KX0;Canara Robeco Manufacturing Fund;Direct Plan;IDWC Option;14.1700;15-Sep-2026
+152447;INF760K01KU6;-;Canara Robeco Manufacturing Fund;Regular Plan;Growth Option;13.6900;15-Sep-2026
+152448;INF760K01KW2;INF760K01KV4;Canara Robeco Manufacturing Fund;Regular Plan;IDWC Option;13.6800;15-Sep-2026
  
 DSP Mutual Fund
  
@@ -5256,8 +5256,8 @@ Invesco Mutual Fund
  
 Jio BlackRock Mutual Fund
  
-154082;INF22M001168;-;JioBlackRock Sector Rotation Fund;Direct Plan;Growth Option;9.8217;11-Sep-2026
-154637;INF22M001242;-;JioBlackRock Sector Rotation Fund;Regular Plan;Growth Option;9.7542;11-Sep-2026
+154082;INF22M001168;-;JioBlackRock Sector Rotation Fund;Direct Plan;Growth Option;9.6465;15-Sep-2026
+154637;INF22M001242;-;JioBlackRock Sector Rotation Fund;Regular Plan;Growth Option;9.5789;15-Sep-2026
  
 Mahindra Manulife Mutual Fund
  
@@ -5386,23 +5386,23 @@ Axis Mutual Fund
  
 Canara Robeco Mutual Fund
  
-149085;INF760K01JW4;-;Canara Robeco Value Fund;Direct Plan;Growth Option;19.1300;11-Sep-2026
-149086;INF760K01JY0;INF760K01JX2;Canara Robeco Value Fund;Direct Plan;IDCW (Payout/Reinvestment);17.0800;11-Sep-2026
-149088;INF760K01JZ7;-;Canara Robeco Value Fund;Regular Plan;Growth Option;17.6900;11-Sep-2026
-149087;INF760K01KB6;INF760K01KA8;Canara Robeco Value Fund;Regular Plan;IDCW (Payout/Reinvestment);15.8100;11-Sep-2026
+149085;INF760K01JW4;-;Canara Robeco Value Fund;Direct Plan;Growth Option;18.7600;15-Sep-2026
+149086;INF760K01JY0;INF760K01JX2;Canara Robeco Value Fund;Direct Plan;IDCW (Payout/Reinvestment);16.7600;15-Sep-2026
+149088;INF760K01JZ7;-;Canara Robeco Value Fund;Regular Plan;Growth Option;17.3500;15-Sep-2026
+149087;INF760K01KB6;INF760K01KA8;Canara Robeco Value Fund;Regular Plan;IDCW (Payout/Reinvestment);15.5000;15-Sep-2026
  
 Groww Mutual Fund
  
-135341;INF666M01BE4;-;Groww Value Fund;Direct Plan;Growth;32.5992;11-Sep-2026
-135343;INF666M01BH7;-;Groww Value Fund;Regular Plan;Growth;26.9069;11-Sep-2026
-135342;INF666M01BF1;INF666M01BG9;Groww Value Fund;Direct Plan;Income Distribution cum capital withdrawal;32.4777;11-Sep-2026
-140819;INF666M01DC4;INF666M01DD2;Groww Value Fund;Direct Plan;Half Yearly - Income Distribution cum capital withdrawal;26.101;11-Sep-2026
-140815;INF666M01CY0;INF666M01CZ7;Groww Value Fund;Direct Plan;Monthly - Income Distribution cum capital withdrawal;23.9075;11-Sep-2026
-140817;INF666M01DA8;INF666M01DB6;Groww Value Fund;Direct Plan;Quarterly - Income Distribution cum capital withdrawal;26.0804;11-Sep-2026
-135344;INF666M01BI5;INF666M01BJ3;Groww Value Fund;Regular Plan;Income Distribution cum capital withdrawal;26.8981;11-Sep-2026
-140820;INF666M01DI1;INF666M01DJ9;Groww Value Fund;Regular Plan;Half Yearly - Income Distribution cum capital withdrawal;22.0401;11-Sep-2026
-140816;INF666M01DE0;INF666M01DF7;Groww Value Fund;Regular Plan;Monthly - Income Distribution cum capital withdrawal;20.881;11-Sep-2026
-140818;INF666M01DG5;INF666M01DH3;Groww Value Fund;Regular Plan;Quarterly - Income Distribution cum capital withdrawal;20.3494;11-Sep-2026
+135341;INF666M01BE4;-;Groww Value Fund;Direct Plan;Growth;32.299;15-Sep-2026
+135343;INF666M01BH7;-;Groww Value Fund;Regular Plan;Growth;26.6552;15-Sep-2026
+135342;INF666M01BF1;INF666M01BG9;Groww Value Fund;Direct Plan;Income Distribution cum capital withdrawal;32.1786;15-Sep-2026
+140819;INF666M01DC4;INF666M01DD2;Groww Value Fund;Direct Plan;Half Yearly - Income Distribution cum capital withdrawal;25.8606;15-Sep-2026
+140815;INF666M01CY0;INF666M01CZ7;Groww Value Fund;Direct Plan;Monthly - Income Distribution cum capital withdrawal;23.6873;15-Sep-2026
+140817;INF666M01DA8;INF666M01DB6;Groww Value Fund;Direct Plan;Quarterly - Income Distribution cum capital withdrawal;25.8402;15-Sep-2026
+135344;INF666M01BI5;INF666M01BJ3;Groww Value Fund;Regular Plan;Income Distribution cum capital withdrawal;26.6464;15-Sep-2026
+140820;INF666M01DI1;INF666M01DJ9;Groww Value Fund;Regular Plan;Half Yearly - Income Distribution cum capital withdrawal;21.8338;15-Sep-2026
+140816;INF666M01DE0;INF666M01DF7;Groww Value Fund;Regular Plan;Monthly - Income Distribution cum capital withdrawal;20.6856;15-Sep-2026
+140818;INF666M01DG5;INF666M01DH3;Groww Value Fund;Regular Plan;Quarterly - Income Distribution cum capital withdrawal;20.159;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -5413,10 +5413,10 @@ HSBC Mutual Fund
  
 JM Financial Mutual Fund
  
-120486;INF192K01BT3;-;JM Value Fund;Direct Plan;Growth Option;110.5968;11-Sep-2026
-120485;INF192K01BR7;INF192K01BS5;JM Value Fund;Direct Plan;IDCW Option;75.3539;11-Sep-2026
-100254;INF137A01037;-;JM Value Fund;Regular Plan;Growth Option;97.1457;11-Sep-2026
-106168;INF137A01011;INF137A01029;JM Value Fund;Regular Plan;IDCW Option;67.8356;11-Sep-2026
+120486;INF192K01BT3;-;JM Value Fund;Direct Plan;Growth Option;107.9166;15-Sep-2026
+120485;INF192K01BR7;INF192K01BS5;JM Value Fund;Direct Plan;IDCW Option;73.5278;15-Sep-2026
+100254;INF137A01037;-;JM Value Fund;Regular Plan;Growth Option;94.7794;15-Sep-2026
+106168;INF137A01011;INF137A01029;JM Value Fund;Regular Plan;IDCW Option;66.1833;15-Sep-2026
  
 Mahindra Manulife Mutual Fund
  
@@ -5451,7 +5451,7 @@ DSP Mutual Fund
  
 Groww Mutual Fund
  
-152891;INF666M01IP5;-;Groww Nifty 1D Rate Liquid ETF;;;110.7383;14-Sep-2026
+152891;INF666M01IP5;-;Groww Nifty 1D Rate Liquid ETF;;;110.7504;15-Sep-2026
  
 Mirae Asset Mutual Fund
  
@@ -5523,7 +5523,7 @@ Invesco Mutual Fund
  
 Jio BlackRock Mutual Fund
  
-154550;INF22M001184;-;JioBlackRock Nifty 50 ETF;;;11.9986;11-Sep-2026
+154550;INF22M001184;-;JioBlackRock Nifty 50 ETF;;;11.8553;15-Sep-2026
  
 Kotak Mahindra Mutual Fund
  
@@ -5595,7 +5595,7 @@ Open Ended Schemes(Exchange Traded Funds (ETFs) - Gold ETF)
  
 360 ONE Mutual Fund
  
-153357;INF579M01BB5;-;360 ONE Gold ETF;Direct Plan;GROWTH Option;147.1753;11-Sep-2026
+153357;INF579M01BB5;-;360 ONE Gold ETF;Direct Plan;GROWTH Option;145.8344;15-Sep-2026
  
 Axis Mutual Fund
  
@@ -5607,7 +5607,7 @@ DSP Mutual Fund
  
 Groww Mutual Fund
  
-152957;INF666M01OE7;-;Groww Gold ETF;;;14.7248;11-Sep-2026
+152957;INF666M01OE7;-;Groww Gold ETF;;;14.5901;15-Sep-2026
  
 Invesco Mutual Fund
  
@@ -5631,32 +5631,32 @@ Open Ended Schemes(Exchange Traded Funds (ETFs) - Other ETF)
  
 360 ONE Mutual Fund
  
-154366;INF579M01BP5;-;360 ONE MSCI India ETF;Direct Plan;GROWTH Option;9.8831;11-Sep-2026
+154366;INF579M01BP5;-;360 ONE MSCI India ETF;Direct Plan;GROWTH Option;9.7331;15-Sep-2026
  
 Groww Mutual Fund
  
-154199;INF666M01OD9;-;Groww BSE Hospitals ETF;;;52.0597;11-Sep-2026
-153744;INF666M01LM6;-;Groww BSE Power ETF;;;11.3104;11-Sep-2026
-153329;INF666M01JV1;-;Groww Nifty 200 ETF;;;11.0999;11-Sep-2026
-153699;INF666M01LL8;-;Groww Nifty 50 ETF;;;9.4654;11-Sep-2026
-153583;INF666M01LB9;-;Groww Nifty 500 Low Volatility 50 ETF;;;10.1347;11-Sep-2026
-153452;INF666M01KJ4;-;Groww Nifty 500 Momentum 50 ETF;;;11.0073;11-Sep-2026
-153907;INF666M01MM4;-;Groww Nifty Capital Markets ETF;;;11.3328;11-Sep-2026
-154476;INF666M01PH7;-;Groww Nifty Cements ETF;;;14.1908;11-Sep-2026
-154111;INF666M01NP5;-;Groww Nifty Chemicals ETF;;;29.8119;11-Sep-2026
-152764;INF666M01IH2;-;Groww Nifty EV & New Age Automotive ETF;;;31.8091;11-Sep-2026
-152845;INF666M01IO8;-;Groww Nifty India Defence ETF;;;97.0951;11-Sep-2026
-153625;INF666M01LI4;-;Groww Nifty India Internet ETF;;;10.9317;11-Sep-2026
-153229;INF666M01JJ6;-;Groww Nifty India Railways PSU ETF;;;27.3874;11-Sep-2026
-154034;INF666M01NI0;-;Groww Nifty Metal ETF;;;12.392;11-Sep-2026
-153940;INF666M01MV5;-;Groww Nifty Midcap 150 ETF;;;229.2297;11-Sep-2026
-153785;INF666M01LZ8;-;Groww Nifty Next 50 ETF;;;72.4465;11-Sep-2026
-154345;INF666M01OT5;-;Groww Nifty Private Bank ETF;;;27.56;11-Sep-2026
-154163;INF666M01NQ3;-;Groww Nifty PSE ETF;;;97.6889;11-Sep-2026
-154277;INF666M01OG2;-;Groww Nifty PSU Bank ETF;;;83.7474;11-Sep-2026
-153899;INF666M01MN2;-;Groww Nifty Realty ETF;;;9.5188;11-Sep-2026
-153923;INF666M01MO0;-;Groww Nifty Smallcap 250 ETF;;;10.5919;11-Sep-2026
-154384;INF666M01PG9;-;Groww Nifty Smallcap 250 Momentum Quality 100 ETF;;;49.2773;11-Sep-2026
+154199;INF666M01OD9;-;Groww BSE Hospitals ETF;;;51.4827;15-Sep-2026
+153744;INF666M01LM6;-;Groww BSE Power ETF;;;10.9936;15-Sep-2026
+153329;INF666M01JV1;-;Groww Nifty 200 ETF;;;10.9247;15-Sep-2026
+153699;INF666M01LL8;-;Groww Nifty 50 ETF;;;9.3523;15-Sep-2026
+153583;INF666M01LB9;-;Groww Nifty 500 Low Volatility 50 ETF;;;10.0139;15-Sep-2026
+153452;INF666M01KJ4;-;Groww Nifty 500 Momentum 50 ETF;;;10.6186;15-Sep-2026
+153907;INF666M01MM4;-;Groww Nifty Capital Markets ETF;;;11.0871;15-Sep-2026
+154476;INF666M01PH7;-;Groww Nifty Cements ETF;;;13.8049;15-Sep-2026
+154111;INF666M01NP5;-;Groww Nifty Chemicals ETF;;;28.8072;15-Sep-2026
+152764;INF666M01IH2;-;Groww Nifty EV & New Age Automotive ETF;;;31.2896;15-Sep-2026
+152845;INF666M01IO8;-;Groww Nifty India Defence ETF;;;91.2994;15-Sep-2026
+153625;INF666M01LI4;-;Groww Nifty India Internet ETF;;;10.6671;15-Sep-2026
+153229;INF666M01JJ6;-;Groww Nifty India Railways PSU ETF;;;26.7339;15-Sep-2026
+154034;INF666M01NI0;-;Groww Nifty Metal ETF;;;12.0771;15-Sep-2026
+153940;INF666M01MV5;-;Groww Nifty Midcap 150 ETF;;;224.3238;15-Sep-2026
+153785;INF666M01LZ8;-;Groww Nifty Next 50 ETF;;;70.6358;15-Sep-2026
+154345;INF666M01OT5;-;Groww Nifty Private Bank ETF;;;27.1917;15-Sep-2026
+154163;INF666M01NQ3;-;Groww Nifty PSE ETF;;;95.4633;15-Sep-2026
+154277;INF666M01OG2;-;Groww Nifty PSU Bank ETF;;;81.8248;15-Sep-2026
+153899;INF666M01MN2;-;Groww Nifty Realty ETF;;;9.1344;15-Sep-2026
+153923;INF666M01MO0;-;Groww Nifty Smallcap 250 ETF;;;10.3338;15-Sep-2026
+154384;INF666M01PG9;-;Groww Nifty Smallcap 250 Momentum Quality 100 ETF;;;47.8454;15-Sep-2026
  
 ICICI Prudential Mutual Fund
  
@@ -5666,7 +5666,7 @@ Open Ended Schemes(Exchange Traded Funds (ETFs) - Silver ETF)
  
 360 ONE Mutual Fund
  
-153415;INF579M01BC3;-;360 ONE Silver ETF;Direct Plan;GROWTH Option;223.3990;11-Sep-2026
+153415;INF579M01BC3;-;360 ONE Silver ETF;Direct Plan;GROWTH Option;221.6444;15-Sep-2026
  
 Axis Mutual Fund
  
@@ -5678,7 +5678,7 @@ DSP Mutual Fund
  
 Groww Mutual Fund
  
-153524;INF666M01OF4;-;Groww Silver ETF;;;22.2568;11-Sep-2026
+153524;INF666M01OF4;-;Groww Silver ETF;;;22.0826;15-Sep-2026
  
 Mirae Asset Mutual Fund
  
@@ -5747,54 +5747,54 @@ Axis Mutual Fund
  
 Groww Mutual Fund
  
-154200;INF666M01NX9;-;Groww BSE Hospitals ETF FOF;Direct Plan;Growth;10.9092;11-Sep-2026
-154221;INF666M01NY7;INF666M01NZ4;Groww BSE Hospitals ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;10.9095;11-Sep-2026
-154223;INF666M01OA5;-;Groww BSE Hospitals ETF FOF;Regular Plan;Growth;10.8873;11-Sep-2026
-154222;INF666M01OB3;INF666M01OC1;Groww BSE Hospitals ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;10.8873;11-Sep-2026
-153745;INF666M01LN4;-;Groww BSE Power ETF FOF;Direct Plan;Growth;11.5458;11-Sep-2026
-153746;INF666M01LO2;INF666M01LP9;Groww BSE Power ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;11.5459;11-Sep-2026
-153748;INF666M01LQ7;-;Groww BSE Power ETF FOF;Regular Plan;Growth;11.4903;11-Sep-2026
-153747;INF666M01LR5;INF666M01LS3;Groww BSE Power ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;11.4903;11-Sep-2026
-152980;INF666M01IX9;-;Groww Gold ETF FOF;Direct Plan;Growth;18.5433;11-Sep-2026
-153004;INF666M01IY7;INF666M01IZ4;Groww Gold ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;18.5433;11-Sep-2026
-153006;INF666M01JA5;-;Groww Gold ETF FOF;Regular Plan;Growth;18.4399;11-Sep-2026
-153005;INF666M01JB3;INF666M01JC1;Groww Gold ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;18.4403;11-Sep-2026
+154200;INF666M01NX9;-;Groww BSE Hospitals ETF FOF;Direct Plan;Growth;10.8256;15-Sep-2026
+154221;INF666M01NY7;INF666M01NZ4;Groww BSE Hospitals ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;10.8259;15-Sep-2026
+154223;INF666M01OA5;-;Groww BSE Hospitals ETF FOF;Regular Plan;Growth;10.8034;15-Sep-2026
+154222;INF666M01OB3;INF666M01OC1;Groww BSE Hospitals ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;10.8034;15-Sep-2026
+153745;INF666M01LN4;-;Groww BSE Power ETF FOF;Direct Plan;Growth;11.2019;15-Sep-2026
+153746;INF666M01LO2;INF666M01LP9;Groww BSE Power ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;11.2019;15-Sep-2026
+153748;INF666M01LQ7;-;Groww BSE Power ETF FOF;Regular Plan;Growth;11.1475;15-Sep-2026
+153747;INF666M01LR5;INF666M01LS3;Groww BSE Power ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;11.1475;15-Sep-2026
+152980;INF666M01IX9;-;Groww Gold ETF FOF;Direct Plan;Growth;18.3201;15-Sep-2026
+153004;INF666M01IY7;INF666M01IZ4;Groww Gold ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;18.3201;15-Sep-2026
+153006;INF666M01JA5;-;Groww Gold ETF FOF;Regular Plan;Growth;18.2174;15-Sep-2026
+153005;INF666M01JB3;INF666M01JC1;Groww Gold ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;18.2179;15-Sep-2026
 154028;INF666M01NC3;-;Groww Multi Asset Omni FOF;Direct Plan;Growth;10.4459;11-Sep-2026
 154058;INF666M01ND1;INF666M01NE9;Groww Multi Asset Omni FOF;Direct Plan;Income Distribution cum capital withdrawal;10.4459;11-Sep-2026
 154057;INF666M01NF6;-;Groww Multi Asset Omni FOF;Regular Plan;Growth;10.3624;11-Sep-2026
 154059;INF666M01NG4;INF666M01NH2;Groww Multi Asset Omni FOF;Regular Plan;Income Distribution cum capital withdrawal;10.3624;11-Sep-2026
-153328;INF666M01JQ1;-;Groww Nifty 200 ETF FOF;Direct Plan;Growth;11.4178;11-Sep-2026
-153343;INF666M01JR9;INF666M01JS7;Groww Nifty 200 ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;11.4178;11-Sep-2026
-153342;INF666M01JT5;-;Groww Nifty 200 ETF FOF;Regular Plan;Growth;11.3248;11-Sep-2026
-153344;INF666M01JU3;INF666M01JW9;Groww Nifty 200 ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;11.3248;11-Sep-2026
-153453;INF666M01JX7;-;Groww Nifty 500 Momentum 50 ETF FOF;Direct Plan;Growth;10.9047;11-Sep-2026
-153454;INF666M01JY5;INF666M01KB1;Groww Nifty 500 Momentum 50 ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;10.9166;11-Sep-2026
-153455;INF666M01KH8;INF666M01KI6;Groww Nifty 500 Momentum 50 ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;10.8377;11-Sep-2026
-153456;INF666M01KC9;-;Groww Nifty 500 Momentum 50 ETF FOF;Regular Plan;Growth;10.8378;11-Sep-2026
-153908;INF666M01MG6;-;Groww Nifty Capital Markets ETF FOF;Direct Plan;Growth;11.4189;11-Sep-2026
-153917;INF666M01MH4;INF666M01MI2;Groww Nifty Capital Markets ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;11.4189;11-Sep-2026
-153918;INF666M01MJ0;-;Groww Nifty Capital Markets ETF FOF;Regular Plan;Growth;11.3772;11-Sep-2026
-153919;INF666M01MK8;INF666M01ML6;Groww Nifty Capital Markets ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;11.3773;11-Sep-2026
-152771;INF666M01IM2;INF666M01IN0;Groww Nifty EV & New Age Automotive ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;9.7653;11-Sep-2026
-152773;INF666M01II0;-;Groww Nifty EV & New Age Automotive ETF FOF;Regular Plan;Growth;9.6833;11-Sep-2026
-152772;INF666M01IJ8;INF666M01IK6;Groww Nifty EV & New Age Automotive ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;9.6834;11-Sep-2026
-152770;INF666M01IL4;-;Groww Nifty EV & New Age Automotive ETF FOF;Direct Plan;Growth;9.7648;11-Sep-2026
-152926;INF666M01IR1;INF666M01IS9;Groww Nifty India Defence ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;14.3495;11-Sep-2026
-152925;INF666M01IQ3;-;Groww Nifty India Defence ETF FOF;Direct Plan;Growth;14.3493;11-Sep-2026
-152927;INF666M01IT7;-;Groww Nifty India Defence ETF FOF;Regular Plan;Growth;14.2413;11-Sep-2026
-152928;INF666M01IU5;INF666M01IV3;Groww Nifty India Defence ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;14.2396;11-Sep-2026
-153626;INF666M01LC7;-;Groww Nifty India Internet ETF FOF;Direct Plan;Growth;10.9047;11-Sep-2026
-153632;INF666M01LD5;INF666M01LE3;Groww Nifty India Internet ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;10.9047;11-Sep-2026
-153633;INF666M01LF0;-;Groww Nifty India Internet ETF FOF;Regular Plan;Growth;10.8459;11-Sep-2026
-153631;INF666M01LG8;INF666M01LH6;Groww Nifty India Internet ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;10.8458;11-Sep-2026
-154164;INF666M01NR1;-;Groww Nifty PSE ETF FOF;Direct Plan;Growth;9.4602;11-Sep-2026
-154172;INF666M01NS9;INF666M01NT7;Groww Nifty PSE ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;9.4602;11-Sep-2026
-154173;INF666M01NU5;-;Groww Nifty PSE ETF FOF;Regular Plan;Growth;9.4443;11-Sep-2026
-154174;INF666M01NV3;INF666M01NW1;Groww Nifty PSE ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;9.4443;11-Sep-2026
-153525;INF666M01KQ9;-;Groww Silver ETF FOF;Direct Plan;Growth;22.0102;11-Sep-2026
-153526;INF666M01KR7;INF666M01KS5;Groww Silver ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;22.0148;11-Sep-2026
-153527;INF666M01KX5;-;Groww Silver ETF FOF;Regular Plan;Growth;21.8955;11-Sep-2026
-153528;INF666M01KY3;INF666M01KZ0;Groww Silver ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;21.8954;11-Sep-2026
+153328;INF666M01JQ1;-;Groww Nifty 200 ETF FOF;Direct Plan;Growth;11.2016;15-Sep-2026
+153343;INF666M01JR9;INF666M01JS7;Groww Nifty 200 ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;11.2015;15-Sep-2026
+153342;INF666M01JT5;-;Groww Nifty 200 ETF FOF;Regular Plan;Growth;11.1096;15-Sep-2026
+153344;INF666M01JU3;INF666M01JW9;Groww Nifty 200 ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;11.1097;15-Sep-2026
+153453;INF666M01JX7;-;Groww Nifty 500 Momentum 50 ETF FOF;Direct Plan;Growth;10.5387;15-Sep-2026
+153454;INF666M01JY5;INF666M01KB1;Groww Nifty 500 Momentum 50 ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;10.5503;15-Sep-2026
+153455;INF666M01KH8;INF666M01KI6;Groww Nifty 500 Momentum 50 ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;10.4735;15-Sep-2026
+153456;INF666M01KC9;-;Groww Nifty 500 Momentum 50 ETF FOF;Regular Plan;Growth;10.4736;15-Sep-2026
+153908;INF666M01MG6;-;Groww Nifty Capital Markets ETF FOF;Direct Plan;Growth;11.2367;15-Sep-2026
+153917;INF666M01MH4;INF666M01MI2;Groww Nifty Capital Markets ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;11.2367;15-Sep-2026
+153918;INF666M01MJ0;-;Groww Nifty Capital Markets ETF FOF;Regular Plan;Growth;11.1951;15-Sep-2026
+153919;INF666M01MK8;INF666M01ML6;Groww Nifty Capital Markets ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;11.1952;15-Sep-2026
+152771;INF666M01IM2;INF666M01IN0;Groww Nifty EV & New Age Automotive ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;9.6334;15-Sep-2026
+152773;INF666M01II0;-;Groww Nifty EV & New Age Automotive ETF FOF;Regular Plan;Growth;9.5523;15-Sep-2026
+152772;INF666M01IJ8;INF666M01IK6;Groww Nifty EV & New Age Automotive ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;9.5524;15-Sep-2026
+152770;INF666M01IL4;-;Groww Nifty EV & New Age Automotive ETF FOF;Direct Plan;Growth;9.633;15-Sep-2026
+152926;INF666M01IR1;INF666M01IS9;Groww Nifty India Defence ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;13.5484;15-Sep-2026
+152925;INF666M01IQ3;-;Groww Nifty India Defence ETF FOF;Direct Plan;Growth;13.5482;15-Sep-2026
+152927;INF666M01IT7;-;Groww Nifty India Defence ETF FOF;Regular Plan;Growth;13.4457;15-Sep-2026
+152928;INF666M01IU5;INF666M01IV3;Groww Nifty India Defence ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;13.4442;15-Sep-2026
+153626;INF666M01LC7;-;Groww Nifty India Internet ETF FOF;Direct Plan;Growth;10.6459;15-Sep-2026
+153632;INF666M01LD5;INF666M01LE3;Groww Nifty India Internet ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;10.6459;15-Sep-2026
+153633;INF666M01LF0;-;Groww Nifty India Internet ETF FOF;Regular Plan;Growth;10.5879;15-Sep-2026
+153631;INF666M01LG8;INF666M01LH6;Groww Nifty India Internet ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;10.5878;15-Sep-2026
+154164;INF666M01NR1;-;Groww Nifty PSE ETF FOF;Direct Plan;Growth;9.2512;15-Sep-2026
+154172;INF666M01NS9;INF666M01NT7;Groww Nifty PSE ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;9.2512;15-Sep-2026
+154173;INF666M01NU5;-;Groww Nifty PSE ETF FOF;Regular Plan;Growth;9.2354;15-Sep-2026
+154174;INF666M01NV3;INF666M01NW1;Groww Nifty PSE ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;9.2354;15-Sep-2026
+153525;INF666M01KQ9;-;Groww Silver ETF FOF;Direct Plan;Growth;21.8134;15-Sep-2026
+153526;INF666M01KR7;INF666M01KS5;Groww Silver ETF FOF;Direct Plan;Income Distribution cum capital withdrawal;21.818;15-Sep-2026
+153527;INF666M01KX5;-;Groww Silver ETF FOF;Regular Plan;Growth;21.6989;15-Sep-2026
+153528;INF666M01KY3;INF666M01KZ0;Groww Silver ETF FOF;Regular Plan;Income Distribution cum capital withdrawal;21.6988;15-Sep-2026
  
 HDFC Mutual Fund
  
@@ -6045,18 +6045,18 @@ LIC Mutual Fund
  
 Navi Mutual Fund
  
-143163;INF959L01CX3;-;Navi Aggressive Hybrid Fund;Direct Plan;Growth;25.8123;11-Sep-2026
-143195;INF959L01DG6;INF959L01DH4;Navi Aggressive Hybrid Fund;Direct Plan;Annual IDCW;25.6967;11-Sep-2026
-143186;INF959L01DE1;INF959L01DF8;Navi Aggressive Hybrid Fund;;;25.6682;11-Sep-2026
-143192;INF959L01DA9;INF959L01DB7;Navi Aggressive Hybrid Fund;Direct Plan;Monthly IDCW;25.692;11-Sep-2026
-143167;INF959L01CY1;INF959L01CZ8;Navi Aggressive Hybrid Fund;Direct Plan;Normal IDCW;25.6932;11-Sep-2026
-143185;INF959L01DC5;INF959L01DD3;Navi Aggressive Hybrid Fund;Direct Plan;Quarterly IDCW;25.6752;11-Sep-2026
-143162;INF959L01DI2;-;Navi Aggressive Hybrid Fund;Regular Plan;Growth;22.2005;11-Sep-2026
-143198;INF959L01DR3;INF959L01DS1;Navi Aggressive Hybrid Fund;Regular Plan;Annual IDCW	;22.1978;11-Sep-2026
-143189;INF959L01DP7;INF959L01DQ5;Navi Aggressive Hybrid Fund;Regular Plan;Half Yearly IDCW	;22.2149;11-Sep-2026
-143197;INF959L01DL6;INF959L01DM4;Navi Aggressive Hybrid Fund;Regular Plan;Monthly IDCW;22.1999;11-Sep-2026
-143166;INF959L01DJ0;INF959L01DK8;Navi Aggressive Hybrid Fund;Regular Plan;Normal IDCW;22.2018;11-Sep-2026
-143199;INF959L01DN2;INF959L01DO0;Navi Aggressive Hybrid Fund;Regular Plan;Quarterly IDCW;22.2006;11-Sep-2026
+143163;INF959L01CX3;-;Navi Aggressive Hybrid Fund;Direct Plan;Growth;25.4281;15-Sep-2026
+143195;INF959L01DG6;INF959L01DH4;Navi Aggressive Hybrid Fund;Direct Plan;Annual IDCW;25.3142;15-Sep-2026
+143186;INF959L01DE1;INF959L01DF8;Navi Aggressive Hybrid Fund;;;25.2861;15-Sep-2026
+143192;INF959L01DA9;INF959L01DB7;Navi Aggressive Hybrid Fund;Direct Plan;Monthly IDCW;25.3095;15-Sep-2026
+143167;INF959L01CY1;INF959L01CZ8;Navi Aggressive Hybrid Fund;Direct Plan;Normal IDCW;25.3107;15-Sep-2026
+143185;INF959L01DC5;INF959L01DD3;Navi Aggressive Hybrid Fund;Direct Plan;Quarterly IDCW;25.293;15-Sep-2026
+143162;INF959L01DI2;-;Navi Aggressive Hybrid Fund;Regular Plan;Growth;21.8655;15-Sep-2026
+143198;INF959L01DR3;INF959L01DS1;Navi Aggressive Hybrid Fund;Regular Plan;Annual IDCW	;21.8629;15-Sep-2026
+143189;INF959L01DP7;INF959L01DQ5;Navi Aggressive Hybrid Fund;Regular Plan;Half Yearly IDCW	;21.8797;15-Sep-2026
+143197;INF959L01DL6;INF959L01DM4;Navi Aggressive Hybrid Fund;Regular Plan;Monthly IDCW;21.8649;15-Sep-2026
+143166;INF959L01DJ0;INF959L01DK8;Navi Aggressive Hybrid Fund;Regular Plan;Normal IDCW;21.8668;15-Sep-2026
+143199;INF959L01DN2;INF959L01DO0;Navi Aggressive Hybrid Fund;Regular Plan;Quarterly IDCW;21.8656;15-Sep-2026
  
 PGIM India Mutual Fund
  
@@ -6302,8 +6302,8 @@ The Wealth Company Mutual Fund
  
 Trust Mutual Fund
  
-153804;INF0GCD01859;-;TRUSTMF ARBITRAGE FUND;Direct Plan;Growth;10.6565;11-Sep-2026
-153805;INF0GCD01867;-;TRUSTMF ARBITRAGE FUND;Regular Plan;Growth;10.5692;11-Sep-2026
+153804;INF0GCD01859;-;TRUSTMF ARBITRAGE FUND;Direct Plan;Growth;10.6698;15-Sep-2026
+153805;INF0GCD01867;-;TRUSTMF ARBITRAGE FUND;Regular Plan;Growth;10.5815;15-Sep-2026
  
 Union Mutual Fund
  
@@ -6970,23 +6970,23 @@ Bank of India Mutual Fund
  
 Canara Robeco Mutual Fund
  
-118272;INF760K01EZ8;-;Canara Robeco Aggressive Hybrid Fund;Direct Plan;GROWTH OPTION;417.4400;11-Sep-2026
-118271;INF760K01EX3;INF760K01EY1;Canara Robeco Aggressive Hybrid Fund;Direct Plan;MONTHLY IDCW (Payout/Reinvestment);129.0100;11-Sep-2026
-106166;INF760K01050;-;Canara Robeco Aggressive Hybrid Fund;Regular Plan;GROWTH OPTION;364.2300;11-Sep-2026
-106167;INF760K01068;INF760K01076;Canara Robeco Aggressive Hybrid Fund;Regular Plan;MONTHLY IDCW (Payout/Reinvestment);90.2600;11-Sep-2026
+118272;INF760K01EZ8;-;Canara Robeco Aggressive Hybrid Fund;Direct Plan;GROWTH OPTION;411.5600;15-Sep-2026
+118271;INF760K01EX3;INF760K01EY1;Canara Robeco Aggressive Hybrid Fund;Direct Plan;MONTHLY IDCW (Payout/Reinvestment);127.2000;15-Sep-2026
+106166;INF760K01050;-;Canara Robeco Aggressive Hybrid Fund;Regular Plan;GROWTH OPTION;359.0500;15-Sep-2026
+106167;INF760K01068;INF760K01076;Canara Robeco Aggressive Hybrid Fund;Regular Plan;MONTHLY IDCW (Payout/Reinvestment);88.9700;15-Sep-2026
  
 Groww Mutual Fund
  
-145599;INF666M01FA3;-;Groww Aggressive Hybrid Fund;Direct Plan;Growth;23.1148;11-Sep-2026
-145605;INF666M01FJ4;-;Groww Aggressive Hybrid Fund;Regular Plan;Growth;20.4363;11-Sep-2026
-145600;INF666M01FB1;INF666M01FC9;Groww Aggressive Hybrid Fund;Direct Plan;Income Distribution cum capital withdrawal;22.9115;11-Sep-2026
-145602;INF666M01FH8;INF666M01FI6;Groww Aggressive Hybrid Fund;Direct Plan;Half Yearly - Income Distribution cum capital withdrawal;22.2197;11-Sep-2026
-145606;INF666M01FD7;INF666M01FE5;Groww Aggressive Hybrid Fund;Direct Plan;Monthly - Income Distribution cum capital withdrawal;22.8752;11-Sep-2026
-145601;INF666M01FF2;INF666M01FG0;Groww Aggressive Hybrid Fund;Direct Plan;Quarterly - Income Distribution cum capital withdrawal;22.6398;11-Sep-2026
-145603;INF666M01FK2;INF666M01FL0;Groww Aggressive Hybrid Fund;Regular Plan;Income Distribution cum capital withdrawal;20.4334;11-Sep-2026
-145608;INF666M01FQ9;INF666M01FR7;Groww Aggressive Hybrid Fund;Regular Plan;Half Yearly - Income Distribution cum capital withdrawal;20.3883;11-Sep-2026
-145604;INF666M01FM8;INF666M01FN6;Groww Aggressive Hybrid Fund;Regular Plan;Monthly - Income Distribution cum capital withdrawal;20.4345;11-Sep-2026
-145607;INF666M01FO4;INF666M01FP1;Groww Aggressive Hybrid Fund;Regular Plan;Quarterly - Income Distribution cum capital withdrawal;21.6612;11-Sep-2026
+145599;INF666M01FA3;-;Groww Aggressive Hybrid Fund;Direct Plan;Growth;22.8489;15-Sep-2026
+145605;INF666M01FJ4;-;Groww Aggressive Hybrid Fund;Regular Plan;Growth;20.1994;15-Sep-2026
+145600;INF666M01FB1;INF666M01FC9;Groww Aggressive Hybrid Fund;Direct Plan;Income Distribution cum capital withdrawal;22.6479;15-Sep-2026
+145602;INF666M01FH8;INF666M01FI6;Groww Aggressive Hybrid Fund;Direct Plan;Half Yearly - Income Distribution cum capital withdrawal;21.9641;15-Sep-2026
+145606;INF666M01FD7;INF666M01FE5;Groww Aggressive Hybrid Fund;Direct Plan;Monthly - Income Distribution cum capital withdrawal;22.612;15-Sep-2026
+145601;INF666M01FF2;INF666M01FG0;Groww Aggressive Hybrid Fund;Direct Plan;Quarterly - Income Distribution cum capital withdrawal;22.3793;15-Sep-2026
+145603;INF666M01FK2;INF666M01FL0;Groww Aggressive Hybrid Fund;Regular Plan;Income Distribution cum capital withdrawal;20.1965;15-Sep-2026
+145608;INF666M01FQ9;INF666M01FR7;Groww Aggressive Hybrid Fund;Regular Plan;Half Yearly - Income Distribution cum capital withdrawal;20.152;15-Sep-2026
+145604;INF666M01FM8;INF666M01FN6;Groww Aggressive Hybrid Fund;Regular Plan;Monthly - Income Distribution cum capital withdrawal;20.1977;15-Sep-2026
+145607;INF666M01FO4;INF666M01FP1;Groww Aggressive Hybrid Fund;Regular Plan;Quarterly - Income Distribution cum capital withdrawal;21.4102;15-Sep-2026
  
 HDFC Mutual Fund
  
@@ -7024,26 +7024,26 @@ Invesco Mutual Fund
  
 JM Financial Mutual Fund
  
-130904;INF192K01HB8;-;JM Aggressive Hybrid Fund;Direct Plan;Annual Bonus Option - Principal Units;140.2854;11-Sep-2026
-131477;INF192K01HJ1;INF192K01HK9;JM Aggressive Hybrid Fund;Direct Plan;Annual IDCW Option;47.2571;11-Sep-2026
+130904;INF192K01HB8;-;JM Aggressive Hybrid Fund;Direct Plan;Annual Bonus Option - Principal Units;137.7486;15-Sep-2026
+131477;INF192K01HJ1;INF192K01HK9;JM Aggressive Hybrid Fund;Direct Plan;Annual IDCW Option;46.4025;15-Sep-2026
 133401;INF192K01GP0;-;JM Aggressive Hybrid Fund;;;131.1849;27-Jan-2025
-120484;INF192K01BQ9;-;JM Aggressive Hybrid Fund;Direct Plan;Growth Option;140.0563;11-Sep-2026
+120484;INF192K01BQ9;-;JM Aggressive Hybrid Fund;Direct Plan;Growth Option;137.5237;15-Sep-2026
 133409;INF192K01HV6;-;JM Aggressive Hybrid Fund;;;131.1823;27-Jan-2025
-133402;INF192K01HH5;INF192K01HI3;JM Aggressive Hybrid Fund;Direct Plan;Half Yearly IDCW Option;100.7798;11-Sep-2026
-120483;INF192K01BO4;INF192K01BP1;JM Aggressive Hybrid Fund;Direct Plan;IDCW Option;77.2161;11-Sep-2026
-133412;INF192K01HN3;INF192K01HO1;JM Aggressive Hybrid Fund;Direct Plan;Monthly IDCW Option;100.7502;11-Sep-2026
+133402;INF192K01HH5;INF192K01HI3;JM Aggressive Hybrid Fund;Direct Plan;Half Yearly IDCW Option;98.9574;15-Sep-2026
+120483;INF192K01BO4;INF192K01BP1;JM Aggressive Hybrid Fund;Direct Plan;IDCW Option;75.8198;15-Sep-2026
+133412;INF192K01HN3;INF192K01HO1;JM Aggressive Hybrid Fund;Direct Plan;Monthly IDCW Option;98.9284;15-Sep-2026
 133411;INF192K01HZ7;-;JM Aggressive Hybrid Fund;;;131.1823;27-Jan-2025
-133406;INF192K01HR4;INF192K01HS2;JM Aggressive Hybrid Fund;Direct Plan;Quarterly IDCW Option;35.4362;11-Sep-2026
+133406;INF192K01HR4;INF192K01HS2;JM Aggressive Hybrid Fund;Direct Plan;Quarterly IDCW Option;34.7954;15-Sep-2026
 133407;INF192K01GZ9;-;JM Aggressive Hybrid Fund;;;116.1562;27-Jan-2025
-131476;INF192K01HF9;INF192K01HG7;JM Aggressive Hybrid Fund;Regular Plan;Annual IDCW Option;33.4433;11-Sep-2026
+131476;INF192K01HF9;INF192K01HG7;JM Aggressive Hybrid Fund;Regular Plan;Annual IDCW Option;32.833;15-Sep-2026
 133400;INF192K01GN5;-;JM Aggressive Hybrid Fund;;;116.158;27-Jan-2025
 133403;INF192K01HT0;-;JM Aggressive Hybrid Fund;;;116.1562;27-Jan-2025
-133408;INF192K01HD4;INF192K01HE2;JM Aggressive Hybrid Fund;Regular Plan;Half Yearly IDCW Option;87.8981;11-Sep-2026
-100220;INF192K01528;INF192K01536;JM Aggressive Hybrid Fund;Regular Plan;IDCW Option;33.6825;11-Sep-2026
-133404;INF192K01HL7;INF192K01HM5;JM Aggressive Hybrid Fund;Regular Plan;Monthly IDCW Option;87.1991;11-Sep-2026
+133408;INF192K01HD4;INF192K01HE2;JM Aggressive Hybrid Fund;Regular Plan;Half Yearly IDCW Option;86.2942;15-Sep-2026
+100220;INF192K01528;INF192K01536;JM Aggressive Hybrid Fund;Regular Plan;IDCW Option;33.0679;15-Sep-2026
+133404;INF192K01HL7;INF192K01HM5;JM Aggressive Hybrid Fund;Regular Plan;Monthly IDCW Option;85.608;15-Sep-2026
 133410;INF192K01HX2;-;JM Aggressive Hybrid Fund;;;116.1562;27-Jan-2025
-133405;INF192K01HP8;INF192K01HQ6;JM Aggressive Hybrid Fund;Regular Plan;Quarterly IDCW Option;31.1233;11-Sep-2026
-100221;INF192K01544;-;JM Aggressive Hybrid Fund;Regular Plan;Growth Option;120.4277;11-Sep-2026
+133405;INF192K01HP8;INF192K01HQ6;JM Aggressive Hybrid Fund;Regular Plan;Quarterly IDCW Option;30.5554;15-Sep-2026
+100221;INF192K01544;-;JM Aggressive Hybrid Fund;Regular Plan;Growth Option;118.2302;15-Sep-2026
  
 Mahindra Manulife Mutual Fund
  
@@ -7116,17 +7116,17 @@ Axis Mutual Fund
  
 Groww Mutual Fund
  
-154320;INF666M01ON8;-;Groww Arbitrage Fund;Direct Plan;Growth;10.2257;11-Sep-2026
-154323;INF666M01OO6;INF666M01OP3;Groww Arbitrage Fund;Direct Plan;Income Distribution cum capital withdrawal;10.2257;11-Sep-2026
-154325;INF666M01OQ1;-;Groww Arbitrage Fund;Regular Plan;Growth;10.1977;11-Sep-2026
-154324;INF666M01OR9;INF666M01OS7;Groww Arbitrage Fund;Regular Plan;Income Distribution cum capital withdrawal;10.1977;11-Sep-2026
+154320;INF666M01ON8;-;Groww Arbitrage Fund;Direct Plan;Growth;10.2291;15-Sep-2026
+154323;INF666M01OO6;INF666M01OP3;Groww Arbitrage Fund;Direct Plan;Income Distribution cum capital withdrawal;10.2291;15-Sep-2026
+154325;INF666M01OQ1;-;Groww Arbitrage Fund;Regular Plan;Growth;10.2003;15-Sep-2026
+154324;INF666M01OR9;INF666M01OS7;Groww Arbitrage Fund;Regular Plan;Income Distribution cum capital withdrawal;10.2003;15-Sep-2026
  
 Helios Mutual Fund
  
-154257;INF0R8701442;-;Helios Arbitrage Fund;Direct Plan;Growth;10.28;11-Sep-2026
-154259;INF0R8701459;INF0R8701467;Helios Arbitrage Fund;Direct Plan;IDCW;10.27;11-Sep-2026
-154258;INF0R8701418;-;Helios Arbitrage Fund;Regular Plan;Growth;10.24;11-Sep-2026
-154260;INF0R8701426;INF0R8701434;Helios Arbitrage Fund;Regular Plan;IDCW;10.24;11-Sep-2026
+154257;INF0R8701442;-;Helios Arbitrage Fund;Direct Plan;Growth;10.29;15-Sep-2026
+154259;INF0R8701459;INF0R8701467;Helios Arbitrage Fund;Direct Plan;IDCW;10.28;15-Sep-2026
+154258;INF0R8701418;-;Helios Arbitrage Fund;Regular Plan;Growth;10.25;15-Sep-2026
+154260;INF0R8701426;INF0R8701434;Helios Arbitrage Fund;Regular Plan;IDCW;10.25;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -7157,31 +7157,31 @@ Invesco Mutual Fund
  
 Jio BlackRock Mutual Fund
  
-154076;INF22M001101;-;JioBlackRock Arbitrage Fund;Direct Plan;Growth Option;10.5028;11-Sep-2026
-154638;INF22M001259;-;JioBlackRock Arbitrage Fund;Regular Plan;Growth Option;10.0115;11-Sep-2026
+154076;INF22M001101;-;JioBlackRock Arbitrage Fund;Direct Plan;Growth Option;10.5139;15-Sep-2026
+154638;INF22M001259;-;JioBlackRock Arbitrage Fund;Regular Plan;Growth Option;10.0213;15-Sep-2026
  
 JM Financial Mutual Fund
  
-133395;INF192K01GX4;-;JM Arbitrage Fund;Direct Plan;Annual Bonus Option - Principal Units;19.1904;11-Sep-2026
-135173;INF192K01KY4;INF192K01KZ1;JM Arbitrage Fund;Direct Plan;Annual IDCW Option;17.0019;11-Sep-2026
-130604;INF192K01GL9;-;JM Arbitrage Fund;Direct Plan;Bonus Option - Principal Units;19.9941;11-Sep-2026
-120482;INF192K01BN6;-;JM Arbitrage Fund;Direct Plan;Growth Option;37.3618;11-Sep-2026
+133395;INF192K01GX4;-;JM Arbitrage Fund;Direct Plan;Annual Bonus Option - Principal Units;19.2011;15-Sep-2026
+135173;INF192K01KY4;INF192K01KZ1;JM Arbitrage Fund;Direct Plan;Annual IDCW Option;17.0114;15-Sep-2026
+130604;INF192K01GL9;-;JM Arbitrage Fund;Direct Plan;Bonus Option - Principal Units;20.0052;15-Sep-2026
+120482;INF192K01BN6;-;JM Arbitrage Fund;Direct Plan;Growth Option;37.3826;15-Sep-2026
 133397;INF192K01ID2;-;JM Arbitrage Fund;;;33.8717;27-Jan-2025
-135171;INF192K01KU2;INF192K01KV0;JM Arbitrage Fund;Direct Plan;Half Yearly IDCW Option;17.2819;11-Sep-2026
-135172;INF192K01KM9;INF192K01KN7;JM Arbitrage Fund;Direct Plan;Monthly IDCW Option;15.0871;11-Sep-2026
+135171;INF192K01KU2;INF192K01KV0;JM Arbitrage Fund;Direct Plan;Half Yearly IDCW Option;17.2914;15-Sep-2026
+135172;INF192K01KM9;INF192K01KN7;JM Arbitrage Fund;Direct Plan;Monthly IDCW Option;15.0955;15-Sep-2026
 133398;INF192K01IH3;-;JM Arbitrage Fund;;;33.8816;27-Jan-2025
-135174;INF192K01KQ0;INF192K01KR8;JM Arbitrage Fund;Direct Plan;Quarterly IDCW Option;17.7538;11-Sep-2026
-120481;INF192K01BL0;INF192K01BM8;JM Arbitrage Fund;Direct Plan;IDCW Option;17.6062;11-Sep-2026
+135174;INF192K01KQ0;INF192K01KR8;JM Arbitrage Fund;Direct Plan;Quarterly IDCW Option;17.7636;15-Sep-2026
+120481;INF192K01BL0;INF192K01BM8;JM Arbitrage Fund;Direct Plan;IDCW Option;17.616;15-Sep-2026
 133394;INF192K01GV8;-;JM Arbitrage Fund;;;32.106;27-Jan-2025
-135167;INF192K01KW8;INF192K01KX6;JM Arbitrage Fund;Regular Plan;Annual IDCW Option;15.354;11-Sep-2026
-130603;INF192K01GJ3;-;JM Arbitrage Fund;Regular Plan;Bonus Option - Principal Units;18.8936;11-Sep-2026
-103780;INF192K01510;-;JM Arbitrage Fund;Regular Plan;Growth Option;34.7534;11-Sep-2026
+135167;INF192K01KW8;INF192K01KX6;JM Arbitrage Fund;Regular Plan;Annual IDCW Option;15.3615;15-Sep-2026
+130603;INF192K01GJ3;-;JM Arbitrage Fund;Regular Plan;Bonus Option - Principal Units;18.9027;15-Sep-2026
+103780;INF192K01510;-;JM Arbitrage Fund;Regular Plan;Growth Option;34.7702;15-Sep-2026
 133399;INF192K01IB6;-;JM Arbitrage Fund;;;32.1609;27-Jan-2025
-135170;INF192K01KS6;INF192K01KT4;JM Arbitrage Fund;Regular Plan;Half Yearly IDCW Option;15.4657;11-Sep-2026
-103781;INF192K01494;INF192K01502;JM Arbitrage Fund;Regular Plan;IDCW Option;16.1303;11-Sep-2026
-135168;INF192K01KK3;INF192K01KL1;JM Arbitrage Fund;Regular Plan;Monthly IDCW Option;13.6637;11-Sep-2026
+135170;INF192K01KS6;INF192K01KT4;JM Arbitrage Fund;Regular Plan;Half Yearly IDCW Option;15.4732;15-Sep-2026
+103781;INF192K01494;INF192K01502;JM Arbitrage Fund;Regular Plan;IDCW Option;16.1381;15-Sep-2026
+135168;INF192K01KK3;INF192K01KL1;JM Arbitrage Fund;Regular Plan;Monthly IDCW Option;13.6703;15-Sep-2026
 133396;INF192K01IF7;-;JM Arbitrage Fund;;;32.1609;27-Jan-2025
-135169;INF192K01KO5;INF192K01KP2;JM Arbitrage Fund;Regular Plan;Quarterly IDCW Option;15.6946;11-Sep-2026
+135169;INF192K01KO5;INF192K01KP2;JM Arbitrage Fund;Regular Plan;Quarterly IDCW Option;15.7022;15-Sep-2026
  
 Mahindra Manulife Mutual Fund
  
@@ -7243,17 +7243,17 @@ Baroda BNP Paribas Mutual Fund
  
 Canara Robeco Mutual Fund
  
-152688;INF760K01LD0;-;Canara Robeco Balanced Advantage Fund;Direct Plan;Growth Option;10.4800;11-Sep-2026
-152689;INF760K01LE8;INF760K01LF5;Canara Robeco Balanced Advantage Fund;Direct Plan;IDCW Option;10.3800;11-Sep-2026
-152690;INF760K01LA6;-;Canara Robeco Balanced Advantage Fund;Regular Plan;Growth Option;10.1800;11-Sep-2026
-152691;INF760K01LB4;INF760K01LC2;Canara Robeco Balanced Advantage Fund;Regular Plan;IDCW Option;10.0700;11-Sep-2026
+152688;INF760K01LD0;-;Canara Robeco Balanced Advantage Fund;Direct Plan;Growth Option;10.3500;15-Sep-2026
+152689;INF760K01LE8;INF760K01LF5;Canara Robeco Balanced Advantage Fund;Direct Plan;IDCW Option;10.2500;15-Sep-2026
+152690;INF760K01LA6;-;Canara Robeco Balanced Advantage Fund;Regular Plan;Growth Option;10.0500;15-Sep-2026
+152691;INF760K01LB4;INF760K01LC2;Canara Robeco Balanced Advantage Fund;Regular Plan;IDCW Option;9.9500;15-Sep-2026
  
 Helios Mutual Fund
  
-152509;INF0R8701145;-;Helios Balanced Advantage Fund;Direct Plan;Growth;11.99;11-Sep-2026
-152511;INF0R8701152;INF0R8701160;Helios Balanced Advantage Fund;Direct Plan;IDCW;11.90;11-Sep-2026
-152512;INF0R8701111;-;Helios Balanced Advantage Fund;Regular Plan;Growth;11.53;11-Sep-2026
-152510;INF0R8701129;INF0R8701137;Helios Balanced Advantage Fund;Regular Plan;IDCW;11.46;11-Sep-2026
+152509;INF0R8701145;-;Helios Balanced Advantage Fund;Direct Plan;Growth;11.77;15-Sep-2026
+152511;INF0R8701152;INF0R8701160;Helios Balanced Advantage Fund;Direct Plan;IDCW;11.69;15-Sep-2026
+152512;INF0R8701111;-;Helios Balanced Advantage Fund;Regular Plan;Growth;11.32;15-Sep-2026
+152510;INF0R8701129;INF0R8701137;Helios Balanced Advantage Fund;Regular Plan;IDCW;11.25;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -7329,10 +7329,10 @@ Open Ended Schemes(Hybrid Schemes - Balanced Hybrid Fund)
  
 360 ONE Mutual Fund
  
-152073;INF579M01AZ6;INF579M01BA7;360 ONE Balanced Hybrid Fund;Direct Plan;IDCW Option;13.8242;11-Sep-2026
-152075;INF579M01AV5;-;360 ONE Balanced Hybrid Fund;Regular Plan;GROWTH Option;13.2225;11-Sep-2026
-152076;INF579M01AY9;-;360 ONE Balanced Hybrid Fund;Direct Plan;GROWTH Option;13.8242;11-Sep-2026
-152074;INF579M01AW3;INF579M01AX1;360 ONE Balanced Hybrid Fund;Regular Plan;IDCW Option;13.2225;11-Sep-2026
+152073;INF579M01AZ6;INF579M01BA7;360 ONE Balanced Hybrid Fund;Direct Plan;IDCW Option;13.6769;15-Sep-2026
+152075;INF579M01AV5;-;360 ONE Balanced Hybrid Fund;Regular Plan;GROWTH Option;13.0794;15-Sep-2026
+152076;INF579M01AY9;-;360 ONE Balanced Hybrid Fund;Direct Plan;GROWTH Option;13.6769;15-Sep-2026
+152074;INF579M01AW3;INF579M01AX1;360 ONE Balanced Hybrid Fund;Regular Plan;IDCW Option;13.0794;15-Sep-2026
  
 SBI Mutual Fund
  
@@ -7375,12 +7375,12 @@ Axis Mutual Fund
  
 Canara Robeco Mutual Fund
  
-118309;INF760K01GB4;-;Canara Robeco Conservative Hybrid Fund;Direct Plan;GROWTH OPTION;115.7314;11-Sep-2026
-118311;INF760K01FZ5;INF760K01GA6;Canara Robeco Conservative Hybrid Fund;Direct Plan;MONTHLY IDCW (Payout/Reinvestment);15.9576;11-Sep-2026
-118310;INF760K01GC2;INF760K01GD0;Canara Robeco Conservative Hybrid Fund;Direct Plan;QUARTERLY IDCW (Payout/Reinvestment);16.2108;11-Sep-2026
-100601;INF760K01282;-;Canara Robeco Conservative Hybrid Fund;Regular Plan;GROWTH OPTION;99.5340;11-Sep-2026
-100600;INF760K01308;INF760K01316;Canara Robeco Conservative Hybrid Fund;Regular Plan;MONTHLY IDCW (Payout/Reinvestment);12.2142;11-Sep-2026
-112378;INF760K01AP7;INF760K01AQ5;Canara Robeco Conservative Hybrid Fund;Regular Plan;QUARTERLY IDCW (Payout/Reinvestment);13.4780;11-Sep-2026
+118309;INF760K01GB4;-;Canara Robeco Conservative Hybrid Fund;Direct Plan;GROWTH OPTION;115.0868;15-Sep-2026
+118311;INF760K01FZ5;INF760K01GA6;Canara Robeco Conservative Hybrid Fund;Direct Plan;MONTHLY IDCW (Payout/Reinvestment);15.8687;15-Sep-2026
+118310;INF760K01GC2;INF760K01GD0;Canara Robeco Conservative Hybrid Fund;Direct Plan;QUARTERLY IDCW (Payout/Reinvestment);16.1205;15-Sep-2026
+100601;INF760K01282;-;Canara Robeco Conservative Hybrid Fund;Regular Plan;GROWTH OPTION;98.9673;15-Sep-2026
+100600;INF760K01308;INF760K01316;Canara Robeco Conservative Hybrid Fund;Regular Plan;MONTHLY IDCW (Payout/Reinvestment);12.1446;15-Sep-2026
+112378;INF760K01AP7;INF760K01AQ5;Canara Robeco Conservative Hybrid Fund;Regular Plan;QUARTERLY IDCW (Payout/Reinvestment);13.4013;15-Sep-2026
  
 DSP Mutual Fund
  
@@ -7503,10 +7503,10 @@ Open Ended Schemes(Hybrid Schemes - Multi Asset Allocation Fund)
  
 360 ONE Mutual Fund
  
-153774;INF579M01BM2;-;360 ONE Multi Asset Allocation Fund;Direct Plan;GROWTH Option;12.4526;11-Sep-2026
-153773;INF579M01BN0;INF579M01BO8;360 ONE Multi Asset Allocation Fund;Direct Plan;IDCW Option;12.4526;11-Sep-2026
-153772;INF579M01BJ8;-;360 ONE Multi Asset Allocation Fund;Regular Plan;GROWTH Option;12.2431;11-Sep-2026
-153775;INF579M01BK6;INF579M01BL4;360 ONE Multi Asset Allocation Fund;Regular Plan;IDCW Option;12.2431;11-Sep-2026
+153774;INF579M01BM2;-;360 ONE Multi Asset Allocation Fund;Direct Plan;GROWTH Option;12.3349;15-Sep-2026
+153773;INF579M01BN0;INF579M01BO8;360 ONE Multi Asset Allocation Fund;Direct Plan;IDCW Option;12.3349;15-Sep-2026
+153772;INF579M01BJ8;-;360 ONE Multi Asset Allocation Fund;Regular Plan;GROWTH Option;12.1254;15-Sep-2026
+153775;INF579M01BK6;INF579M01BL4;360 ONE Multi Asset Allocation Fund;Regular Plan;IDCW Option;12.1254;15-Sep-2026
  
 AlphaGrep Mutual Fund
  
@@ -7524,17 +7524,17 @@ Axis Mutual Fund
  
 Canara Robeco Mutual Fund
  
-153465;INF760K01LH1;-;Canara Robeco Multi Asset Allocation Fund;Direct Plan;Growth;11.4700;11-Sep-2026
-153468;INF760K01LJ7;INF760K01LL3;Canara Robeco Multi Asset Allocation Fund;Direct Plan;IDCW;11.4700;11-Sep-2026
-153466;INF760K01LG3;-;Canara Robeco Multi Asset Allocation Fund;Regular Plan;Growth;11.2500;11-Sep-2026
-153467;INF760K01LI9;INF760K01LK5;Canara Robeco Multi Asset Allocation Fund;Regular Plan;IDCW;11.2500;11-Sep-2026
+153465;INF760K01LH1;-;Canara Robeco Multi Asset Allocation Fund;Direct Plan;Growth;11.3300;15-Sep-2026
+153468;INF760K01LJ7;INF760K01LL3;Canara Robeco Multi Asset Allocation Fund;Direct Plan;IDCW;11.3300;15-Sep-2026
+153466;INF760K01LG3;-;Canara Robeco Multi Asset Allocation Fund;Regular Plan;Growth;11.1100;15-Sep-2026
+153467;INF760K01LI9;INF760K01LK5;Canara Robeco Multi Asset Allocation Fund;Regular Plan;IDCW;11.1100;15-Sep-2026
  
 Groww Mutual Fund
  
-153821;INF666M01MA9;-;Groww Multi Asset Allocation Fund;Direct Plan;Growth;10.3285;11-Sep-2026
-153852;INF666M01MB7;INF666M01MC5;Groww Multi Asset Allocation Fund;Direct Plan;Income Distribution cum capital withdrawal;10.3255;11-Sep-2026
-153851;INF666M01MD3;-;Groww Multi Asset Allocation Fund;Regular Plan;Growth;10.1522;11-Sep-2026
-153850;INF666M01ME1;INF666M01MF8;Groww Multi Asset Allocation Fund;Regular Plan;Income Distribution cum capital withdrawal;10.1525;11-Sep-2026
+153821;INF666M01MA9;-;Groww Multi Asset Allocation Fund;Direct Plan;Growth;10.2154;15-Sep-2026
+153852;INF666M01MB7;INF666M01MC5;Groww Multi Asset Allocation Fund;Direct Plan;Income Distribution cum capital withdrawal;10.2123;15-Sep-2026
+153851;INF666M01MD3;-;Groww Multi Asset Allocation Fund;Regular Plan;Growth;10.0392;15-Sep-2026
+153850;INF666M01ME1;INF666M01MF8;Groww Multi Asset Allocation Fund;Regular Plan;Income Distribution cum capital withdrawal;10.0394;15-Sep-2026
  
 HDFC Mutual Fund
  
@@ -7575,10 +7575,10 @@ ITI Mutual Fund
  
 JM Financial Mutual Fund
  
-154423;INF192K01NQ4;-;JM Multi Asset Allocation Fund;Direct Plan;Growth Option;10.2891;11-Sep-2026
-154421;INF192K01NS0;INF192K01NR2;JM Multi Asset Allocation Fund;Direct Plan;IDCW Option;10.2891;11-Sep-2026
-154424;INF192K01NT8;-;JM Multi Asset Allocation Fund;Regular Plan;Growth Option;10.2607;11-Sep-2026
-154422;INF192K01NV4;INF192K01NU6;JM Multi Asset Allocation Fund;Regular Plan;IDCW Option;10.2607;11-Sep-2026
+154423;INF192K01NQ4;-;JM Multi Asset Allocation Fund;Direct Plan;Growth Option;10.1452;15-Sep-2026
+154421;INF192K01NS0;INF192K01NR2;JM Multi Asset Allocation Fund;Direct Plan;IDCW Option;10.1452;15-Sep-2026
+154424;INF192K01NT8;-;JM Multi Asset Allocation Fund;Regular Plan;Growth Option;10.1153;15-Sep-2026
+154422;INF192K01NV4;INF192K01NU6;JM Multi Asset Allocation Fund;Regular Plan;IDCW Option;10.1153;15-Sep-2026
  
 Mahindra Manulife Mutual Fund
  
@@ -7894,10 +7894,10 @@ Bandhan Mutual Fund
  
 Canara Robeco Mutual Fund
  
-150505;INF760K01KC4;-;Canara Robeco Banking and PSU Debt Fund;Direct Plan;Growth Option;12.9087;11-Sep-2026
-150507;INF760K01KE0;INF760K01KD2;Canara Robeco Banking and PSU Debt Fund;Direct Plan;IDCW Payout;10.8217;11-Sep-2026
-150503;INF760K01KF7;-;Canara Robeco Banking and PSU Debt Fund;Regular Plan;Growth Option;12.7506;11-Sep-2026
-150504;INF760K01KH3;INF760K01KG5;Canara Robeco Banking and PSU Debt Fund;Regular Plan;IDCW (Payout/ Reinvestment);10.6982;11-Sep-2026
+150505;INF760K01KC4;-;Canara Robeco Banking and PSU Debt Fund;Direct Plan;Growth Option;12.8875;15-Sep-2026
+150507;INF760K01KE0;INF760K01KD2;Canara Robeco Banking and PSU Debt Fund;Direct Plan;IDCW Payout;10.8039;15-Sep-2026
+150503;INF760K01KF7;-;Canara Robeco Banking and PSU Debt Fund;Regular Plan;Growth Option;12.7292;15-Sep-2026
+150504;INF760K01KH3;INF760K01KG5;Canara Robeco Banking and PSU Debt Fund;Regular Plan;IDCW (Payout/ Reinvestment);10.6802;15-Sep-2026
  
 DSP Mutual Fund
  
@@ -8065,10 +8065,10 @@ Axis Mutual Fund
  
 Canara Robeco Mutual Fund
  
-126685;INF760K01HB2;-;Canara Robeco Corporate Bond Fund;Direct Plan;GROWTH OPTION;24.6856;11-Sep-2026
-126686;INF760K01HC0;INF760K01HD8;Canara Robeco Corporate Bond Fund;Direct Plan;IDCW (Payout/Reinvestment);12.4897;11-Sep-2026
-126687;INF760K01GY6;-;Canara Robeco Corporate Bond Fund;Regular Plan;GROWTH OPTION;22.8627;11-Sep-2026
-126688;INF760K01GZ3;INF760K01HA4;Canara Robeco Corporate Bond Fund;Regular Plan;IDCW (Payout/Reinvestment);11.5912;11-Sep-2026
+126685;INF760K01HB2;-;Canara Robeco Corporate Bond Fund;Direct Plan;GROWTH OPTION;24.6559;15-Sep-2026
+126686;INF760K01HC0;INF760K01HD8;Canara Robeco Corporate Bond Fund;Direct Plan;IDCW (Payout/Reinvestment);12.4746;15-Sep-2026
+126687;INF760K01GY6;-;Canara Robeco Corporate Bond Fund;Regular Plan;GROWTH OPTION;22.8337;15-Sep-2026
+126688;INF760K01GZ3;INF760K01HA4;Canara Robeco Corporate Bond Fund;Regular Plan;IDCW (Payout/Reinvestment);11.5764;15-Sep-2026
  
 Franklin Templeton Mutual Fund
  
@@ -8205,14 +8205,14 @@ Open Ended Schemes(Income/Debt Oriented Schemes - Dynamic Term Fund)
  
 360 ONE Mutual Fund
  
-122612;INF579M01183;-;360 ONE Dynamic Term Fund;Regular Plan;GROWTH Option;24.1823;11-Sep-2026
-122715;INF579M01266;-;360 ONE Dynamic Term Fund;Direct Plan;GROWTH Option;25.5889;11-Sep-2026
-122721;INF579M01282;INF579M01316;360 ONE Dynamic Term Fund;Direct Plan;IDCW Option;14.1985;11-Sep-2026
-122717;INF579M01290;INF579M01324;360 ONE Dynamic Term Fund;Direct Plan;IDCW Option;23.6092;11-Sep-2026
-122711;INF579M01191;-;360 ONE Dynamic Term Fund;Regular Plan;GROWTH Option;24.1822;11-Sep-2026
-122720;INF579M01225;INF579M01258;360 ONE Dynamic Term Fund;Regular Plan;IDCW Option;23.3358;11-Sep-2026
-122719;INF579M01209;INF579M01233;360 ONE Dynamic Term Fund;Regular Plan;IDCW Option;13.0727;11-Sep-2026
-122712;INF579M01217;INF579M01241;360 ONE Dynamic Term Fund;Regular Plan;IDCW Option;23.3360;11-Sep-2026
+122612;INF579M01183;-;360 ONE Dynamic Term Fund;Regular Plan;GROWTH Option;24.1185;15-Sep-2026
+122715;INF579M01266;-;360 ONE Dynamic Term Fund;Direct Plan;GROWTH Option;25.5221;15-Sep-2026
+122721;INF579M01282;INF579M01316;360 ONE Dynamic Term Fund;Direct Plan;IDCW Option;14.1614;15-Sep-2026
+122717;INF579M01290;INF579M01324;360 ONE Dynamic Term Fund;Direct Plan;IDCW Option;23.5475;15-Sep-2026
+122711;INF579M01191;-;360 ONE Dynamic Term Fund;Regular Plan;GROWTH Option;24.1184;15-Sep-2026
+122720;INF579M01225;INF579M01258;360 ONE Dynamic Term Fund;Regular Plan;IDCW Option;23.2742;15-Sep-2026
+122719;INF579M01209;INF579M01233;360 ONE Dynamic Term Fund;Regular Plan;IDCW Option;13.0383;15-Sep-2026
+122712;INF579M01217;INF579M01241;360 ONE Dynamic Term Fund;Regular Plan;IDCW Option;23.2744;15-Sep-2026
  
 Aditya Birla Sun Life Mutual Fund
  
@@ -8267,10 +8267,10 @@ Baroda BNP Paribas Mutual Fund
  
 Canara Robeco Mutual Fund
  
-118284;INF760K01EC7;-;Canara Robeco Dynamic Term Fund;Direct Plan;GROWTH OPTION;33.1554;11-Sep-2026
-118283;INF760K01EA1;INF760K01EB9;Canara Robeco Dynamic Term Fund;Direct Plan;IDCW (Payout/Reinvestment);14.9640;11-Sep-2026
-111962;INF760K01449;-;Canara Robeco Dynamic Term Fund;Regular Plan;GROWTH OPTION;29.6830;11-Sep-2026
-111963;INF760K01423;INF760K01431;Canara Robeco Dynamic Term Fund;Regular Plan;IDCW (Payout/Reinvestment);13.2443;11-Sep-2026
+118284;INF760K01EC7;-;Canara Robeco Dynamic Term Fund;Direct Plan;GROWTH OPTION;33.0616;15-Sep-2026
+118283;INF760K01EA1;INF760K01EB9;Canara Robeco Dynamic Term Fund;Direct Plan;IDCW (Payout/Reinvestment);14.9217;15-Sep-2026
+111962;INF760K01449;-;Canara Robeco Dynamic Term Fund;Regular Plan;GROWTH OPTION;29.5958;15-Sep-2026
+111963;INF760K01423;INF760K01431;Canara Robeco Dynamic Term Fund;Regular Plan;IDCW (Payout/Reinvestment);13.2054;15-Sep-2026
  
 DSP Mutual Fund
  
@@ -8287,16 +8287,16 @@ DSP Mutual Fund
  
 Groww Mutual Fund
  
-145589;INF666M01EK5;-;Groww Dynamic Term Fund;Direct Plan;Growth;1579.301;11-Sep-2026
-145590;INF666M01ES8;-;Groww Dynamic Term Fund;Regular Plan;Growth;1497.6484;11-Sep-2026
-145596;-;INF666M01EL3;Groww Dynamic Term Fund;Direct Plan;Income Distribution cum capital withdrawal;1016.9685;11-Sep-2026
-145595;INF666M01EO7;INF666M01EP4;Groww Dynamic Term Fund;Direct Plan;Fortnightly - Income Distribution cum capital withdrawal;1020.8339;11-Sep-2026
-145591;INF666M01EQ2;INF666M01ER0;Groww Dynamic Term Fund;Direct Plan;Monthly - Income Distribution cum capital withdrawal;1011.9065;11-Sep-2026
-145597;INF666M01EM1;INF666M01EN9;Groww Dynamic Term Fund;Direct Plan;Weekly - Income Distribution cum capital withdrawal;1016.0955;11-Sep-2026
-145593;-;INF666M01ET6;Groww Dynamic Term Fund;Regular Plan;Income Distribution cum capital withdrawal;1018.7878;11-Sep-2026
-145598;INF666M01EW0;INF666M01EX8;Groww Dynamic Term Fund;Regular Plan;Fortnightly - Income Distribution cum capital withdrawal;1017.3331;11-Sep-2026
-145592;INF666M01EY6;INF666M01EZ3;Groww Dynamic Term Fund;Regular Plan;Monthly - Income Distribution cum capital withdrawal;1012.0023;11-Sep-2026
-145594;INF666M01EU4;INF666M01EV2;Groww Dynamic Term Fund;Regular Plan;Weekly - Income Distribution cum capital withdrawal;1015.6339;11-Sep-2026
+145589;INF666M01EK5;-;Groww Dynamic Term Fund;Direct Plan;Growth;1578.2867;15-Sep-2026
+145590;INF666M01ES8;-;Groww Dynamic Term Fund;Regular Plan;Growth;1496.5376;15-Sep-2026
+145596;-;INF666M01EL3;Groww Dynamic Term Fund;Direct Plan;Income Distribution cum capital withdrawal;1016.3157;15-Sep-2026
+145595;INF666M01EO7;INF666M01EP4;Groww Dynamic Term Fund;Direct Plan;Fortnightly - Income Distribution cum capital withdrawal;1020.1785;15-Sep-2026
+145591;INF666M01EQ2;INF666M01ER0;Groww Dynamic Term Fund;Direct Plan;Monthly - Income Distribution cum capital withdrawal;1011.2583;15-Sep-2026
+145597;INF666M01EM1;INF666M01EN9;Groww Dynamic Term Fund;Direct Plan;Weekly - Income Distribution cum capital withdrawal;1015.4408;15-Sep-2026
+145593;-;INF666M01ET6;Groww Dynamic Term Fund;Regular Plan;Income Distribution cum capital withdrawal;1018.0328;15-Sep-2026
+145598;INF666M01EW0;INF666M01EX8;Groww Dynamic Term Fund;Regular Plan;Fortnightly - Income Distribution cum capital withdrawal;1016.5797;15-Sep-2026
+145592;INF666M01EY6;INF666M01EZ3;Groww Dynamic Term Fund;Regular Plan;Monthly - Income Distribution cum capital withdrawal;1011.2521;15-Sep-2026
+145594;INF666M01EU4;INF666M01EV2;Groww Dynamic Term Fund;Regular Plan;Weekly - Income Distribution cum capital withdrawal;1014.8807;15-Sep-2026
  
 HDFC Mutual Fund
  
@@ -8354,20 +8354,20 @@ ITI Mutual Fund
  
 JM Financial Mutual Fund
  
-120432;-;INF192K01CZ8;JM Dynamic Term Fund;Direct Plan;Daily IDCW Option;10.0867;11-Sep-2026
-120434;INF192K01DB7;INF192K01DC5;JM Dynamic Term Fund;Direct Plan;IDCW Option;46.7714;11-Sep-2026
-133414;INF192K01IL5;INF192K01IM3;JM Dynamic Term Fund;Direct Plan;Monthly IDCW Option;47.1298;11-Sep-2026
-120433;-;INF192K01DA9;JM Dynamic Term Fund;Direct Plan;Weekly IDCW Option;10.5381;11-Sep-2026
+120432;-;INF192K01CZ8;JM Dynamic Term Fund;Direct Plan;Daily IDCW Option;10.0618;15-Sep-2026
+120434;INF192K01DB7;INF192K01DC5;JM Dynamic Term Fund;Direct Plan;IDCW Option;46.656;15-Sep-2026
+133414;INF192K01IL5;INF192K01IM3;JM Dynamic Term Fund;Direct Plan;Monthly IDCW Option;47.0135;15-Sep-2026
+120433;-;INF192K01DA9;JM Dynamic Term Fund;Direct Plan;Weekly IDCW Option;10.5121;15-Sep-2026
 122323;INF192K01EX9;-;JM Dynamic Term Fund;;;40.0725;27-Jan-2025
-105639;-;INF192K01668;JM Dynamic Term Fund;Regular Plan;Daily IDCW Option;10.0284;11-Sep-2026
-101806;INF192K01700;-;JM Dynamic Term Fund;Regular Plan;Growth Option;43.3323;11-Sep-2026
+105639;-;INF192K01668;JM Dynamic Term Fund;Regular Plan;Daily IDCW Option;10.0031;15-Sep-2026
+101806;INF192K01700;-;JM Dynamic Term Fund;Regular Plan;Growth Option;43.223;15-Sep-2026
 133389;INF192K01IN1;-;JM Dynamic Term Fund;;;40.4031;27-Jan-2025
-101805;INF192K01684;INF192K01692;JM Dynamic Term Fund;Regular Plan;IDCW Option;43.4682;11-Sep-2026
-133390;INF192K01IJ9;INF192K01IK7;JM Dynamic Term Fund;Regular Plan;Monthly IDCW Option;43.6746;11-Sep-2026
-105637;-;INF192K01676;JM Dynamic Term Fund;Regular Plan;Weekly IDCW Option;10.5291;11-Sep-2026
+101805;INF192K01684;INF192K01692;JM Dynamic Term Fund;Regular Plan;IDCW Option;43.3586;15-Sep-2026
+133390;INF192K01IJ9;INF192K01IK7;JM Dynamic Term Fund;Regular Plan;Monthly IDCW Option;43.5644;15-Sep-2026
+105637;-;INF192K01676;JM Dynamic Term Fund;Regular Plan;Weekly IDCW Option;10.5025;15-Sep-2026
 101807;INF192K01734;INF192K01742;JM Dynamic Term Fund;;;10.2458;16-Mar-2021
 122315;INF192K01EZ4;-;JM Dynamic Term Fund;;;42.4963;27-Jan-2025
-120435;INF192K01DD3;-;JM Dynamic Term Fund;Direct Plan;Growth Option;46.5214;11-Sep-2026
+120435;INF192K01DD3;-;JM Dynamic Term Fund;Direct Plan;Growth Option;46.4066;15-Sep-2026
 133388;INF192K01IP6;-;JM Dynamic Term Fund;;;42.9228;27-Jan-2025
 105638;-;INF192K01718;JM Dynamic Term Fund;;;10.0470;06-May-2020
 101808;INF192K01759;-;JM Dynamic Term Fund;;;29.1520;14-Jan-2020
@@ -8619,10 +8619,10 @@ Axis Mutual Fund
  
 Canara Robeco Mutual Fund
  
-118299;INF760K01FC4;-;Canara Robeco Gilt Fund;Direct Plan;GROWTH OPTION;83.5294;11-Sep-2026
-118298;INF760K01FA8;INF760K01FB6;Canara Robeco Gilt Fund;Direct Plan;IDCW (Payout/Reinvestment);16.2470;11-Sep-2026
-100597;INF760K01AE1;-;Canara Robeco Gilt Fund;Regular Plan;GROWTH OPTION;76.8770;11-Sep-2026
-100596;INF760K01AB7;INF760K01AC5;Canara Robeco Gilt Fund;Regular Plan;IDCW (Payout/Reinvestment);14.7653;11-Sep-2026
+118299;INF760K01FC4;-;Canara Robeco Gilt Fund;Direct Plan;GROWTH OPTION;83.3692;15-Sep-2026
+118298;INF760K01FA8;INF760K01FB6;Canara Robeco Gilt Fund;Direct Plan;IDCW (Payout/Reinvestment);16.2159;15-Sep-2026
+100597;INF760K01AE1;-;Canara Robeco Gilt Fund;Regular Plan;GROWTH OPTION;76.7230;15-Sep-2026
+100596;INF760K01AB7;INF760K01AC5;Canara Robeco Gilt Fund;Regular Plan;IDCW (Payout/Reinvestment);14.7357;15-Sep-2026
  
 Edelweiss Mutual Fund
  
@@ -8648,10 +8648,10 @@ Franklin Templeton Mutual Fund
  
 Groww Mutual Fund
  
-153477;INF666M01KK2;-;Groww Gilt Fund;Direct Plan;Growth;10.0144;11-Sep-2026
-153502;INF666M01KL0;INF666M01KM8;Groww Gilt Fund;Direct Plan;Income Distribution cum capital withdrawal;10.0124;11-Sep-2026
-153503;INF666M01KN6;-;Groww Gilt Fund;Regular Plan;Growth;9.875;11-Sep-2026
-153504;INF666M01KO4;INF666M01KP1;Groww Gilt Fund;Regular Plan;Income Distribution cum capital withdrawal;9.8752;11-Sep-2026
+153477;INF666M01KK2;-;Groww Gilt Fund;Direct Plan;Growth;10.0097;15-Sep-2026
+153502;INF666M01KL0;INF666M01KM8;Groww Gilt Fund;Direct Plan;Income Distribution cum capital withdrawal;10.0077;15-Sep-2026
+153503;INF666M01KN6;-;Groww Gilt Fund;Regular Plan;Growth;9.8692;15-Sep-2026
+153504;INF666M01KO4;INF666M01KP1;Groww Gilt Fund;Regular Plan;Income Distribution cum capital withdrawal;9.8694;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -8703,26 +8703,26 @@ Open Ended Schemes(Income/Debt Oriented Schemes - Liquid Fund)
  
 360 ONE Mutual Fund
  
-125349;-;INF579M01688;360 ONE Liquid Fund;Direct Plan;IDCW Option;1001.1249;14-Sep-2026
-125345;INF579M01621;-;360 ONE Liquid Fund;Direct Plan;GROWTH Option;2175.0164;14-Sep-2026
-125343;INF579M01639;INF579M01696;360 ONE Liquid Fund;Direct Plan;IDCW Option;1005.8282;14-Sep-2026
-125342;-;INF579M01563;360 ONE Liquid Fund;Regular Plan;IDCW Option;1001.1249;14-Sep-2026
-125259;INF579M01506;-;360 ONE Liquid Fund;Regular Plan;GROWTH Option;2158.7700;14-Sep-2026
-125337;INF579M01514;INF579M01571;360 ONE Liquid Fund;Regular Plan;IDCW Option;1005.7995;14-Sep-2026
+125349;-;INF579M01688;360 ONE Liquid Fund;Direct Plan;IDCW Option;1001.0309;15-Sep-2026
+125345;INF579M01621;-;360 ONE Liquid Fund;Direct Plan;GROWTH Option;2175.1363;15-Sep-2026
+125343;INF579M01639;INF579M01696;360 ONE Liquid Fund;Direct Plan;IDCW Option;1005.0000;15-Sep-2026
+125342;-;INF579M01563;360 ONE Liquid Fund;Regular Plan;IDCW Option;1001.0309;15-Sep-2026
+125259;INF579M01506;-;360 ONE Liquid Fund;Regular Plan;GROWTH Option;2158.8817;15-Sep-2026
+125337;INF579M01514;INF579M01571;360 ONE Liquid Fund;Regular Plan;IDCW Option;1005.0000;15-Sep-2026
  
 Abakkus Mutual Fund
  
-154049;-;INF2JJD01011;Abakkus Liquid Fund;Direct Plan;Daily IDCW Reinvestment;100.0881;14-Sep-2026
-154051;INF2JJD01029;-;Abakkus Liquid Fund;Direct Plan;Growth;104.5304;14-Sep-2026
-154055;-;INF2JJD01037;Abakkus Liquid Fund;Direct Plan;Monthly IDCW Reinvestment;100.5378;14-Sep-2026
-154052;-;INF2JJD01052;Abakkus Liquid Fund;Direct Plan;Quarterly IDCW Reinvestment;101.3308;14-Sep-2026
-154050;-;INF2JJD01045;Abakkus Liquid Fund;Direct Plan;Weekly IDCW Reinvestment;100.0623;14-Sep-2026
-154053;-;INF2JJD01060;Abakkus Liquid Fund;Regular Plan;Daily IDCW Reinvestment;100.0881;14-Sep-2026
-154047;INF2JJD01078;-;Abakkus Liquid Fund;Regular Plan;Growth;104.4666;14-Sep-2026
-154048;-;INF2JJD01086;Abakkus Liquid Fund;Regular Plan;Monthly IDCW Reinvestment;100.5318;14-Sep-2026
-154054;-;INF2JJD01102;Abakkus Liquid Fund;Regular Plan;Quarterly IDCW Reinvestment;101.2698;14-Sep-2026
-154056;-;INF2JJD01094;Abakkus Liquid Fund;Regular Plan;Weekly IDCW Reinvestment;100.0623;14-Sep-2026
-154521;-;-;Abakkus Liquid Fund;Direct Plan;Unclaimed Redemption Less Than 3 years;100.9642;14-Sep-2026
+154049;-;INF2JJD01011;Abakkus Liquid Fund;Direct Plan;Daily IDCW Reinvestment;100.0881;15-Sep-2026
+154051;INF2JJD01029;-;Abakkus Liquid Fund;Direct Plan;Growth;104.5370;15-Sep-2026
+154055;-;INF2JJD01037;Abakkus Liquid Fund;Direct Plan;Monthly IDCW Reinvestment;100.0517;15-Sep-2026
+154052;-;INF2JJD01052;Abakkus Liquid Fund;Direct Plan;Quarterly IDCW Reinvestment;101.3373;15-Sep-2026
+154050;-;INF2JJD01045;Abakkus Liquid Fund;Direct Plan;Weekly IDCW Reinvestment;100.0687;15-Sep-2026
+154053;-;INF2JJD01060;Abakkus Liquid Fund;Regular Plan;Daily IDCW Reinvestment;100.0881;15-Sep-2026
+154047;INF2JJD01078;-;Abakkus Liquid Fund;Regular Plan;Growth;104.4730;15-Sep-2026
+154048;-;INF2JJD01086;Abakkus Liquid Fund;Regular Plan;Monthly IDCW Reinvestment;100.0519;15-Sep-2026
+154054;-;INF2JJD01102;Abakkus Liquid Fund;Regular Plan;Quarterly IDCW Reinvestment;101.2760;15-Sep-2026
+154056;-;INF2JJD01094;Abakkus Liquid Fund;Regular Plan;Weekly IDCW Reinvestment;100.0685;15-Sep-2026
+154521;-;-;Abakkus Liquid Fund;Direct Plan;Unclaimed Redemption Less Than 3 years;100.9395;15-Sep-2026
  
 ASK MUTUAL FUND
  
@@ -8753,16 +8753,16 @@ Axis Mutual Fund
  
 Canara Robeco Mutual Fund
  
-118307;-;INF760K01FS0;Canara Robeco Liquid Fund;Direct Plan;DAILY IDCW (Reinvestment);1005.5000;14-Sep-2026
-118305;INF760K01FU6;-;Canara Robeco Liquid Fund;Direct Plan;GROWTH OPTION;3406.1766;14-Sep-2026
-118304;INF760K01FT8;-;Canara Robeco Liquid Fund;Direct Plan;IDCW (Payout/Reinvestment);2267.1153;14-Sep-2026
-118306;INF760K01FV4;INF760K01FW2;Canara Robeco Liquid Fund;Direct Plan;MONTHLY IDCW (Payout/Reinvestment);1003.9718;14-Sep-2026
-118308;INF760K01FY8;INF760K01FX0;Canara Robeco Liquid Fund;Direct Plan;WEEKLY IDCW (Payout/Reinvestment);1001.3317;14-Sep-2026
-109349;-;INF760K01CU3;Canara Robeco Liquid Fund;Regular Plan;DAILY IDCW (Reinvestment);1005.5000;14-Sep-2026
-109353;INF760K01CW9;-;Canara Robeco Liquid Fund;Regular Plan;GROWTH OPTION;3383.4503;14-Sep-2026
-109351;INF760K01CX7;INF760K01CY5;Canara Robeco Liquid Fund;Regular Plan;MONTHLY IDCW (Payout/Reinvestment);1003.7212;14-Sep-2026
-109350;INF760K01BZ4;INF760K01CZ2;Canara Robeco Liquid Fund;Regular Plan;WEEKLY IDCW (Payout/Reinvestment);1001.3188;14-Sep-2026
-139235;INF760K01IC8;-;Canara Robeco Liquid Fund;Direct Plan;Unclaimed Redemption and Dividend Plan-Growth Option;1858.9604;14-Sep-2026
+118307;-;INF760K01FS0;Canara Robeco Liquid Fund;Direct Plan;DAILY IDCW (Reinvestment);1005.5000;15-Sep-2026
+118305;INF760K01FU6;-;Canara Robeco Liquid Fund;Direct Plan;GROWTH OPTION;3406.3670;15-Sep-2026
+118304;INF760K01FT8;-;Canara Robeco Liquid Fund;Direct Plan;IDCW (Payout/Reinvestment);2267.2420;15-Sep-2026
+118306;INF760K01FV4;INF760K01FW2;Canara Robeco Liquid Fund;Direct Plan;MONTHLY IDCW (Payout/Reinvestment);1004.0279;15-Sep-2026
+118308;INF760K01FY8;INF760K01FX0;Canara Robeco Liquid Fund;Direct Plan;WEEKLY IDCW (Payout/Reinvestment);1001.3877;15-Sep-2026
+109349;-;INF760K01CU3;Canara Robeco Liquid Fund;Regular Plan;DAILY IDCW (Reinvestment);1005.5000;15-Sep-2026
+109353;INF760K01CW9;-;Canara Robeco Liquid Fund;Regular Plan;GROWTH OPTION;3383.6307;15-Sep-2026
+109351;INF760K01CX7;INF760K01CY5;Canara Robeco Liquid Fund;Regular Plan;MONTHLY IDCW (Payout/Reinvestment);1003.7747;15-Sep-2026
+109350;INF760K01BZ4;INF760K01CZ2;Canara Robeco Liquid Fund;Regular Plan;WEEKLY IDCW (Payout/Reinvestment);1001.3722;15-Sep-2026
+139235;INF760K01IC8;-;Canara Robeco Liquid Fund;Direct Plan;Unclaimed Redemption and Dividend Plan-Growth Option;1859.0654;15-Sep-2026
  
 DSP Mutual Fund
  
@@ -8775,16 +8775,16 @@ DSP Mutual Fund
  
 Groww Mutual Fund
  
-119135;INF666M01451;-;Groww Liquid Fund;Direct Plan;Growth;2755.1513;14-Sep-2026
-119136;-;INF666M01469;Groww Liquid Fund;Direct Plan;Income Distribution cum capital withdrawal;1002.0907;14-Sep-2026
-115991;INF666M01014;-;Groww Liquid Fund;Regular Plan;Growth;2718.5439;14-Sep-2026
-119138;INF666M01501;INF666M01485;Groww Liquid Fund;Direct Plan;Fortnightly - Income Distribution cum capital withdrawal;1002.3023;14-Sep-2026
-119139;INF666M01519;INF666M01493;Groww Liquid Fund;Direct Plan;Monthly - Income Distribution cum capital withdrawal;1031.6855;14-Sep-2026
-119137;INF666M01527;INF666M01477;Groww Liquid Fund;Direct Plan;Weekly - Income Distribution cum capital withdrawal;1002.7756;14-Sep-2026
-115992;-;INF666M01022;Groww Liquid Fund;Regular Plan;Income Distribution cum capital withdrawal;1002.0894;14-Sep-2026
-115995;INF666M01071;INF666M01055;Groww Liquid Fund;Regular Plan;Monthly - Income Distribution cum capital withdrawal;1003.9336;14-Sep-2026
-115993;INF666M01089;INF666M01030;Groww Liquid Fund;Regular Plan;Weekly - Income Distribution cum capital withdrawal;1002.7566;14-Sep-2026
-115994;INF666M01063;INF666M01048;Groww Liquid Fund;Regular Plan;Fortnightly - Income Distribution cum capital withdrawal;1002.3029;14-Sep-2026
+119135;INF666M01451;-;Groww Liquid Fund;Direct Plan;Growth;2755.4924;15-Sep-2026
+119136;-;INF666M01469;Groww Liquid Fund;Direct Plan;Income Distribution cum capital withdrawal;1002.0907;15-Sep-2026
+115991;INF666M01014;-;Groww Liquid Fund;Regular Plan;Growth;2718.8729;15-Sep-2026
+119138;INF666M01501;INF666M01485;Groww Liquid Fund;Direct Plan;Fortnightly - Income Distribution cum capital withdrawal;1002.4264;15-Sep-2026
+119139;INF666M01519;INF666M01493;Groww Liquid Fund;Direct Plan;Monthly - Income Distribution cum capital withdrawal;1031.8132;15-Sep-2026
+119137;INF666M01527;INF666M01477;Groww Liquid Fund;Direct Plan;Weekly - Income Distribution cum capital withdrawal;1001.7855;15-Sep-2026
+115992;-;INF666M01022;Groww Liquid Fund;Regular Plan;Income Distribution cum capital withdrawal;1002.0894;15-Sep-2026
+115995;INF666M01071;INF666M01055;Groww Liquid Fund;Regular Plan;Monthly - Income Distribution cum capital withdrawal;1004.055;15-Sep-2026
+115993;INF666M01089;INF666M01030;Groww Liquid Fund;Regular Plan;Weekly - Income Distribution cum capital withdrawal;1001.7855;15-Sep-2026
+115994;INF666M01063;INF666M01048;Groww Liquid Fund;Regular Plan;Fortnightly - Income Distribution cum capital withdrawal;1002.4242;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -8820,22 +8820,22 @@ Invesco Mutual Fund
  
 Jio BlackRock Mutual Fund
  
-153651;INF22M001010;-;JioBlackRock Liquid Fund;Direct Plan;Growth Option;1078.1000;14-Sep-2026
-154645;INF22M001267;-;JioBlackRock Liquid Fund;Regular Plan;Growth Option;1004.4720;14-Sep-2026
+153651;INF22M001010;-;JioBlackRock Liquid Fund;Direct Plan;Growth Option;1078.1879;15-Sep-2026
+154645;INF22M001267;-;JioBlackRock Liquid Fund;Regular Plan;Growth Option;1004.5503;15-Sep-2026
  
 JM Financial Mutual Fund
  
 120410;INF192K01CN4;-;JM Liquid Fund;;;22.4898;27-Jan-2025
-120411;-;INF192K01CH6;JM Liquid Fund;Direct Plan;Daily IDCW Option;10.4302;14-Sep-2026
-120406;INF192K01CM6;-;JM Liquid Fund;Direct Plan;Growth Option;77.5287;14-Sep-2026
-120408;INF192K01CK0;INF192K01CL8;JM Liquid Fund;Direct Plan;Quarterly IDCW Option;44.0162;14-Sep-2026
-120407;INF192K01CI4;INF192K01CJ2;JM Liquid Fund;Direct Plan;Weekly IDCW Option;11.0154;14-Sep-2026
-100244;INF192K01866;INF192K01874;JM Liquid Fund;Regular Plan;Quarterly IDCW Option;43.3651;14-Sep-2026
-100247;INF192K01981;-;JM Liquid Fund;Regular Plan;Super Institutional Plan - Growth Option;44.0528;14-Sep-2026
-100233;INF192K01841;INF192K01858;JM Liquid Fund;Regular Plan;Weekly IDCW Option;11.0127;14-Sep-2026
-100234;INF192K01882;-;JM Liquid Fund;Regular Plan;Growth Option;76.6154;14-Sep-2026
-148414;-;-;JM Liquid Fund;Direct Plan;Unclaimed Application Refund Amount I.E.F - Growth Plan;41.4437;14-Sep-2026
-148413;-;-;JM Liquid Fund;Direct Plan;Unclaimed Brokerage I.E.F - Growth Plan;41.4437;14-Sep-2026
+120411;-;INF192K01CH6;JM Liquid Fund;Direct Plan;Daily IDCW Option;10.4302;15-Sep-2026
+120406;INF192K01CM6;-;JM Liquid Fund;Direct Plan;Growth Option;77.5317;15-Sep-2026
+120408;INF192K01CK0;INF192K01CL8;JM Liquid Fund;Direct Plan;Quarterly IDCW Option;44.0179;15-Sep-2026
+120407;INF192K01CI4;INF192K01CJ2;JM Liquid Fund;Direct Plan;Weekly IDCW Option;11.006;15-Sep-2026
+100244;INF192K01866;INF192K01874;JM Liquid Fund;Regular Plan;Quarterly IDCW Option;43.3666;15-Sep-2026
+100247;INF192K01981;-;JM Liquid Fund;Regular Plan;Super Institutional Plan - Growth Option;44.0543;15-Sep-2026
+100233;INF192K01841;INF192K01858;JM Liquid Fund;Regular Plan;Weekly IDCW Option;11.0035;15-Sep-2026
+100234;INF192K01882;-;JM Liquid Fund;Regular Plan;Growth Option;76.6181;15-Sep-2026
+148414;-;-;JM Liquid Fund;Direct Plan;Unclaimed Application Refund Amount I.E.F - Growth Plan;41.4437;15-Sep-2026
+148413;-;-;JM Liquid Fund;Direct Plan;Unclaimed Brokerage I.E.F - Growth Plan;41.4437;15-Sep-2026
 148415;-;-;JM Liquid Fund;;;41.4437;27-Mar-2025
 139258;INF192K01LB0;-;JM Liquid Fund;;;57.8229;24-Jan-2022
 139260;INF192K01LD6;-;JM Liquid Fund;;;41.4437;24-Jan-2022
@@ -9210,10 +9210,10 @@ Bandhan Mutual Fund
  
 Canara Robeco Mutual Fund
  
-118282;INF760K01FI1;-;Canara Robeco Medium To Long Term Fund;Direct Plan;GROWTH OPTION;64.6409;11-Sep-2026
-118281;INF760K01FG5;INF760K01FH3;Canara Robeco Medium To Long Term Fund;Direct Plan;QUARTERLY IDCW (Payout/Reinvestment);16.8963;11-Sep-2026
-101588;INF760K01324;-;Canara Robeco Medium To Long Term Fund;Regular Plan;GROWTH OPTION;56.8809;11-Sep-2026
-101587;INF760K01340;INF760K01357;Canara Robeco Medium To Long Term Fund;Regular Plan;QUARTERLY IDCW (Payout/Reinvestment);14.6314;11-Sep-2026
+118282;INF760K01FI1;-;Canara Robeco Medium To Long Term Fund;Direct Plan;GROWTH OPTION;64.4833;15-Sep-2026
+118281;INF760K01FG5;INF760K01FH3;Canara Robeco Medium To Long Term Fund;Direct Plan;QUARTERLY IDCW (Payout/Reinvestment);16.8551;15-Sep-2026
+101588;INF760K01324;-;Canara Robeco Medium To Long Term Fund;Regular Plan;GROWTH OPTION;56.7356;15-Sep-2026
+101587;INF760K01340;INF760K01357;Canara Robeco Medium To Long Term Fund;Regular Plan;QUARTERLY IDCW (Payout/Reinvestment);14.5940;15-Sep-2026
  
 Franklin Templeton Mutual Fund
  
@@ -9256,11 +9256,11 @@ ICICI Prudential Mutual Fund
 JM Financial Mutual Fund
  
 120428;INF192K01CX3;-;JM Medium to Long Term Fund;;;28.556;27-Jan-2025
-120430;INF192K01CW5;-;JM Medium to Long Term Fund;Direct Plan;Growth Option;72.2324;11-Sep-2026
-120431;INF192K01CU9;INF192K01CV7;JM Medium to Long Term Fund;Direct Plan;Quarterly IDCW Option;25.5238;11-Sep-2026
-100223;INF192K01AB3;-;JM Medium to Long Term Fund;Regular Plan;Growth Option;64.4587;11-Sep-2026
-100222;INF192K01999;INF192K01AA5;JM Medium to Long Term Fund;Regular Plan;Quarterly IDCW Option;21.9163;11-Sep-2026
-101181;INF192K01AC1;-;JM Medium to Long Term Fund Growth - Bonus Option;Regular Plan;Bonus Option - Principal Units;26.3719;11-Sep-2026
+120430;INF192K01CW5;-;JM Medium to Long Term Fund;Direct Plan;Growth Option;71.9757;15-Sep-2026
+120431;INF192K01CU9;INF192K01CV7;JM Medium to Long Term Fund;Direct Plan;Quarterly IDCW Option;25.4331;15-Sep-2026
+100223;INF192K01AB3;-;JM Medium to Long Term Fund;Regular Plan;Growth Option;64.2265;15-Sep-2026
+100222;INF192K01999;INF192K01AA5;JM Medium to Long Term Fund;Regular Plan;Quarterly IDCW Option;21.8374;15-Sep-2026
+101181;INF192K01AC1;-;JM Medium to Long Term Fund Growth - Bonus Option;Regular Plan;Bonus Option - Principal Units;26.2769;15-Sep-2026
  
 Kotak Mahindra Mutual Fund
  
@@ -9371,10 +9371,10 @@ DSP Mutual Fund
  
 Groww Mutual Fund
  
-153982;INF666M01MW3;-;Groww Money Market Fund;Direct Plan;Growth;10.4848;11-Sep-2026
-153991;INF666M01MX1;INF666M01MY9;Groww Money Market Fund;Direct Plan;Income Distribution cum capital withdrawal;10.4847;11-Sep-2026
-153992;INF666M01MZ6;-;Groww Money Market Fund;Regular Plan;Growth;10.4351;11-Sep-2026
-153993;INF666M01NA7;INF666M01NB5;Groww Money Market Fund;Regular Plan;Income Distribution cum capital withdrawal;10.4352;11-Sep-2026
+153982;INF666M01MW3;-;Groww Money Market Fund;Direct Plan;Growth;10.4882;15-Sep-2026
+153991;INF666M01MX1;INF666M01MY9;Groww Money Market Fund;Direct Plan;Income Distribution cum capital withdrawal;10.4881;15-Sep-2026
+153992;INF666M01MZ6;-;Groww Money Market Fund;Regular Plan;Growth;10.4377;15-Sep-2026
+153993;INF666M01NA7;INF666M01NB5;Groww Money Market Fund;Regular Plan;Income Distribution cum capital withdrawal;10.4379;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -9405,8 +9405,8 @@ Invesco Mutual Fund
  
 Jio BlackRock Mutual Fund
  
-153649;INF22M001028;-;JioBlackRock Money Market Fund;Direct Plan;Growth Option;1076.7340;11-Sep-2026
-154639;INF22M001309;-;JioBlackRock Money Market Fund;Regular Plan;Growth Option;1005.0675;11-Sep-2026
+153649;INF22M001028;-;JioBlackRock Money Market Fund;Direct Plan;Growth Option;1076.7227;15-Sep-2026
+154639;INF22M001309;-;JioBlackRock Money Market Fund;Regular Plan;Growth Option;1005.0349;15-Sep-2026
  
 Kotak Mahindra Mutual Fund
  
@@ -9446,10 +9446,10 @@ Open Ended Schemes(Income/Debt Oriented Schemes - Overnight Fund)
  
 360 ONE Mutual Fund
  
-153703;INF579M01BG4;-;360 ONE Overnight Fund;Direct Plan;GROWTH Option;1063.6657;14-Sep-2026
-153700;INF579M01BD1;-;360 ONE Overnight Fund;Regular Plan;GROWTH Option;1062.6598;14-Sep-2026
-153702;INF579M01BE9;INF579M01BF6;360 ONE Overnight Fund;Regular Plan;IDCW Option;1062.6598;14-Sep-2026
-153701;INF579M01BH2;INF579M01BI0;360 ONE Overnight Fund;Direct Plan;IDCW Option;1063.6657;14-Sep-2026
+153703;INF579M01BG4;-;360 ONE Overnight Fund;Direct Plan;GROWTH Option;1063.8058;15-Sep-2026
+153700;INF579M01BD1;-;360 ONE Overnight Fund;Regular Plan;GROWTH Option;1062.7974;15-Sep-2026
+153702;INF579M01BE9;INF579M01BF6;360 ONE Overnight Fund;Regular Plan;IDCW Option;1062.7974;15-Sep-2026
+153701;INF579M01BH2;INF579M01BI0;360 ONE Overnight Fund;Direct Plan;IDCW Option;1063.8058;15-Sep-2026
  
 Axis Mutual Fund
  
@@ -9464,42 +9464,42 @@ Axis Mutual Fund
  
 Canara Robeco Mutual Fund
  
-147532;-;INF760K01JN3;Canara Robeco Overnight Fund;Direct Plan;DAILY IDCW (Reinvestment);1001.0012;14-Sep-2026
-147531;INF760K01JM5;-;Canara Robeco Overnight Fund;Direct Plan;GROWTH OPTION;1422.8395;14-Sep-2026
-147533;-;INF760K01JP8;Canara Robeco Overnight Fund;Regular Plan;DAILY IDCW (Reinvestment);1001.0000;14-Sep-2026
-147534;INF760K01JO1;-;Canara Robeco Overnight Fund;Regular Plan;GROWTH OPTION;1421.1842;14-Sep-2026
+147532;-;INF760K01JN3;Canara Robeco Overnight Fund;Direct Plan;DAILY IDCW (Reinvestment);1001.0012;15-Sep-2026
+147531;INF760K01JM5;-;Canara Robeco Overnight Fund;Direct Plan;GROWTH OPTION;1423.0255;15-Sep-2026
+147533;-;INF760K01JP8;Canara Robeco Overnight Fund;Regular Plan;DAILY IDCW (Reinvestment);1001.0000;15-Sep-2026
+147534;INF760K01JO1;-;Canara Robeco Overnight Fund;Regular Plan;GROWTH OPTION;1421.3685;15-Sep-2026
  
 Choice Mutual Fund
  
-154416;-;INF2KCX01061;Choice Overnight Fund;Direct Plan;Daily IDCW;100.1000;14-Sep-2026
-154414;-;INF2KCX01079;Choice Overnight Fund;Regular Plan;Daily IDCW;100.1000;14-Sep-2026
-154413;INF2KCX01087;-;Choice Overnight Fund;Direct Plan;Growth;100.9950;14-Sep-2026
-154415;INF2KCX01095;-;Choice Overnight Fund;Regular Plan;Growth;100.9736;14-Sep-2026
-154624;-;-;Choice Overnight Fund;Direct Plan;Unclaimed Less than 3 years Redemption;100.4426;14-Sep-2026
+154416;-;INF2KCX01061;Choice Overnight Fund;Direct Plan;Daily IDCW;100.1000;15-Sep-2026
+154414;-;INF2KCX01079;Choice Overnight Fund;Regular Plan;Daily IDCW;100.1000;15-Sep-2026
+154413;INF2KCX01087;-;Choice Overnight Fund;Direct Plan;Growth;101.0081;15-Sep-2026
+154415;INF2KCX01095;-;Choice Overnight Fund;Regular Plan;Growth;100.9865;15-Sep-2026
+154624;-;-;Choice Overnight Fund;Direct Plan;Unclaimed Less than 3 years Redemption;100.4559;15-Sep-2026
  
 Groww Mutual Fund
  
-147458;-;INF666M01GM6;Groww Overnight Fund;Direct Plan;Income Distribution cum capital withdrawal;1001.5271;14-Sep-2026
-147452;INF666M01GP9;INF666M01GQ7;Groww Overnight Fund;Direct Plan;Fortnightly - Income Distribution cum capital withdrawal;1215.3968;14-Sep-2026
-147450;INF666M01GL8;-;Groww Overnight Fund;Direct Plan;Growth;1419.515;14-Sep-2026
-147453;INF666M01GR5;INF666M01GS3;Groww Overnight Fund;Direct Plan;Monthly - Income Distribution cum capital withdrawal;1002.9062;14-Sep-2026
-147451;INF666M01GN4;INF666M01GO2;Groww Overnight Fund;Direct Plan;Weekly - Income Distribution cum capital withdrawal;1003.2184;14-Sep-2026
-147455;-;INF666M01GU9;Groww Overnight Fund;Regular Plan;Income Distribution cum capital withdrawal;1001.0531;14-Sep-2026
-147457;INF666M01GX3;INF666M01GY1;Groww Overnight Fund;Regular Plan;Fortnightly - Income Distribution cum capital withdrawal;1001.4362;14-Sep-2026
-147454;INF666M01GT1;-;Groww Overnight Fund;Regular Plan;Growth;1409.8731;14-Sep-2026
-147459;INF666M01GZ8;INF666M01HA9;Groww Overnight Fund;Regular Plan;Monthly - Income Distribution cum capital withdrawal;1002.8616;14-Sep-2026
-147456;INF666M01GV7;INF666M01GW5;Groww Overnight Fund;Regular Plan;Weekly - Income Distribution cum capital withdrawal;1001.7809;14-Sep-2026
-149394;-;-;Groww Overnight Fund;;;1316.9209;14-Sep-2026
+147458;-;INF666M01GM6;Groww Overnight Fund;Direct Plan;Income Distribution cum capital withdrawal;1001.5298;15-Sep-2026
+147452;INF666M01GP9;INF666M01GQ7;Groww Overnight Fund;Direct Plan;Fortnightly - Income Distribution cum capital withdrawal;1215.554;15-Sep-2026
+147450;INF666M01GL8;-;Groww Overnight Fund;Direct Plan;Growth;1419.6986;15-Sep-2026
+147453;INF666M01GR5;INF666M01GS3;Groww Overnight Fund;Direct Plan;Monthly - Income Distribution cum capital withdrawal;1003.0358;15-Sep-2026
+147451;INF666M01GN4;INF666M01GO2;Groww Overnight Fund;Direct Plan;Weekly - Income Distribution cum capital withdrawal;1002.2989;15-Sep-2026
+147455;-;INF666M01GU9;Groww Overnight Fund;Regular Plan;Income Distribution cum capital withdrawal;1001.0532;15-Sep-2026
+147457;INF666M01GX3;INF666M01GY1;Groww Overnight Fund;Regular Plan;Fortnightly - Income Distribution cum capital withdrawal;1001.5628;15-Sep-2026
+147454;INF666M01GT1;-;Groww Overnight Fund;Regular Plan;Growth;1410.051;15-Sep-2026
+147459;INF666M01GZ8;INF666M01HA9;Groww Overnight Fund;Regular Plan;Monthly - Income Distribution cum capital withdrawal;1002.9884;15-Sep-2026
+147456;INF666M01GV7;INF666M01GW5;Groww Overnight Fund;Regular Plan;Weekly - Income Distribution cum capital withdrawal;1001.0155;15-Sep-2026
+149394;-;-;Groww Overnight Fund;;;1317.0927;15-Sep-2026
 149393;-;-;Groww Overnight Fund;;;1183.0934;27-Nov-2024
-149396;-;-;Groww Overnight Fund;;;1302.7758;14-Sep-2026
-149395;-;-;Groww Overnight Fund;;;1000;14-Sep-2026
+149396;-;-;Groww Overnight Fund;;;1302.9444;15-Sep-2026
+149395;-;-;Groww Overnight Fund;;;1000;15-Sep-2026
  
 Helios Mutual Fund
  
-152151;INF0R8701087;-;Helios Overnight Fund;Direct Plan;Daily IDCW;1000.0000;14-Sep-2026
-152152;INF0R8701079;-;Helios Overnight Fund;Direct Plan;Growth;1181.6587;14-Sep-2026
-152154;INF0R8701103;-;Helios Overnight Fund;Regular Plan;Daily IDCW;1000.0000;14-Sep-2026
-152153;INF0R8701095;-;Helios Overnight Fund;Regular Plan;Growth;1179.9682;14-Sep-2026
+152151;INF0R8701087;-;Helios Overnight Fund;Direct Plan;Daily IDCW;1000.0000;15-Sep-2026
+152152;INF0R8701079;-;Helios Overnight Fund;Direct Plan;Growth;1181.8111;15-Sep-2026
+152154;INF0R8701103;-;Helios Overnight Fund;Regular Plan;Daily IDCW;1000.0000;15-Sep-2026
+152153;INF0R8701095;-;Helios Overnight Fund;Regular Plan;Growth;1180.1187;15-Sep-2026
  
 HSBC Mutual Fund
  
@@ -9529,22 +9529,22 @@ Invesco Mutual Fund
  
 Jio BlackRock Mutual Fund
  
-153650;INF22M001036;-;JioBlackRock Overnight Fund;Direct Plan;Growth Option;1064.4128;14-Sep-2026
-154640;INF22M001317;-;JioBlackRock Overnight Fund;Regular Plan;Growth Option;1002.8680;14-Sep-2026
-154070;-;-;JioBlackRock Overnight Fund;;Unclaimed Redemption - Upto 3 years - Growth Option;1040.8398;14-Sep-2026
+153650;INF22M001036;-;JioBlackRock Overnight Fund;Direct Plan;Growth Option;1064.5592;15-Sep-2026
+154640;INF22M001317;-;JioBlackRock Overnight Fund;Regular Plan;Growth Option;1003.0036;15-Sep-2026
+154070;-;-;JioBlackRock Overnight Fund;;Unclaimed Redemption - Upto 3 years - Growth Option;1040.9830;15-Sep-2026
  
 JM Financial Mutual Fund
  
-147838;-;INF192K01LY2;JM Overnight Fund;Direct Plan;Daily IDCW Option;1000;14-Sep-2026
-147835;INF192K01LZ9;INF192K01MA0;JM Overnight Fund;Direct Plan;Weekly IDCW Option;1000.7098;14-Sep-2026
-147839;-;INF192K01LU0;JM Overnight Fund;Regular Plan;Daily IDCW Option;1000;14-Sep-2026
-147836;INF192K01LX4;-;JM Overnight Fund;Regular Plan;Growth Option;1389.299;14-Sep-2026
-147834;INF192K01LV8;INF192K01LW6;JM Overnight Fund;Regular Plan;Weekly IDCW Option;1000.7046;14-Sep-2026
-147837;INF192K01MB8;-;JM Overnight Fund;Direct Plan;Growth Option;1395.8899;14-Sep-2026
-149828;INF192K01MJ1;-;JM Overnight Fund;Direct Plan;Unclaimed IDCW - Growth Plan;1401.1395;14-Sep-2026
-149827;INF192K01ML7;-;JM Overnight Fund;Direct Plan;Unclaimed IDCW I.E.F - Growth Plan;1073.9936;14-Sep-2026
-149829;INF192K01MI3;-;JM Overnight Fund;Direct Plan;Unclaimed Redemption - Growth Plan;1395.9126;14-Sep-2026
-149826;INF192K01MK9;-;JM Overnight Fund;Direct Plan;Unclaimed Redemption I.E.F - Growth Plan;1073.9936;14-Sep-2026
+147838;-;INF192K01LY2;JM Overnight Fund;Direct Plan;Daily IDCW Option;1000;15-Sep-2026
+147835;INF192K01LZ9;INF192K01MA0;JM Overnight Fund;Direct Plan;Weekly IDCW Option;1000;15-Sep-2026
+147839;-;INF192K01LU0;JM Overnight Fund;Regular Plan;Daily IDCW Option;1000;15-Sep-2026
+147836;INF192K01LX4;-;JM Overnight Fund;Regular Plan;Growth Option;1389.4701;15-Sep-2026
+147834;INF192K01LV8;INF192K01LW6;JM Overnight Fund;Regular Plan;Weekly IDCW Option;1000;15-Sep-2026
+147837;INF192K01MB8;-;JM Overnight Fund;Direct Plan;Growth Option;1396.0644;15-Sep-2026
+149828;INF192K01MJ1;-;JM Overnight Fund;Direct Plan;Unclaimed IDCW - Growth Plan;1401.3074;15-Sep-2026
+149827;INF192K01ML7;-;JM Overnight Fund;Direct Plan;Unclaimed IDCW I.E.F - Growth Plan;1073.9936;15-Sep-2026
+149829;INF192K01MI3;-;JM Overnight Fund;Direct Plan;Unclaimed Redemption - Growth Plan;1396.0871;15-Sep-2026
+149826;INF192K01MK9;-;JM Overnight Fund;Direct Plan;Unclaimed Redemption I.E.F - Growth Plan;1073.9936;15-Sep-2026
  
 Mirae Asset Mutual Fund
  
@@ -9559,9 +9559,9 @@ Mirae Asset Mutual Fund
  
 Monarch Mutual Fund
  
-154705;INF2ZSC01085;INF2ZSC01069;Monarch Overnight Fund;Direct Plan;Monthly IDCW;1000.9522;14-Sep-2026
-154706;INF2ZSC01028;-;Monarch Overnight Fund;Direct Plan;Growth;1000.9532;14-Sep-2026
-154711;INF2ZSC01010;-;Monarch Overnight Fund;Regular Plan;Growth;1000.9435;14-Sep-2026
+154705;INF2ZSC01085;INF2ZSC01069;Monarch Overnight Fund;Direct Plan;Monthly IDCW;1001.0791;15-Sep-2026
+154706;INF2ZSC01028;-;Monarch Overnight Fund;Direct Plan;Growth;1001.0804;15-Sep-2026
+154711;INF2ZSC01010;-;Monarch Overnight Fund;Regular Plan;Growth;1001.0690;15-Sep-2026
  
 NJ Mutual Fund
  
@@ -9664,12 +9664,12 @@ Baroda BNP Paribas Mutual Fund
  
 Canara Robeco Mutual Fund
  
-118320;INF760K01DX5;-;Canara Robeco Short Term Fund;Direct Plan;GROWTH OPTION;29.6114;11-Sep-2026
-118321;INF760K01DV9;INF760K01DW7;Canara Robeco Short Term Fund;Direct Plan;MONTHLY IDCW (Payout/Reinvestment);18.4979;11-Sep-2026
-118322;INF760K01DY3;INF760K01DZ0;Canara Robeco Short Term Fund;Direct Plan;QUARTERLY IDCW (Payout/Reinvestment);17.3722;11-Sep-2026
-115077;INF760K01BM2;-;Canara Robeco Short Term Fund;Regular Plan;GROWTH OPTION;26.9401;11-Sep-2026
-115078;INF760K01BO8;INF760K01BN0;Canara Robeco Short Term Fund;Regular Plan;MONTHLY IDCW (Payout/Reinvestment);15.7967;11-Sep-2026
-115079;INF760K01BQ3;INF760K01BP5;Canara Robeco Short Term Fund;Regular Plan;QUARTERLY IDCW (Payout/Reinvestment);15.5222;11-Sep-2026
+118320;INF760K01DX5;-;Canara Robeco Short Term Fund;Direct Plan;GROWTH OPTION;29.5844;15-Sep-2026
+118321;INF760K01DV9;INF760K01DW7;Canara Robeco Short Term Fund;Direct Plan;MONTHLY IDCW (Payout/Reinvestment);18.4809;15-Sep-2026
+118322;INF760K01DY3;INF760K01DZ0;Canara Robeco Short Term Fund;Direct Plan;QUARTERLY IDCW (Payout/Reinvestment);17.3563;15-Sep-2026
+115077;INF760K01BM2;-;Canara Robeco Short Term Fund;Regular Plan;GROWTH OPTION;26.9135;15-Sep-2026
+115078;INF760K01BO8;INF760K01BN0;Canara Robeco Short Term Fund;Regular Plan;MONTHLY IDCW (Payout/Reinvestment);15.7812;15-Sep-2026
+115079;INF760K01BQ3;INF760K01BP5;Canara Robeco Short Term Fund;Regular Plan;QUARTERLY IDCW (Payout/Reinvestment);15.5069;15-Sep-2026
  
 Franklin Templeton Mutual Fund
  
@@ -9680,14 +9680,14 @@ Franklin Templeton Mutual Fund
  
 Groww Mutual Fund
  
-123708;INF666M01AJ5;-;Groww Short Term Fund;Regular Plan;Growth;2212.3923;11-Sep-2026
-123704;INF666M01AC0;-;Groww Short Term Fund;Direct Plan;Growth;2561.9663;11-Sep-2026
-123706;INF666M01AH9;INF666M01AE6;Groww Short Term Fund;Direct Plan;Fortnightly - Income Distribution cum capital withdrawal;1018.6384;11-Sep-2026
-123707;INF666M01AI7;INF666M01AF3;Groww Short Term Fund;Direct Plan;Monthly - Income Distribution cum capital withdrawal;1020.8484;11-Sep-2026
-123705;INF666M01AG1;INF666M01AD8;Groww Short Term Fund;Direct Plan;Weekly - Income Distribution cum capital withdrawal;1018.7962;11-Sep-2026
-123710;INF666M01AO5;INF666M01AL1;Groww Short Term Fund;Regular Plan;Fortnightly - Income Distribution cum capital withdrawal;1018.5781;11-Sep-2026
-123711;INF666M01AP2;INF666M01AM9;Groww Short Term Fund;Regular Plan;Monthly - Income Distribution cum capital withdrawal;1026.8659;11-Sep-2026
-123709;INF666M01AN7;INF666M01AK3;Groww Short Term Fund;Regular Plan;Weekly - Income Distribution cum capital withdrawal;1018.6928;11-Sep-2026
+123708;INF666M01AJ5;-;Groww Short Term Fund;Regular Plan;Growth;2210.8073;15-Sep-2026
+123704;INF666M01AC0;-;Groww Short Term Fund;Direct Plan;Growth;2560.3378;15-Sep-2026
+123706;INF666M01AH9;INF666M01AE6;Groww Short Term Fund;Direct Plan;Fortnightly - Income Distribution cum capital withdrawal;1018.0096;15-Sep-2026
+123707;INF666M01AI7;INF666M01AF3;Groww Short Term Fund;Direct Plan;Monthly - Income Distribution cum capital withdrawal;1020.1998;15-Sep-2026
+123705;INF666M01AG1;INF666M01AD8;Groww Short Term Fund;Direct Plan;Weekly - Income Distribution cum capital withdrawal;1018.1486;15-Sep-2026
+123710;INF666M01AO5;INF666M01AL1;Groww Short Term Fund;Regular Plan;Fortnightly - Income Distribution cum capital withdrawal;1017.8395;15-Sep-2026
+123711;INF666M01AP2;INF666M01AM9;Groww Short Term Fund;Regular Plan;Monthly - Income Distribution cum capital withdrawal;1026.1299;15-Sep-2026
+123709;INF666M01AN7;INF666M01AK3;Groww Short Term Fund;Regular Plan;Weekly - Income Distribution cum capital withdrawal;1017.9633;15-Sep-2026
  
 HDFC Mutual Fund
  
@@ -9728,15 +9728,15 @@ Invesco Mutual Fund
  
 Jio BlackRock Mutual Fund
  
-154079;INF22M001143;-;JioBlackRock Short Term Fund;Direct Plan;Growth Option;1039.2433;11-Sep-2026
-154635;INF22M001226;-;JioBlackRock Short Term Fund;Regular Plan;Growth Option;1001.5085;11-Sep-2026
+154079;INF22M001143;-;JioBlackRock Short Term Fund;Direct Plan;Growth Option;1038.6780;15-Sep-2026
+154635;INF22M001226;-;JioBlackRock Short Term Fund;Regular Plan;Growth Option;1000.8890;15-Sep-2026
  
 JM Financial Mutual Fund
  
-150545;INF192K01MP8;-;JM Short Term Fund;Direct Plan;Growth Option;13.147;11-Sep-2026
-150544;INF192K01MQ6;INF192K01MR4;JM Short Term Fund;Direct Plan;IDCW Option;13.1475;11-Sep-2026
-150542;INF192K01MM5;-;JM Short Term Fund;Regular Plan;Growth Option;12.7386;11-Sep-2026
-150543;INF192K01MN3;INF192K01MO1;JM Short Term Fund;Regular Plan;IDCW Option;12.7392;11-Sep-2026
+150545;INF192K01MP8;-;JM Short Term Fund;Direct Plan;Growth Option;13.1273;15-Sep-2026
+150544;INF192K01MQ6;INF192K01MR4;JM Short Term Fund;Direct Plan;IDCW Option;13.1278;15-Sep-2026
+150542;INF192K01MM5;-;JM Short Term Fund;Regular Plan;Growth Option;12.7186;15-Sep-2026
+150543;INF192K01MN3;INF192K01MO1;JM Short Term Fund;Regular Plan;IDCW Option;12.7192;15-Sep-2026
 120469;-;INF192K01DZ6;JM Short Term Fund-closed;;;14.6036;25-Sep-2020
 120470;INF192K01DX1;INF192K01DY9;JM Short Term Fund-closed;;;10.6757;25-Sep-2020
 120471;INF192K01EA7;-;JM Short Term Fund-closed;;;26.9629;25-Sep-2020
@@ -9831,14 +9831,14 @@ Tata Mutual Fund
  
 Trust Mutual Fund
  
-149076;INF0GCD01370;-;TRUSTMF Short Term Fund;Direct Plan;Growth;1362.8244;11-Sep-2026
-149078;INF0GCD01396;INF0GCD01404;TRUSTMF Short Term Fund;Direct Plan;Monthly Income Distribution Cum Capital Withdrawal;1164.7179;11-Sep-2026
-149079;INF0GCD01412;INF0GCD01420;TRUSTMF Short Term Fund;Direct Plan;Quarterly Income Distribution Cum Capital Withdrawal;1184.2913;11-Sep-2026
-149077;-;INF0GCD01388;TRUSTMF Short Term Fund;Direct Plan;Weekly Income Distribution Cum Capital Withdrawal;1139.6849;11-Sep-2026
-149073;INF0GCD01313;-;TRUSTMF Short Term Fund;Regular Plan;Growth;1328.5121;11-Sep-2026
-149080;INF0GCD01339;INF0GCD01347;TRUSTMF Short Term Fund;Regular Plan;Monthly Income Distribution Cum Capital Withdrawal;1143.3173;11-Sep-2026
-149075;INF0GCD01354;INF0GCD01362;TRUSTMF Short Term Fund;Regular Plan;Quarterly Income Distribution Cum Capital Withdrawal;1152.2653;11-Sep-2026
-149074;-;INF0GCD01321;TRUSTMF Short Term Fund;Regular Plan;Weekly Income Distribution Cum Capital Withdrawal;1118.9892;11-Sep-2026
+149076;INF0GCD01370;-;TRUSTMF Short Term Fund;Direct Plan;Growth;1362.1322;15-Sep-2026
+149078;INF0GCD01396;INF0GCD01404;TRUSTMF Short Term Fund;Direct Plan;Monthly Income Distribution Cum Capital Withdrawal;1164.1277;15-Sep-2026
+149079;INF0GCD01412;INF0GCD01420;TRUSTMF Short Term Fund;Direct Plan;Quarterly Income Distribution Cum Capital Withdrawal;1183.6896;15-Sep-2026
+149077;-;INF0GCD01388;TRUSTMF Short Term Fund;Direct Plan;Weekly Income Distribution Cum Capital Withdrawal;1138.4052;15-Sep-2026
+149073;INF0GCD01313;-;TRUSTMF Short Term Fund;Regular Plan;Growth;1327.7655;15-Sep-2026
+149080;INF0GCD01339;INF0GCD01347;TRUSTMF Short Term Fund;Regular Plan;Monthly Income Distribution Cum Capital Withdrawal;1142.6763;15-Sep-2026
+149075;INF0GCD01354;INF0GCD01362;TRUSTMF Short Term Fund;Regular Plan;Quarterly Income Distribution Cum Capital Withdrawal;1151.6194;15-Sep-2026
+149074;-;INF0GCD01321;TRUSTMF Short Term Fund;Regular Plan;Weekly Income Distribution Cum Capital Withdrawal;1117.6630;15-Sep-2026
  
 UTI Mutual Fund
  
@@ -9918,16 +9918,16 @@ Baroda BNP Paribas Mutual Fund
  
 Canara Robeco Mutual Fund
  
-118315;-;INF760K01GL3;Canara Robeco Ultra Short Term Fund;Direct Plan;DAILY IDCW (Reinvestment);1240.4487;11-Sep-2026
-118317;INF760K01GM1;-;Canara Robeco Ultra Short Term Fund;Direct Plan;GROWTH OPTION;4362.1442;11-Sep-2026
-118319;INF760K01GN9;-;Canara Robeco Ultra Short Term Fund;Direct Plan;IDCW (Payout/Reinvestment);2321.7365;11-Sep-2026
-118318;INF760K01GP4;INF760K01GO7;Canara Robeco Ultra Short Term Fund;Direct Plan;MONTHLY IDCW (Payout/Reinvestment);1004.2586;11-Sep-2026
-118316;INF760K01GQ2;INF760K01GR0;Canara Robeco Ultra Short Term Fund;Direct Plan;WEEKLY IDCW (Payout/Reinvestment);1240.4488;11-Sep-2026
-109372;-;INF760K01DA3;Canara Robeco Ultra Short Term Fund;Regular Plan;DAILY IDCW (Reinvestment);1240.4100;11-Sep-2026
-109371;INF760K01DC9;-;Canara Robeco Ultra Short Term Fund;Regular Plan;GROWTH OPTION;4072.2854;11-Sep-2026
-109370;INF760K01CA5;INF760K01DD7;Canara Robeco Ultra Short Term Fund;Regular Plan;MONTHLY IDCW (Payout/Reinvestment);1004.0232;11-Sep-2026
-109366;INF760K01DE5;INF760K01DF2;Canara Robeco Ultra Short Term Fund;Regular Plan;WEEKLY IDCW (Payout/Reinvestment);1240.4099;11-Sep-2026
-140530;INF760K01IL9;-;Canara Robeco Ultra Short Term Fund;Regular Plan;IDCW (Payout);1555.9234;11-Sep-2026
+118315;-;INF760K01GL3;Canara Robeco Ultra Short Term Fund;Direct Plan;DAILY IDCW (Reinvestment);1240.6419;15-Sep-2026
+118317;INF760K01GM1;-;Canara Robeco Ultra Short Term Fund;Direct Plan;GROWTH OPTION;4362.8235;15-Sep-2026
+118319;INF760K01GN9;-;Canara Robeco Ultra Short Term Fund;Direct Plan;IDCW (Payout/Reinvestment);2322.0973;15-Sep-2026
+118318;INF760K01GP4;INF760K01GO7;Canara Robeco Ultra Short Term Fund;Direct Plan;MONTHLY IDCW (Payout/Reinvestment);1004.4149;15-Sep-2026
+118316;INF760K01GQ2;INF760K01GR0;Canara Robeco Ultra Short Term Fund;Direct Plan;WEEKLY IDCW (Payout/Reinvestment);1240.6424;15-Sep-2026
+109372;-;INF760K01DA3;Canara Robeco Ultra Short Term Fund;Regular Plan;DAILY IDCW (Reinvestment);1240.5255;15-Sep-2026
+109371;INF760K01DC9;-;Canara Robeco Ultra Short Term Fund;Regular Plan;GROWTH OPTION;4072.6647;15-Sep-2026
+109370;INF760K01CA5;INF760K01DD7;Canara Robeco Ultra Short Term Fund;Regular Plan;MONTHLY IDCW (Payout/Reinvestment);1004.1167;15-Sep-2026
+109366;INF760K01DE5;INF760K01DF2;Canara Robeco Ultra Short Term Fund;Regular Plan;WEEKLY IDCW (Payout/Reinvestment);1240.5254;15-Sep-2026
+140530;INF760K01IL9;-;Canara Robeco Ultra Short Term Fund;Regular Plan;IDCW (Payout);1556.0683;15-Sep-2026
  
 DSP Mutual Fund
  
@@ -10219,16 +10219,16 @@ Baroda BNP Paribas Mutual Fund
  
 Canara Robeco Mutual Fund
  
-118294;INF760K01ER5;INF760K01ES3;Canara Robeco Ultra Short to Short Term Fund;Direct Plan;WEEKLY IDCW (Payout/Reinvestment);10.2551;11-Sep-2026
-118293;-;INF760K01EM6;Canara Robeco Ultra Short to Short Term Fund;Direct Plan;DAILY IDCW (Reinvestment);10.2552;11-Sep-2026
-118291;INF760K01ET1;-;Canara Robeco Ultra Short to Short Term Fund;Direct Plan;GROWTH OPTION;46.7218;11-Sep-2026
-118292;INF760K01EP9;INF760K01EQ7;Canara Robeco Ultra Short to Short Term Fund;Direct Plan;IDCW (Payout/Reinvestment);38.8193;11-Sep-2026
-118295;INF760K01EN4;INF760K01EO2;Canara Robeco Ultra Short to Short Term Fund;Direct Plan;MONTHLY IDCW (Payout/Reinvestment);10.2940;11-Sep-2026
-104559;-;INF760K01803;Canara Robeco Ultra Short to Short Term Fund;Regular Plan;DAILY IDCW (Reinvestment);10.2550;11-Sep-2026
-102913;INF760K01795;-;Canara Robeco Ultra Short to Short Term Fund;Regular Plan;GROWTH OPTION;45.3196;11-Sep-2026
-102914;INF760K01779;INF760K01787;Canara Robeco Ultra Short to Short Term Fund;Regular Plan;IDCW (Payout/Reinvestment);37.7584;11-Sep-2026
-113144;INF760K01AM4;INF760K01AN2;Canara Robeco Ultra Short to Short Term Fund;Regular Plan;MONTHLY IDCW (Payout/Reinvestment);10.2929;11-Sep-2026
-102915;INF760K01CB3;INF760K01811;Canara Robeco Ultra Short to Short Term Fund;Regular Plan;WEEKLY IDCW (Payout/Reinvestment);10.2550;11-Sep-2026
+118294;INF760K01ER5;INF760K01ES3;Canara Robeco Ultra Short to Short Term Fund;Direct Plan;WEEKLY IDCW (Payout/Reinvestment);10.2542;15-Sep-2026
+118293;-;INF760K01EM6;Canara Robeco Ultra Short to Short Term Fund;Direct Plan;DAILY IDCW (Reinvestment);10.2542;15-Sep-2026
+118291;INF760K01ET1;-;Canara Robeco Ultra Short to Short Term Fund;Direct Plan;GROWTH OPTION;46.7175;15-Sep-2026
+118292;INF760K01EP9;INF760K01EQ7;Canara Robeco Ultra Short to Short Term Fund;Direct Plan;IDCW (Payout/Reinvestment);38.8158;15-Sep-2026
+118295;INF760K01EN4;INF760K01EO2;Canara Robeco Ultra Short to Short Term Fund;Direct Plan;MONTHLY IDCW (Payout/Reinvestment);10.2931;15-Sep-2026
+104559;-;INF760K01803;Canara Robeco Ultra Short to Short Term Fund;Regular Plan;DAILY IDCW (Reinvestment);10.2538;15-Sep-2026
+102913;INF760K01795;-;Canara Robeco Ultra Short to Short Term Fund;Regular Plan;GROWTH OPTION;45.3142;15-Sep-2026
+102914;INF760K01779;INF760K01787;Canara Robeco Ultra Short to Short Term Fund;Regular Plan;IDCW (Payout/Reinvestment);37.7539;15-Sep-2026
+113144;INF760K01AM4;INF760K01AN2;Canara Robeco Ultra Short to Short Term Fund;Regular Plan;MONTHLY IDCW (Payout/Reinvestment);10.2917;15-Sep-2026
+102915;INF760K01CB3;INF760K01811;Canara Robeco Ultra Short to Short Term Fund;Regular Plan;WEEKLY IDCW (Payout/Reinvestment);10.2538;15-Sep-2026
  
 DSP Mutual Fund
  
@@ -10322,21 +10322,21 @@ Invesco Mutual Fund
  
 Jio BlackRock Mutual Fund
  
-154636;INF22M001234;-;JioBlackRock Ultra Short to Short Term Fund;Regular Plan;Growth Option;1002.0345;11-Sep-2026
-154081;INF22M001150;-;JioBlackRock Ultra Short to Short Term Fund;Direct Plan;Growth Option;1041.9721;11-Sep-2026
+154636;INF22M001234;-;JioBlackRock Ultra Short to Short Term Fund;Regular Plan;Growth Option;1001.7197;15-Sep-2026
+154081;INF22M001150;-;JioBlackRock Ultra Short to Short Term Fund;Direct Plan;Growth Option;1041.6978;15-Sep-2026
  
 JM Financial Mutual Fund
  
-143610;INF192K01FL1;-;JM Ultra Short to Short Term Fund;Direct Plan;Bonus Option - Principal Units;24.7225;11-Sep-2026
-143604;-;INF192K01DT9;JM Ultra Short to Short Term Fund;Direct Plan;Daily IDCW Option;10.8442;11-Sep-2026
-143606;-;INF192K01DV5;JM Ultra Short to Short Term Fund;Direct Plan;Fortnightly IDCW Option;11.1166;11-Sep-2026
-143612;INF192K01DW3;-;JM Ultra Short to Short Term Fund;Direct Plan;Growth Option;41.0606;11-Sep-2026
-143611;-;INF192K01DU7;JM Ultra Short to Short Term Fund;Direct Plan;Weekly IDCW Option;11.4464;11-Sep-2026
-143603;-;INF192K01AV1;JM Ultra Short to Short Term Fund;Regular Plan;Daily IDCW Option;10.8139;11-Sep-2026
-143605;-;INF192K01AX7;JM Ultra Short to Short Term Fund;Regular Plan;Fortnightly IDCW Option;11.0761;11-Sep-2026
-143607;INF192K01AY5;-;JM Ultra Short to Short Term Fund;Regular Plan;Growth Option;39.7405;11-Sep-2026
-143608;-;INF192K01AW9;JM Ultra Short to Short Term Fund;Regular Plan;Weekly IDCW Option;11.406;11-Sep-2026
-143609;INF192K01FJ5;-;JM Ultra Short to Short Term Fund;Regular Plan;Bonus Option - Principal Units;23.9427;11-Sep-2026
+143610;INF192K01FL1;-;JM Ultra Short to Short Term Fund;Direct Plan;Bonus Option - Principal Units;24.716;15-Sep-2026
+143604;-;INF192K01DT9;JM Ultra Short to Short Term Fund;Direct Plan;Daily IDCW Option;10.8413;15-Sep-2026
+143606;-;INF192K01DV5;JM Ultra Short to Short Term Fund;Direct Plan;Fortnightly IDCW Option;11.1136;15-Sep-2026
+143612;INF192K01DW3;-;JM Ultra Short to Short Term Fund;Direct Plan;Growth Option;41.0498;15-Sep-2026
+143611;-;INF192K01DU7;JM Ultra Short to Short Term Fund;Direct Plan;Weekly IDCW Option;11.4434;15-Sep-2026
+143603;-;INF192K01AV1;JM Ultra Short to Short Term Fund;Regular Plan;Daily IDCW Option;10.8106;15-Sep-2026
+143605;-;INF192K01AX7;JM Ultra Short to Short Term Fund;Regular Plan;Fortnightly IDCW Option;11.0727;15-Sep-2026
+143607;INF192K01AY5;-;JM Ultra Short to Short Term Fund;Regular Plan;Growth Option;39.7281;15-Sep-2026
+143608;-;INF192K01AW9;JM Ultra Short to Short Term Fund;Regular Plan;Weekly IDCW Option;11.4025;15-Sep-2026
+143609;INF192K01FJ5;-;JM Ultra Short to Short Term Fund;Regular Plan;Bonus Option - Principal Units;23.9352;15-Sep-2026
  
 Kotak Mahindra Mutual Fund
  
@@ -10542,8 +10542,8 @@ Invesco Mutual Fund
  
 Jio BlackRock Mutual Fund
  
-153791;INF22M001069;-;JioBlackRock Nifty 8-13 yr G-Sec Index Fund;Direct Plan;Growth Option;10.3726;11-Sep-2026
-154642;INF22M001333;-;JioBlackRock Nifty 8-13 yr G-Sec Index Fund;Regular Plan;Growth Option;9.9127;11-Sep-2026
+153791;INF22M001069;-;JioBlackRock Nifty 8-13 yr G-Sec Index Fund;Direct Plan;Growth Option;10.3369;15-Sep-2026
+154642;INF22M001333;-;JioBlackRock Nifty 8-13 yr G-Sec Index Fund;Regular Plan;Growth Option;9.8785;15-Sep-2026
  
 Mirae Asset Mutual Fund
  
@@ -10584,10 +10584,10 @@ Open Ended Schemes(Index Funds - Equity Funds)
  
 360 ONE Mutual Fund
  
-151165;INF579M01AN2;-;360 ONE ELSS Tax Saver Nifty 50 Index Fund;Direct Plan;GROWTH Option;13.3144;11-Sep-2026
-151166;INF579M01AO0;-;360 ONE ELSS Tax Saver Nifty 50 Index Fund;Direct Plan;IDCW Option;13.3144;11-Sep-2026
-151164;INF579M01AL6;-;360 ONE ELSS Tax Saver Nifty 50 Index Fund;Regular Plan;GROWTH Option;13.1916;11-Sep-2026
-151167;INF579M01AM4;-;360 ONE ELSS Tax Saver Nifty 50 Index Fund;Regular Plan;IDCW Option;13.1916;11-Sep-2026
+151165;INF579M01AN2;-;360 ONE ELSS Tax Saver Nifty 50 Index Fund;Direct Plan;GROWTH Option;13.1559;15-Sep-2026
+151166;INF579M01AO0;-;360 ONE ELSS Tax Saver Nifty 50 Index Fund;Direct Plan;IDCW Option;13.1559;15-Sep-2026
+151164;INF579M01AL6;-;360 ONE ELSS Tax Saver Nifty 50 Index Fund;Regular Plan;GROWTH Option;13.0342;15-Sep-2026
+151167;INF579M01AM4;-;360 ONE ELSS Tax Saver Nifty 50 Index Fund;Regular Plan;IDCW Option;13.0342;15-Sep-2026
  
 Aditya Birla Sun Life Mutual Fund
  
@@ -10682,46 +10682,46 @@ Edelweiss Mutual Fund
  
 Groww Mutual Fund
  
-153704;INF666M01KT3;-;Groww Nifty 50 Index Fund;Direct Plan;Growth;9.3912;11-Sep-2026
-153709;INF666M01KU1;INF666M01KV9;Groww Nifty 50 Index Fund;Direct Plan;Income Distribution cum capital withdrawal;9.3912;11-Sep-2026
-153710;INF666M01KW7;-;Groww Nifty 50 Index Fund;Regular Plan;Growth;9.317;11-Sep-2026
-153711;INF666M01LJ2;INF666M01LK0;Groww Nifty 50 Index Fund;Regular Plan;Income Distribution cum capital withdrawal;9.317;11-Sep-2026
-153230;INF666M01JK4;-;Groww Nifty India Railways PSU Index Fund;Direct Plan;Growth;7.4497;11-Sep-2026
-153231;INF666M01JL2;INF666M01JM0;Groww Nifty India Railways PSU Index Fund;Direct Plan;Income Distribution cum capital withdrawal;7.4493;11-Sep-2026
-153232;INF666M01JN8;-;Groww Nifty India Railways PSU Index Fund;Regular Plan;Growth;7.3855;11-Sep-2026
-153233;INF666M01JO6;INF666M01JP3;Groww Nifty India Railways PSU Index Fund;Regular Plan;Income Distribution cum capital withdrawal;7.3831;11-Sep-2026
-153939;INF666M01MP7;-;Groww Nifty Midcap 150 Index Fund;Direct Plan;Growth;10.2428;11-Sep-2026
-153952;INF666M01MQ5;INF666M01MR3;Groww Nifty Midcap 150 Index Fund;Direct Plan;Income Distribution cum capital withdrawal;10.2427;11-Sep-2026
-153953;INF666M01MS1;-;Groww Nifty Midcap 150 Index Fund;Regular Plan;Growth;10.1879;11-Sep-2026
-153954;INF666M01MT9;INF666M01MU7;Groww Nifty Midcap 150 Index Fund;Regular Plan;Income Distribution cum capital withdrawal;10.1879;11-Sep-2026
-153786;INF666M01LT1;-;Groww Nifty Next 50 Index Fund;Direct Plan;Growth;10.6837;11-Sep-2026
-153797;INF666M01LU9;INF666M01LV7;Groww Nifty Next 50 Index Fund;Direct Plan;Income Distribution cum capital withdrawal;10.6836;11-Sep-2026
-153798;INF666M01LW5;-;Groww Nifty Next 50 Index Fund;Regular Plan;Growth;10.6064;11-Sep-2026
-153799;INF666M01LX3;INF666M01LY1;Groww Nifty Next 50 Index Fund;Regular Plan;Income Distribution cum capital withdrawal;10.6064;11-Sep-2026
-152636;INF666M01IF6;INF666M01IG4;Groww Nifty Non-Cyclical Consumer Index Fund;Direct Plan;Income Distribution cum capital withdrawal;10.0947;11-Sep-2026
-152637;INF666M01IE9;-;Groww Nifty Non-Cyclical Consumer Index Fund;Direct Plan;Growth;10.0948;11-Sep-2026
-152635;INF666M01IC3;INF666M01ID1;Groww Nifty Non-Cyclical Consumer Index Fund;Regular Plan;Income Distribution cum capital withdrawal;9.9623;11-Sep-2026
-152633;INF666M01IB5;-;Groww Nifty Non-Cyclical Consumer Index Fund;Regular Plan;Growth;9.9634;11-Sep-2026
-154346;INF666M01OU3;-;Groww Nifty Private Bank Index Fund;Direct Plan;Growth;10.2246;11-Sep-2026
-154352;INF666M01OV1;INF666M01OW9;Groww Nifty Private Bank Index Fund;Direct Plan;Income Distribution cum capital withdrawal;10.2246;11-Sep-2026
-154350;INF666M01OX7;-;Groww Nifty Private Bank Index Fund;Regular Plan;Growth;10.204;11-Sep-2026
-154351;INF666M01OY5;INF666M01OZ2;Groww Nifty Private Bank Index Fund;Regular Plan;Income Distribution cum capital withdrawal;10.204;11-Sep-2026
-154278;INF666M01OH0;-;Groww Nifty PSU Bank Index Fund;Direct Plan;Growth;9.9208;11-Sep-2026
-154283;INF666M01OI8;INF666M01OJ6;Groww Nifty PSU Bank Index Fund;Direct Plan;Income Distribution cum capital withdrawal;9.9195;11-Sep-2026
-154284;INF666M01OK4;-;Groww Nifty PSU Bank Index Fund;Regular Plan;Growth;9.8958;11-Sep-2026
-154285;INF666M01OL2;INF666M01OM0;Groww Nifty PSU Bank Index Fund;Regular Plan;Income Distribution cum capital withdrawal;9.8958;11-Sep-2026
-152431;INF666M01HY9;-;Groww Nifty Smallcap 250 Index Fund;Direct Plan;Growth;12.2486;11-Sep-2026
-152436;INF666M01HZ6;INF666M01IA7;Groww Nifty Smallcap 250 Index Fund;Direct Plan;Income Distribution cum capital withdrawal;12.2537;11-Sep-2026
-152433;INF666M01HV5;-;Groww Nifty Smallcap 250 Index Fund;Regular Plan;Growth;12.0832;11-Sep-2026
-152434;INF666M01HW3;INF666M01HX1;Groww Nifty Smallcap 250 Index Fund;Regular Plan;Income Distribution cum capital withdrawal;12.0687;11-Sep-2026
-154383;INF666M01PA2;-;Groww Nifty Smallcap 250 Momentum Quality 100 Index Fund;Direct Plan;Growth;10.7324;11-Sep-2026
-154385;INF666M01PB0;INF666M01PC8;Groww Nifty Smallcap 250 Momentum Quality 100 Index Fund;Direct Plan;Income Distribution cum capital withdrawal;10.7324;11-Sep-2026
-154387;INF666M01PD6;-;Groww Nifty Smallcap 250 Momentum Quality 100 Index Fund;Regular Plan;Growth;10.7179;11-Sep-2026
-154386;INF666M01PE4;INF666M01PF1;Groww Nifty Smallcap 250 Momentum Quality 100 Index Fund;Regular Plan;Income Distribution cum capital withdrawal;10.7179;11-Sep-2026
-152092;INF666M01HM4;-;Groww Nifty Total Market Index Fund;Direct Plan;Growth;13.8199;11-Sep-2026
-152125;INF666M01HN2;INF666M01HO0;Groww Nifty Total Market Index Fund;Direct Plan;Income Distribution cum capital withdrawal;13.8195;11-Sep-2026
-152127;INF666M01HJ0;-;Groww Nifty Total Market Index Fund;Regular Plan;Growth;13.5581;11-Sep-2026
-152126;INF666M01HK8;INF666M01HL6;Groww Nifty Total Market Index Fund;Regular Plan;Income Distribution cum capital withdrawal;13.5589;11-Sep-2026
+153704;INF666M01KT3;-;Groww Nifty 50 Index Fund;Direct Plan;Growth;9.2786;15-Sep-2026
+153709;INF666M01KU1;INF666M01KV9;Groww Nifty 50 Index Fund;Direct Plan;Income Distribution cum capital withdrawal;9.2787;15-Sep-2026
+153710;INF666M01KW7;-;Groww Nifty 50 Index Fund;Regular Plan;Growth;9.2046;15-Sep-2026
+153711;INF666M01LJ2;INF666M01LK0;Groww Nifty 50 Index Fund;Regular Plan;Income Distribution cum capital withdrawal;9.2047;15-Sep-2026
+153230;INF666M01JK4;-;Groww Nifty India Railways PSU Index Fund;Direct Plan;Growth;7.2723;15-Sep-2026
+153231;INF666M01JL2;INF666M01JM0;Groww Nifty India Railways PSU Index Fund;Direct Plan;Income Distribution cum capital withdrawal;7.272;15-Sep-2026
+153232;INF666M01JN8;-;Groww Nifty India Railways PSU Index Fund;Regular Plan;Growth;7.2093;15-Sep-2026
+153233;INF666M01JO6;INF666M01JP3;Groww Nifty India Railways PSU Index Fund;Regular Plan;Income Distribution cum capital withdrawal;7.207;15-Sep-2026
+153939;INF666M01MP7;-;Groww Nifty Midcap 150 Index Fund;Direct Plan;Growth;10.023;15-Sep-2026
+153952;INF666M01MQ5;INF666M01MR3;Groww Nifty Midcap 150 Index Fund;Direct Plan;Income Distribution cum capital withdrawal;10.023;15-Sep-2026
+153953;INF666M01MS1;-;Groww Nifty Midcap 150 Index Fund;Regular Plan;Growth;9.9686;15-Sep-2026
+153954;INF666M01MT9;INF666M01MU7;Groww Nifty Midcap 150 Index Fund;Regular Plan;Income Distribution cum capital withdrawal;9.9686;15-Sep-2026
+153786;INF666M01LT1;-;Groww Nifty Next 50 Index Fund;Direct Plan;Growth;10.4162;15-Sep-2026
+153797;INF666M01LU9;INF666M01LV7;Groww Nifty Next 50 Index Fund;Direct Plan;Income Distribution cum capital withdrawal;10.4161;15-Sep-2026
+153798;INF666M01LW5;-;Groww Nifty Next 50 Index Fund;Regular Plan;Growth;10.34;15-Sep-2026
+153799;INF666M01LX3;INF666M01LY1;Groww Nifty Next 50 Index Fund;Regular Plan;Income Distribution cum capital withdrawal;10.34;15-Sep-2026
+152636;INF666M01IF6;INF666M01IG4;Groww Nifty Non-Cyclical Consumer Index Fund;Direct Plan;Income Distribution cum capital withdrawal;9.9522;15-Sep-2026
+152637;INF666M01IE9;-;Groww Nifty Non-Cyclical Consumer Index Fund;Direct Plan;Growth;9.9523;15-Sep-2026
+152635;INF666M01IC3;INF666M01ID1;Groww Nifty Non-Cyclical Consumer Index Fund;Regular Plan;Income Distribution cum capital withdrawal;9.8212;15-Sep-2026
+152633;INF666M01IB5;-;Groww Nifty Non-Cyclical Consumer Index Fund;Regular Plan;Growth;9.8223;15-Sep-2026
+154346;INF666M01OU3;-;Groww Nifty Private Bank Index Fund;Direct Plan;Growth;10.0863;15-Sep-2026
+154352;INF666M01OV1;INF666M01OW9;Groww Nifty Private Bank Index Fund;Direct Plan;Income Distribution cum capital withdrawal;10.0863;15-Sep-2026
+154350;INF666M01OX7;-;Groww Nifty Private Bank Index Fund;Regular Plan;Growth;10.0652;15-Sep-2026
+154351;INF666M01OY5;INF666M01OZ2;Groww Nifty Private Bank Index Fund;Regular Plan;Income Distribution cum capital withdrawal;10.0652;15-Sep-2026
+154278;INF666M01OH0;-;Groww Nifty PSU Bank Index Fund;Direct Plan;Growth;9.6932;15-Sep-2026
+154283;INF666M01OI8;INF666M01OJ6;Groww Nifty PSU Bank Index Fund;Direct Plan;Income Distribution cum capital withdrawal;9.692;15-Sep-2026
+154284;INF666M01OK4;-;Groww Nifty PSU Bank Index Fund;Regular Plan;Growth;9.6683;15-Sep-2026
+154285;INF666M01OL2;INF666M01OM0;Groww Nifty PSU Bank Index Fund;Regular Plan;Income Distribution cum capital withdrawal;9.6683;15-Sep-2026
+152431;INF666M01HY9;-;Groww Nifty Smallcap 250 Index Fund;Direct Plan;Growth;11.9495;15-Sep-2026
+152436;INF666M01HZ6;INF666M01IA7;Groww Nifty Smallcap 250 Index Fund;Direct Plan;Income Distribution cum capital withdrawal;11.9545;15-Sep-2026
+152433;INF666M01HV5;-;Groww Nifty Smallcap 250 Index Fund;Regular Plan;Growth;11.7875;15-Sep-2026
+152434;INF666M01HW3;INF666M01HX1;Groww Nifty Smallcap 250 Index Fund;Regular Plan;Income Distribution cum capital withdrawal;11.7733;15-Sep-2026
+154383;INF666M01PA2;-;Groww Nifty Smallcap 250 Momentum Quality 100 Index Fund;Direct Plan;Growth;10.4204;15-Sep-2026
+154385;INF666M01PB0;INF666M01PC8;Groww Nifty Smallcap 250 Momentum Quality 100 Index Fund;Direct Plan;Income Distribution cum capital withdrawal;10.4204;15-Sep-2026
+154387;INF666M01PD6;-;Groww Nifty Smallcap 250 Momentum Quality 100 Index Fund;Regular Plan;Growth;10.4056;15-Sep-2026
+154386;INF666M01PE4;INF666M01PF1;Groww Nifty Smallcap 250 Momentum Quality 100 Index Fund;Regular Plan;Income Distribution cum capital withdrawal;10.4056;15-Sep-2026
+152092;INF666M01HM4;-;Groww Nifty Total Market Index Fund;Direct Plan;Growth;13.574;15-Sep-2026
+152125;INF666M01HN2;INF666M01HO0;Groww Nifty Total Market Index Fund;Direct Plan;Income Distribution cum capital withdrawal;13.5736;15-Sep-2026
+152127;INF666M01HJ0;-;Groww Nifty Total Market Index Fund;Regular Plan;Growth;13.3163;15-Sep-2026
+152126;INF666M01HK8;INF666M01HL6;Groww Nifty Total Market Index Fund;Regular Plan;Income Distribution cum capital withdrawal;13.317;15-Sep-2026
  
 HDFC Mutual Fund
  
@@ -10748,14 +10748,14 @@ Invesco Mutual Fund
  
 Jio BlackRock Mutual Fund
  
-153787;INF22M001044;-;JioBlackRock Nifty 50 Index Fund;Direct Plan;Growth Option;9.4944;11-Sep-2026
-154633;INF22M001200;-;JioBlackRock Nifty 50 Index Fund;Regular Plan;Growth Option;9.6328;11-Sep-2026
-153788;INF22M001077;-;JioBlackRock Nifty Midcap 150 Index Fund;Direct Plan;Growth Option;10.7734;11-Sep-2026
-154643;INF22M001341;-;JioBlackRock Nifty Midcap 150 Index Fund;Regular Plan;Growth Option;9.7762;11-Sep-2026
-153789;INF22M001085;-;JioBlackRock Nifty Next 50 Index Fund;Direct Plan;Growth Option;10.7651;11-Sep-2026
-154644;INF22M001358;-;JioBlackRock Nifty Next 50 Index Fund;Regular Plan;Growth Option;9.7138;11-Sep-2026
-153790;INF22M001051;-;JioBlackRock Nifty Smallcap 250 Index Fund;Direct Plan;Growth Option;10.8850;11-Sep-2026
-154634;INF22M001218;-;JioBlackRock Nifty Smallcap 250 Index Fund;Regular Plan;Growth Option;9.9930;11-Sep-2026
+153787;INF22M001044;-;JioBlackRock Nifty 50 Index Fund;Direct Plan;Growth Option;9.3810;15-Sep-2026
+154633;INF22M001200;-;JioBlackRock Nifty 50 Index Fund;Regular Plan;Growth Option;9.5174;15-Sep-2026
+153788;INF22M001077;-;JioBlackRock Nifty Midcap 150 Index Fund;Direct Plan;Growth Option;10.5429;15-Sep-2026
+154643;INF22M001341;-;JioBlackRock Nifty Midcap 150 Index Fund;Regular Plan;Growth Option;9.5663;15-Sep-2026
+153789;INF22M001085;-;JioBlackRock Nifty Next 50 Index Fund;Direct Plan;Growth Option;10.4958;15-Sep-2026
+154644;INF22M001358;-;JioBlackRock Nifty Next 50 Index Fund;Regular Plan;Growth Option;9.4703;15-Sep-2026
+153790;INF22M001051;-;JioBlackRock Nifty Smallcap 250 Index Fund;Direct Plan;Growth Option;10.6197;15-Sep-2026
+154634;INF22M001218;-;JioBlackRock Nifty Smallcap 250 Index Fund;Regular Plan;Growth Option;9.7488;15-Sep-2026
  
 Kotak Mahindra Mutual Fund
  
@@ -10834,9 +10834,9 @@ Open Ended Schemes(Money Market)
  
 Taurus Mutual Fund
  
-139619;-;-;Taurus Investor Education Pool (Greater than 3 yrs);;;10.0000;11-Sep-2026
-139618;-;-;Taurus Investor Education Pool (Greater than 3 yrs);;Growth;10.0000;11-Sep-2026
-139617;-;-;Taurus Unclaimed Dividend & Redemption Liability (Less than 3 yrs);;Growth;17.7599;11-Sep-2026
+139619;-;-;Taurus Investor Education Pool (Greater than 3 yrs);;;10.0000;15-Sep-2026
+139618;-;-;Taurus Investor Education Pool (Greater than 3 yrs);;Growth;10.0000;15-Sep-2026
+139617;-;-;Taurus Unclaimed Dividend & Redemption Liability (Less than 3 yrs);;Growth;17.7597;15-Sep-2026
  
 Open Ended Schemes(Other Scheme - FoF Domestic)
  
@@ -10873,10 +10873,10 @@ Aditya Birla Sun Life Mutual Fund
  
 Angel One Mutual Fund
  
-153828;INF1J2R01106;-;ANGEL ONE GOLD ETF FOF;Regular Plan;Growth;13.7018;11-Sep-2026
-153827;INF1J2R01098;-;ANGEL ONE GOLD ETF FOF;Direct Plan;Growth;13.7707;11-Sep-2026
-154206;INF1J2R01155;-;ANGEL ONE SILVER ETF FOF;Direct Plan;Growth;7.8931;11-Sep-2026
-154207;INF1J2R01163;-;ANGEL ONE SILVER ETF FOF;Regular Plan;Growth;7.8721;11-Sep-2026
+153828;INF1J2R01106;-;ANGEL ONE GOLD ETF FOF;Regular Plan;Growth;14.0393;15-Sep-2026
+153827;INF1J2R01098;-;ANGEL ONE GOLD ETF FOF;Direct Plan;Growth;14.1107;15-Sep-2026
+154206;INF1J2R01155;-;ANGEL ONE SILVER ETF FOF;Direct Plan;Growth;7.8568;15-Sep-2026
+154207;INF1J2R01163;-;ANGEL ONE SILVER ETF FOF;Regular Plan;Growth;7.8355;15-Sep-2026
  
 Bandhan Mutual Fund
  
@@ -11250,14 +11250,14 @@ Open Ended Schemes(Other Scheme - FoF Overseas)
  
 Aditya Birla Sun Life Mutual Fund
  
-132141;INF084M01EC8;INF084M01ED6;Aditya Birla Sun Life Global Emerging Opportunities Fund;Direct Plan;IDCW;30.4274;10-Sep-2026
-132140;INF084M01EB0;-;Aditya Birla Sun Life Global Emerging Opportunities Fund;Direct Plan;GROWTH;34.4028;10-Sep-2026
-132139;INF084M01AU8;INF084M01AV6;Aditya Birla Sun Life Global Emerging Opportunities Fund;Regular Plan;IDCW Re-investment;32.6679;10-Sep-2026
-132138;INF084M01AT0;-;Aditya Birla Sun Life Global Emerging Opportunities Fund;Regular Plan;GROWTH;32.6620;10-Sep-2026
-132009;INF084M01EH7;-;Aditya Birla Sun Life Global Excellence Equity Fund Of Fund;Direct Plan;GROWTH;46.1782;10-Sep-2026
-132005;INF084M01AZ7;-;Aditya Birla Sun Life Global Excellence Equity Fund Of Fund;Regular Plan;GROWTH;43.1212;10-Sep-2026
-132010;INF084M01EI5;INF084M01EJ3;Aditya Birla Sun Life Global Excellence Equity Fund Of Fund;;;46.2018;10-Sep-2026
-132003;INF084M01BA8;INF084M01BB6;Aditya Birla Sun Life Global Excellence Equity Fund Of Fund;Regular Plan;IDCW Re-investment;43.1480;10-Sep-2026
+132141;INF084M01EC8;INF084M01ED6;Aditya Birla Sun Life Global Emerging Opportunities Fund;Direct Plan;IDCW;30.6694;11-Sep-2026
+132140;INF084M01EB0;-;Aditya Birla Sun Life Global Emerging Opportunities Fund;Direct Plan;GROWTH;34.6763;11-Sep-2026
+132139;INF084M01AU8;INF084M01AV6;Aditya Birla Sun Life Global Emerging Opportunities Fund;Regular Plan;IDCW Re-investment;32.9271;11-Sep-2026
+132138;INF084M01AT0;-;Aditya Birla Sun Life Global Emerging Opportunities Fund;Regular Plan;GROWTH;32.9212;11-Sep-2026
+132009;INF084M01EH7;-;Aditya Birla Sun Life Global Excellence Equity Fund Of Fund;Direct Plan;GROWTH;46.5878;11-Sep-2026
+132005;INF084M01AZ7;-;Aditya Birla Sun Life Global Excellence Equity Fund Of Fund;Regular Plan;GROWTH;43.5029;11-Sep-2026
+132010;INF084M01EI5;INF084M01EJ3;Aditya Birla Sun Life Global Excellence Equity Fund Of Fund;;;46.6116;11-Sep-2026
+132003;INF084M01BA8;INF084M01BB6;Aditya Birla Sun Life Global Excellence Equity Fund Of Fund;Regular Plan;IDCW Re-investment;43.5299;11-Sep-2026
 152140;INF209KB16W7;-;Aditya Birla Sun Life US Treasury 1-3 Year Bond ETFs Passive FOF;Direct Plan;GROWTH;12.8613;11-Sep-2026
 152139;INF209KB17W5;INF209KB18W3;Aditya Birla Sun Life US Treasury 1-3 Year Bond ETFs Passive FOF;Direct Plan;IDCW;12.8613;11-Sep-2026
 152142;INF209KB13W4;-;Aditya Birla Sun Life US Treasury 1-3 Year Bond ETFs Passive FOF;Regular Plan;GROWTH;12.8443;11-Sep-2026
@@ -11452,7 +11452,7 @@ Kotak Mahindra Mutual Fund
  
 LIC Mutual Fund
  
-151961;INF767K01SM1;-;LIC MF Gold Exchange Traded Fund;;;135.8635;11-Sep-2026
+151961;INF767K01SM1;-;LIC MF Gold Exchange Traded Fund;;;134.6196;15-Sep-2026
  
 Motilal Oswal Mutual Fund
  
@@ -11564,12 +11564,12 @@ Aditya Birla Sun Life Mutual Fund
  
 Angel One Mutual Fund
  
-153529;INF1J2R01072;-;ANGEL ONE NIFTY 50 INDEX FUND;Direct Plan;Growth;9.6444;11-Sep-2026
-153530;INF1J2R01080;-;ANGEL ONE NIFTY 50 INDEX FUND;Regular Plan;Growth;9.582;11-Sep-2026
-153330;INF1J2R01023;-;ANGEL ONE NIFTY TOTAL MARKET INDEX FUND;Direct Plan;Growth;11.7064;11-Sep-2026
-153331;INF1J2R01031;-;ANGEL ONE NIFTY TOTAL MARKET INDEX FUND;Regular Plan;Growth;11.573;11-Sep-2026
-153956;INF1J2R01122;-;ANGEL ONE NIFTY TOTAL MARKET MOMENTUM QUALITY 50 INDEX FUND;Direct Plan;Growth;10.3231;11-Sep-2026
-153955;INF1J2R01130;-;ANGEL ONE NIFTY TOTAL MARKET MOMENTUM QUALITY 50 INDEX FUND;Regular Plan;Growth;10.2654;11-Sep-2026
+153529;INF1J2R01072;-;ANGEL ONE NIFTY 50 INDEX FUND;Direct Plan;Growth;9.5291;15-Sep-2026
+153530;INF1J2R01080;-;ANGEL ONE NIFTY 50 INDEX FUND;Regular Plan;Growth;9.4669;15-Sep-2026
+153330;INF1J2R01023;-;ANGEL ONE NIFTY TOTAL MARKET INDEX FUND;Direct Plan;Growth;11.4984;15-Sep-2026
+153331;INF1J2R01031;-;ANGEL ONE NIFTY TOTAL MARKET INDEX FUND;Regular Plan;Growth;11.3665;15-Sep-2026
+153956;INF1J2R01122;-;ANGEL ONE NIFTY TOTAL MARKET MOMENTUM QUALITY 50 INDEX FUND;Direct Plan;Growth;9.9824;15-Sep-2026
+153955;INF1J2R01130;-;ANGEL ONE NIFTY TOTAL MARKET MOMENTUM QUALITY 50 INDEX FUND;Regular Plan;Growth;9.9259;15-Sep-2026
  
 Axis Mutual Fund
  
@@ -12242,26 +12242,26 @@ Motilal Oswal Mutual Fund
  
 Navi Mutual Fund
  
-152062;INF959L01HK9;-;NAVI BSE SENSEX INDEX FUND;Direct Plan;GROWTH;11.6646;11-Sep-2026
-152061;INF959L01HJ1;-;NAVI BSE SENSEX INDEX FUND;Regular Plan;GROWTH;11.4299;11-Sep-2026
-149039;INF959L01FP2;-;Navi Nifty 50 Index Fund;Direct Plan;Growth;15.4598;11-Sep-2026
-149040;INF959L01FQ0;-;Navi Nifty 50 Index Fund;Regular Plan;Growth;15.296;11-Sep-2026
-152751;INF959L01HO1;-;Navi Nifty 500 Multicap 50:25:25 Index Fund;Direct Plan;Growth;10.0996;11-Sep-2026
-152750;INF959L01HN3;-;Navi Nifty 500 Multicap 50:25:25 Index Fund;Regular Plan;Growth;9.9553;11-Sep-2026
-149804;INF959L01FT4;-;Navi Nifty Bank Index Fund;Direct Plan;Growth;14.9423;11-Sep-2026
-149805;INF959L01FU2;-;Navi Nifty Bank Index Fund;Regular Plan;Growth;14.4428;11-Sep-2026
-150515;INF959L01GD6;-;Navi Nifty India Manufacturing Index Fund;Direct Plan;Growth;19.4492;11-Sep-2026
-150516;INF959L01GE4;-;Navi Nifty India Manufacturing Index Fund;Regular Plan;Growth;18.8617;11-Sep-2026
-149892;INF959L01FX6;-;Navi Nifty Midcap 150 Index Fund;;;21.6513;11-Sep-2026
-149893;INF959L01FY4;-;Navi Nifty Midcap 150 Index Fund;;;20.8446;11-Sep-2026
-154026;INF959L01HS2;-;Navi Nifty Midsmallcap 400 Index Fund;Regular Plan;Growth;10.695;11-Sep-2026
-154027;INF959L01HR4;-;Navi Nifty Midsmallcap 400 Index Fund;Direct Plan;Growth;10.7641;11-Sep-2026
-149447;INF959L01FR8;-;Navi Nifty Next 50 Index Fund;Direct Plan;Growth;17.1986;11-Sep-2026
-149448;INF959L01FS6;-;Navi Nifty Next 50 Index Fund;Regular Plan;Growth;16.7474;11-Sep-2026
-153362;INF959L01HQ6;-;Navi Nifty Smallcap250 Momentum Quality 100 Index Fund;Direct Plan;Growth;12.3818;11-Sep-2026
-153363;INF959L01HP8;-;Navi Nifty Smallcap250 Momentum Quality 100 Index Fund;Regular Plan;Growth;12.2562;11-Sep-2026
-152535;INF959L01HM5;-;Navi NiftyIT Index Fund;Direct Plan;Growth;8.629;11-Sep-2026
-152536;INF959L01HL7;-;Navi NiftyIT Index Fund;Regular Plan;Growth;8.4791;11-Sep-2026
+152062;INF959L01HK9;-;NAVI BSE SENSEX INDEX FUND;Direct Plan;GROWTH;11.5429;15-Sep-2026
+152061;INF959L01HJ1;-;NAVI BSE SENSEX INDEX FUND;Regular Plan;GROWTH;11.3099;15-Sep-2026
+149039;INF959L01FP2;-;Navi Nifty 50 Index Fund;Direct Plan;Growth;15.275;15-Sep-2026
+149040;INF959L01FQ0;-;Navi Nifty 50 Index Fund;Regular Plan;Growth;15.1129;15-Sep-2026
+152751;INF959L01HO1;-;Navi Nifty 500 Multicap 50:25:25 Index Fund;Direct Plan;Growth;9.9112;15-Sep-2026
+152750;INF959L01HN3;-;Navi Nifty 500 Multicap 50:25:25 Index Fund;Regular Plan;Growth;9.7688;15-Sep-2026
+149804;INF959L01FT4;-;Navi Nifty Bank Index Fund;Direct Plan;Growth;14.7276;15-Sep-2026
+149805;INF959L01FU2;-;Navi Nifty Bank Index Fund;Regular Plan;Growth;14.2339;15-Sep-2026
+150515;INF959L01GD6;-;Navi Nifty India Manufacturing Index Fund;Direct Plan;Growth;18.9825;15-Sep-2026
+150516;INF959L01GE4;-;Navi Nifty India Manufacturing Index Fund;Regular Plan;Growth;18.4078;15-Sep-2026
+149892;INF959L01FX6;-;Navi Nifty Midcap 150 Index Fund;;;21.1871;15-Sep-2026
+149893;INF959L01FY4;-;Navi Nifty Midcap 150 Index Fund;;;20.396;15-Sep-2026
+154026;INF959L01HS2;-;Navi Nifty Midsmallcap 400 Index Fund;Regular Plan;Growth;10.4552;15-Sep-2026
+154027;INF959L01HR4;-;Navi Nifty Midsmallcap 400 Index Fund;Direct Plan;Growth;10.5237;15-Sep-2026
+149447;INF959L01FR8;-;Navi Nifty Next 50 Index Fund;Direct Plan;Growth;16.7682;15-Sep-2026
+149448;INF959L01FS6;-;Navi Nifty Next 50 Index Fund;Regular Plan;Growth;16.3267;15-Sep-2026
+153362;INF959L01HQ6;-;Navi Nifty Smallcap250 Momentum Quality 100 Index Fund;Direct Plan;Growth;12.0236;15-Sep-2026
+153363;INF959L01HP8;-;Navi Nifty Smallcap250 Momentum Quality 100 Index Fund;Regular Plan;Growth;11.9008;15-Sep-2026
+152535;INF959L01HM5;-;Navi NiftyIT Index Fund;Direct Plan;Growth;8.8175;15-Sep-2026
+152536;INF959L01HL7;-;Navi NiftyIT Index Fund;Regular Plan;Growth;8.6637;15-Sep-2026
  
 Nippon India Mutual Fund
  
@@ -12614,10 +12614,10 @@ Tata Mutual Fund
  
 Taurus Mutual Fund
  
-118881;INF044D01CQ5;-;Taurus Nifty 50 Index Fund;Direct Plan;Growth;47.5566;11-Sep-2026
-118882;INF044D01CR3;INF044D01CS1;Taurus Nifty 50 Index Fund;Direct Plan;Income Distribution cum Capital Withdrawal;44.5075;11-Sep-2026
-112948;INF044D01948;-;Taurus Nifty 50 Index Fund;Regular Plan;Growth;44.5109;11-Sep-2026
-112949;INF044D01914;INF044D01922;Taurus Nifty 50 Index Fund;Regular Plan;Income Distribution cum Capital Withdrawal;28.3794;11-Sep-2026
+118881;INF044D01CQ5;-;Taurus Nifty 50 Index Fund;Direct Plan;Growth;46.9885;15-Sep-2026
+118882;INF044D01CR3;INF044D01CS1;Taurus Nifty 50 Index Fund;Direct Plan;Income Distribution cum Capital Withdrawal;43.9758;15-Sep-2026
+112948;INF044D01948;-;Taurus Nifty 50 Index Fund;Regular Plan;Growth;43.9779;15-Sep-2026
+112949;INF044D01914;INF044D01922;Taurus Nifty 50 Index Fund;Regular Plan;Income Distribution cum Capital Withdrawal;28.0396;15-Sep-2026
  
 UTI Mutual Fund
  
@@ -12648,10 +12648,10 @@ Aditya Birla Sun Life Mutual Fund
  
 Angel One Mutual Fund
  
-153451;INF1J2R01056;-;ANGEL ONE NIFTY 1D RATE LIQUID ETF - GROWTH;Direct Plan;Growth;1076.7453;14-Sep-2026
-153531;INF1J2R01064;-;ANGEL ONE NIFTY 50 ETF;Direct Plan;;9.6735;11-Sep-2026
-153332;INF1J2R01015;-;ANGEL ONE NIFTY TOTAL MARKET ETF;Direct Plan;;11.7187;11-Sep-2026
-153957;INF1J2R01148;-;ANGEL ONE NIFTY TOTAL MARKET MOMENTUM QUALITY 50 ETF;Direct Plan;;10.3306;11-Sep-2026
+153451;INF1J2R01056;-;ANGEL ONE NIFTY 1D RATE LIQUID ETF - GROWTH;Direct Plan;Growth;1076.8833;15-Sep-2026
+153531;INF1J2R01064;-;ANGEL ONE NIFTY 50 ETF;Direct Plan;;9.5581;15-Sep-2026
+153332;INF1J2R01015;-;ANGEL ONE NIFTY TOTAL MARKET ETF;Direct Plan;;11.5105;15-Sep-2026
+153957;INF1J2R01148;-;ANGEL ONE NIFTY TOTAL MARKET MOMENTUM QUALITY 50 ETF;Direct Plan;;9.99;15-Sep-2026
 154205;INF1J2R01171;-;ANGEL ONE SILVER ETF;Direct Plan;;8.6794;11-Sep-2026
  
 Bajaj Finserv Mutual Fund

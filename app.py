@@ -730,7 +730,17 @@ def get_or_fetch_nav_for_date(target_iso: str) -> dict:
         path = _snapshot_path(iso)
         with open(path, 'r', encoding='utf-8') as f:
             nav_map, _, _ = _parse_nav_text(f.read())
-        return {k: v[0] for k, v in nav_map.items() if v[0] > 0}
+        # Return {isin: float_nav} — never tuples. Tuples here force object
+        # dtype into every downstream diff column.
+        out = {}
+        for k, v in nav_map.items():
+            try:
+                nav = float(v[0]) if isinstance(v, (tuple, list)) else float(v)
+                if nav > 0:
+                    out[k] = nav
+            except (TypeError, ValueError, IndexError):
+                continue
+        return out
 
     try:
         target_d = datetime.strptime(iso, "%Y-%m-%d").date()
@@ -2625,7 +2635,17 @@ def load_previous_nav_map() -> dict:
     except Exception:
         return {}
     nav_map, _, _ = _parse_nav_text(text)
-    return {isin: nav for isin, (nav, _) in nav_map.items()}
+    # Flatten {isin: (nav, date)} -> {isin: nav_float}. Returning tuples here
+    # pollutes downstream diff columns with object dtype and crashes
+    # .nlargest()/.nsmallest() on the Dashboard.
+    flat = {}
+    for isin, val in nav_map.items():
+        try:
+            nav = float(val[0]) if isinstance(val, (tuple, list)) else float(val)
+            flat[isin] = nav
+        except (TypeError, ValueError, IndexError):
+            continue
+    return flat
 
 
 def get_previous_nav_date() -> Optional[str]:
@@ -3099,6 +3119,14 @@ def get_enriched_folio_nav_df(_v: int) -> pd.DataFrame:
             )
 
     folio_nav_df = folio_nav_df.drop(columns=['product_code_norm'], errors='ignore')
+
+    # ── Guarantee numeric dtypes at the source so every downstream
+    #    arithmetic/diff/sort op stays float64. Any TEXT row from SQLite
+    #    will otherwise poison the whole column into object dtype.
+    for col in ("units", "current_nav", "file_aum", "nav_based_aum"):
+        if col in folio_nav_df.columns:
+            folio_nav_df[col] = pd.to_numeric(folio_nav_df[col], errors="coerce")
+
     log.info("[NAV-ENRICH] Rebuilt %s rows", len(folio_nav_df))
     return folio_nav_df
 
@@ -3854,18 +3882,31 @@ if mode == "📊 Dashboard":
         if not prev_nav_map:
             st.warning("⚠️ Previous NAV snapshot not available for 1-day diff. Use Admin → Sync Previous Business Day NAV.")
         else:
+            # ── Coerce all numeric inputs first. SQLite returns TEXT for any
+            #    column that ever held a non-numeric value, which silently
+            #    turns these into object dtype and breaks nlargest/nsmallest.
+            df_nav["units"] = pd.to_numeric(df_nav["units"], errors="coerce")
+            df_nav["current_nav"] = pd.to_numeric(df_nav["current_nav"], errors="coerce")
+
             # Calculate 1-day diff
-            df_nav["prev_nav_1d"] = df_nav["isin"].apply(
-                lambda i: prev_nav_map.get(str(i).strip().upper()) if pd.notna(i) else None
+            df_nav["prev_nav_1d"] = pd.to_numeric(
+                df_nav["isin"].apply(
+                    lambda i: prev_nav_map.get(str(i).strip().upper()) if pd.notna(i) else None
+                ),
+                errors="coerce",
             )
             df_nav["diff_1d_value"] = (
                 (df_nav["current_nav"] - df_nav["prev_nav_1d"]) * df_nav["units"]
-            ).fillna(0.0)
+            ).astype("float64").fillna(0.0)
             df_nav["diff_1d_pct"] = (
                 (df_nav["current_nav"] - df_nav["prev_nav_1d"]) / df_nav["prev_nav_1d"] * 100
-            ).fillna(0.0)
+            ).astype("float64").fillna(0.0)
             
             # Summary stats
+            df_nav["diff_1d_value"] = pd.to_numeric(
+                df_nav["diff_1d_value"], errors="coerce"
+            ).astype("float64").fillna(0.0)
+
             total_1d_diff = df_nav["diff_1d_value"].sum()
             top_gainers_1d = df_nav[df_nav["diff_1d_value"] > 0].nlargest(5, "diff_1d_value")[
                 ["folio_id", "scheme_name", "current_nav", "prev_nav_1d", "units", "diff_1d_value", "rta"]
@@ -3946,12 +3987,15 @@ if mode == "📊 Dashboard":
             nav_1wk_map = get_or_fetch_nav_for_date(seven_days_ago_iso)
             
             if nav_1wk_map:
-                df_nav["prev_nav_1w"] = df_nav["isin"].apply(
-                    lambda i: nav_1wk_map.get(str(i).strip().upper()) if pd.notna(i) else None
+                df_nav["prev_nav_1w"] = pd.to_numeric(
+                    df_nav["isin"].apply(
+                        lambda i: nav_1wk_map.get(str(i).strip().upper()) if pd.notna(i) else None
+                    ),
+                    errors="coerce",
                 )
                 df_nav["diff_1w_value"] = (
                     (df_nav["current_nav"] - df_nav["prev_nav_1w"]) * df_nav["units"]
-                ).fillna(0.0)
+                ).astype("float64").fillna(0.0)
                 
                 total_1w_diff = df_nav["diff_1w_value"].sum()
                 top_gainers_1w = df_nav[df_nav["diff_1w_value"] > 0].nlargest(5, "diff_1w_value")[

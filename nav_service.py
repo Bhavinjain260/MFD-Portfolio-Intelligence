@@ -592,7 +592,20 @@ def load_previous_nav_map() -> dict:
     except Exception:
         return {}
     nav_map, _, _ = _parse_nav_text(text)
-    return {isin: nav for isin, (nav, _) in nav_map.items()}
+    # _parse_nav_text returns {isin: (nav, nav_date)}. Flatten to {isin: nav_float}
+    # so callers can do arithmetic directly — returning the tuple forces any
+    # downstream column into object dtype and breaks .nlargest()/.nsmallest().
+    flat = {}
+    for isin, val in nav_map.items():
+        try:
+            if isinstance(val, (tuple, list)):
+                nav = float(val[0])
+            else:
+                nav = float(val)
+            flat[isin] = nav
+        except (TypeError, ValueError, IndexError):
+            continue
+    return flat
 
 
 def get_previous_nav_date() -> Optional[str]:
@@ -612,7 +625,15 @@ def get_or_fetch_nav_for_date(target_iso: str) -> dict:
         path = _snapshot_path(target_iso)
         with open(path, 'r', encoding='utf-8') as f:
             nav_map, _, _ = _parse_nav_text(f.read())
-        return {k: v[0] for k, v in nav_map.items() if v[0] > 0}
+        out = {}
+        for k, v in nav_map.items():
+            try:
+                nav = float(v[0]) if isinstance(v, (tuple, list)) else float(v)
+                if nav > 0:
+                    out[k] = nav
+            except (TypeError, ValueError, IndexError):
+                continue
+        return out
 
     try:
         target_d = datetime.strptime(target_iso, "%Y-%m-%d").date()
