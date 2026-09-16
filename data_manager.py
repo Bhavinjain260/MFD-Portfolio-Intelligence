@@ -21,6 +21,7 @@ import streamlit as st
 
 from init_db import get_conn
 import nav_data_ingestion 
+import sync_failure_log as sflog
 
 
 log = logging.getLogger(__name__)
@@ -910,9 +911,21 @@ def parse_bse_scheme_master(file, replace: bool) -> tuple[bool, str, dict]:
 
 def parse_cams_wbr4_aum(file, replace: bool) -> tuple[bool, str, dict]:
     df = _read_csv_auto(file)
-    if df is None: return False, "Could not parse file", {}
+    if df is None:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="CAMS", report="WBR4", file=getattr(file, "name", ""),
+            msg="Could not parse file",
+        )
+        return False, "Could not parse file", {}
     df = _clean_cols(df)
-    if "FOLIOCHK" not in df.columns: return False, f"Missing FOLIOCHK. Found: {list(df.columns)[:10]}", {}
+    if "FOLIOCHK" not in df.columns:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="CAMS", report="WBR4", file=getattr(file, "name", ""),
+            msg=f"Missing FOLIOCHK. Found: {list(df.columns)[:10]}",
+        )
+        return False, f"Missing FOLIOCHK. Found: {list(df.columns)[:10]}", {}
     batch = _batch_id("CAMS_R4", file.name);
     rows, skipped = [], 0
     for _, row in df.iterrows():
@@ -944,9 +957,21 @@ def parse_cams_wbr4_aum(file, replace: bool) -> tuple[bool, str, dict]:
 
 def parse_cams_wbr9_folio(file, replace: bool) -> tuple[bool, str, dict]:
     df = _read_csv_auto(file)
-    if df is None: return False, "Could not parse file", {}
+    if df is None:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="CAMS", report="WBR9", file=getattr(file, "name", ""),
+            msg="Could not parse file",
+        )
+        return False, "Could not parse file", {}
     df = _clean_cols(df)
-    if "FOLIOCHK" not in df.columns: return False, f"Missing FOLIOCHK. Found: {list(df.columns)[:10]}", {}
+    if "FOLIOCHK" not in df.columns:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="CAMS", report="WBR9", file=getattr(file, "name", ""),
+            msg=f"Missing FOLIOCHK. Found: {list(df.columns)[:10]}",
+        )
+        return False, f"Missing FOLIOCHK. Found: {list(df.columns)[:10]}", {}
     batch = _batch_id("CAMS_R9", file.name);
     rows, skipped = [], 0
     for _, row in df.iterrows():
@@ -1005,9 +1030,21 @@ def parse_cams_wbr9_folio(file, replace: bool) -> tuple[bool, str, dict]:
 
 def parse_cams_wbr2_transaction(file, replace: bool) -> tuple[bool, str, dict]:
     df = _read_csv_auto(file)
-    if df is None: return False, "Could not parse file", {}
+    if df is None:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="CAMS", report="WBR2", file=getattr(file, "name", ""),
+            msg="Could not parse file",
+        )
+        return False, "Could not parse file", {}
     df = _clean_cols(df)
-    if "TRXNNO" not in df.columns: return False, f"Missing TRXNNO. Found: {list(df.columns)[:10]}", {}
+    if "TRXNNO" not in df.columns:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="CAMS", report="WBR2", file=getattr(file, "name", ""),
+            msg=f"Missing TRXNNO. Found: {list(df.columns)[:10]}",
+        )
+        return False, f"Missing TRXNNO. Found: {list(df.columns)[:10]}", {}
     batch = _batch_id("CAMS_R2", file.name);
     rows, skipped = [], 0
     for _, row in df.iterrows():
@@ -1101,9 +1138,21 @@ def parse_cams_wbr2_transaction(file, replace: bool) -> tuple[bool, str, dict]:
 
 def parse_cams_wbr49_sip(file, replace: bool) -> tuple[bool, str, dict]:
     df = _read_csv_auto(file)
-    if df is None: return False, "Could not parse file", {}
+    if df is None:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="CAMS", report="WBR49", file=getattr(file, "name", ""),
+            msg="Could not parse file",
+        )
+        return False, "Could not parse file", {}
     df = _clean_cols(df)
-    if "AUTO_TRNO" not in df.columns: return False, f"Missing AUTO_TRNO. Found: {list(df.columns)[:10]}", {}
+    if "AUTO_TRNO" not in df.columns:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="CAMS", report="WBR49", file=getattr(file, "name", ""),
+            msg=f"Missing AUTO_TRNO. Found: {list(df.columns)[:10]}",
+        )
+        return False, f"Missing AUTO_TRNO. Found: {list(df.columns)[:10]}", {}
     batch = _batch_id("CAMS_R49", file.name);
     rows, skipped = [], 0
     for _, row in df.iterrows():
@@ -1135,9 +1184,21 @@ def parse_cams_wbr49_sip(file, replace: bool) -> tuple[bool, str, dict]:
 
 def parse_cams_wbr77_brokerage(file, replace: bool) -> tuple[bool, str, dict]:
     df = _read_csv_auto(file)
-    if df is None: return False, "Could not parse file", {}
+    if df is None:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="CAMS", report="WBR77", file=getattr(file, "name", ""),
+            msg="Could not parse file",
+        )
+        return False, "Could not parse file", {}
     df = _clean_cols(df)
-    if "TRXN_NO" not in df.columns: return False, f"Missing TRXN_NO. Found: {list(df.columns)[:10]}", {}
+    if "TRXN_NO" not in df.columns:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="CAMS", report="WBR77", file=getattr(file, "name", ""),
+            msg=f"Missing TRXN_NO. Found: {list(df.columns)[:10]}",
+        )
+        return False, f"Missing TRXN_NO. Found: {list(df.columns)[:10]}", {}
     batch = _batch_id("CAMS_R77", file.name);
     rows, skipped = [], 0
     for _, row in df.iterrows():
@@ -1231,9 +1292,10 @@ def _execute_cams_import(table: str, rows: list, batch: str, replace: bool, skip
     if skipped:
         msg += f" | Skipped {skipped}"
     return True, msg, {"rows": inserted, "updated": updated, "skipped": skipped}
+    
 
 
-table_column_map = {
+table_column_map = {    
     "cams_wbr4_aum": ["FOLIOCHK", "INV_NAME", "ADDRESS1", "ADDRESS2", "ADDRESS3", "CITY", "PINCODE", "PRODUCT",
                       "SCH_NAME", "REP_DATE", "CLOS_BAL", "RUPEE_BAL", "SUBBROK", "REINV_FLAG", "JOINT1_NAME",
                       "JOINT2_NAME", "PHONE_OFF", "PHONE_RES", "EMAIL", "HOLDING_NATURE", "UIN_NO", "BROKER_CODE",
@@ -1313,9 +1375,21 @@ CAMS_CONFLICT_COLS = {
 
 def parse_kfin_mfsd203_aum(file, replace: bool) -> tuple[bool, str, dict]:
     df = _read_csv_auto(file)
-    if df is None: return False, "Could not parse file", {}
+    if df is None:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="KFinTech", report="MFSD203", file=getattr(file, "name", ""),
+            msg="Could not parse file",
+        )
+        return False, "Could not parse file", {}
     df = _clean_cols(df)
-    if "FOLIO_NUMBER" not in df.columns: return False, "Missing FOLIO_NUMBER", {}
+    if "FOLIO_NUMBER" not in df.columns:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="KFinTech", report="MFSD203", file=getattr(file, "name", ""),
+            msg="Missing FOLIO_NUMBER",
+        )
+        return False, "Missing FOLIO_NUMBER", {}
     batch = _batch_id("KFIN_203", file.name);
     rows, skipped = [], 0
     for _, row in df.iterrows():
@@ -1347,7 +1421,13 @@ def parse_kfin_mfsd211_folio(file, replace: bool) -> tuple[bool, str, dict]:
                   "HOLDER_2_AADHAAR_INFO": "HOLDER2_AADHAAR", "HOLDER_3_AADHAAR_INFO": "HOLDER3_AADHAAR",
                   "GUARDIAN_AADHAAR_INFO": "GUARDIAN_AADHAAR"}
     df.rename(columns=rename_map, inplace=True)
-    if "FOLIO" not in df.columns: return False, "Missing FOLIO", {}
+    if "FOLIO" not in df.columns:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="KFinTech", report="MFSD211", file=getattr(file, "name", ""),
+            msg="Missing FOLIO",
+        )
+        return False, "Missing FOLIO", {}
     batch = _batch_id("KFIN_211", file.name);
     rows, skipped = [], 0
     for _, row in df.iterrows():
@@ -1384,9 +1464,21 @@ def parse_kfin_mfsd211_folio(file, replace: bool) -> tuple[bool, str, dict]:
 
 def parse_kfin_mfsd201_transaction(file, replace: bool) -> tuple[bool, str, dict]:
     df = _read_csv_auto(file)
-    if df is None: return False, "Could not parse file", {}
+    if df is None:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="KFinTech", report="MFSD201", file=getattr(file, "name", ""),
+            msg="Could not parse file",
+        )
+        return False, "Could not parse file", {}
     df = _clean_cols(df)
-    if "TD_TRNO" not in df.columns: return False, "Missing TD_TRNO", {}
+    if "TD_TRNO" not in df.columns:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="KFinTech", report="MFSD201", file=getattr(file, "name", ""),
+            msg="Missing TD_TRNO",
+        )
+        return False, "Missing TD_TRNO", {}
     batch = _batch_id("KFIN_201", file.name);
     rows, skipped = [], 0
     for _, row in df.iterrows():
@@ -1427,7 +1519,13 @@ def parse_kfin_mfsd243_sip(file, replace: bool) -> tuple[bool, str, dict]:
                   "REGSLNO": "REG_SLNO", "INVDPID": "INV_DP_ID", "INVCLIENTID": "INV_CLIENT_ID",
                   "DP_INVNAME": "DP_INV_NAME", "MODIFYFLAG": "MODIFY_FLAG"}
     df.rename(columns=rename_map, inplace=True)
-    if "FOLIO" not in df.columns: return False, "Missing FOLIO", {}
+    if "FOLIO" not in df.columns:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="KFinTech", report="MFSD243", file=getattr(file, "name", ""),
+            msg="Missing FOLIO",
+        )
+        return False, "Missing FOLIO", {}
     batch = _batch_id("KFIN_243", file.name);
     rows, skipped = [], 0
     for _, row in df.iterrows():
@@ -1457,7 +1555,13 @@ def parse_kfin_mfsd243_sip(file, replace: bool) -> tuple[bool, str, dict]:
 def parse_kfin_mfsd205_brokerage(file, replace: bool) -> tuple[bool, str, dict]:
     """Parse KFintech MFSD 205 Brokerage file."""
     df = _read_csv_auto(file)
-    if df is None: return False, "Could not parse file", {}
+    if df is None:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="KFinTech", report="MFSD205", file=getattr(file, "name", ""),
+            msg="Could not parse file",
+        )
+        return False, "Could not parse file", {}
     df = _clean_cols(df)
 
     # DEBUG: Print all columns found
@@ -1693,8 +1797,17 @@ def _execute_kfin_import(table: str, rows: list, batch: str, replace: bool, skip
         msg += f" | Updated {updated} existing"
     if skipped:
         msg += f" | Skipped {skipped}"
-    return True, msg, {"rows": inserted, "updated": updated, "skipped": skipped}
 
+    if inserted == 0 and updated == 0 and rows:
+        sflog.record_failure(
+            source="manual_upload", stage="db_insert",
+            rta="KFinTech", report=table,
+            msg=f"All {len(rows)} rows were skipped or ignored",
+            context={"skipped": skipped},
+        )
+
+    return True, msg, {"rows": inserted, "updated": updated, "skipped": skipped}
+    
 
 kfin_table_column_map = {
     "kfin_mfsd203_aum": [("PRODUCT_CODE", "FUND", "FOLIO_NUMBER", "SCHEME_CODE", "DIVIDEND_OPTION", "FUND_DESCRIPTION",

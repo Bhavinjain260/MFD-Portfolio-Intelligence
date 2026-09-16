@@ -31,6 +31,7 @@ from theme_patch import THEME_WATCHER_JS, render_theme
 import cams_mailback_sync
 import cams_mailback_sync as mail_sync
 import email_tempate
+import sync_failure_log as sflog
 
 from xirr import compute_xirr_debug
 
@@ -7874,11 +7875,89 @@ elif mode == "⚙️ Admin Panel":
     st.divider()
 
 
-    tab_upload, tab_raw = st.tabs(["📤 Upload Data", "📄 View Raw Data"])
+    tab_upload, tab_raw, tab_failures = st.tabs(
+        ["📤 Upload Data", "📄 View Raw Data", "⚠️ Sync Failures"]
+    )
 
     # ---------- UPLOAD TAB ----------
     with tab_upload:
         data_manager.render_data_manager()
+
+    # ---------- SYNC FAILURES TAB ----------
+    with tab_failures:
+        st.subheader("⚠️ Sync Failure Log")
+        st.caption(
+            "Persistent record of every mailback / NAV / manual-upload failure. "
+            "Newest first. Log file survives restarts and worker crashes."
+        )
+
+        fc1, fc2, fc3, fc4 = st.columns([1, 1, 1, 2])
+        with fc1:
+            source_filter = st.selectbox(
+                "Source",
+                ["All", "mailback", "nav", "bse", "manual_upload"],
+                key="fail_src_filter",
+            )
+        with fc2:
+            limit = st.number_input(
+                "Show last N", 10, 2000, 200, step=10, key="fail_limit"
+            )
+        with fc3:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if st.button("🔄 Refresh", width="stretch", key="fail_refresh"):
+                st.rerun()
+        with fc4:
+            st.caption(f"📁 Log file: `{sflog.get_log_path()}`")
+
+        records = sflog.read_failures(
+            limit=int(limit),
+            source_filter="" if source_filter == "All" else source_filter,
+        )
+
+        if not records:
+            st.success("✅ No failures logged — everything is clean.")
+        else:
+            st.warning(f"⚠️ {len(records)} failure record(s) found.")
+
+            rows = []
+            for r in records:
+                rows.append({
+                    "Timestamp": r.get("ts", ""),
+                    "Source":    r.get("source", ""),
+                    "Stage":     r.get("stage", ""),
+                    "RTA":       r.get("rta", ""),
+                    "Report":    r.get("report", ""),
+                    "File":      r.get("file", ""),
+                    "Message":   r.get("msg", ""),
+                })
+            fail_df = pd.DataFrame(rows)
+
+            st.dataframe(
+                fail_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Message": st.column_config.TextColumn(width="large"),
+                },
+            )
+
+            dc1, dc2 = st.columns(2)
+            with dc1:
+                csv = fail_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇️ Download Failure Log (CSV)",
+                    csv,
+                    f"sync_failures_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    "text/csv",
+                    key="fail_download",
+                )
+            with dc2:
+                if st.button("🗑️ Clear Log", key="fail_clear"):
+                    if sflog.clear_log():
+                        st.success("Log cleared.")
+                        st.rerun()
+                    else:
+                        st.error("Could not clear log — check file permissions.")
 
     # ---------- RAW DATA TAB ----------
     with tab_raw:

@@ -327,45 +327,67 @@ def _search_safe(imap, query: str, max_retries: int = 2) -> tuple[bool, list]:
 # ══════════════════════════════════════════════════════════════
 # DOWNLOAD + EXTRACT
 # ══════════════════════════════════════════════════════════════
-def _download_and_extract(url: str, rta: str, report_code: str, zip_password: str) -> list[str]:
+def _parse_and_move(path_str: str, rta: str, report_code: str) -> dict:
     """
-    Download zip, extract, return list of file paths.
+    Parse one extracted file into the DB. On success: move to done/.
 
-    Returns an empty list if the ZIP has zero entries — that's a
-    legitimate "no data" report, not an error. Callers should treat
-    an empty return as a no-op, not a failure.
+    Zero-row files (header-only) are considered a successful no-op —
+    they get moved to done/ so they don't get retried every run, and
+    are logged at INFO rather than WARNING.
     """
-    log.info("[%s-%s] Downloading %s", rta, report_code, url)
-    resp = requests.get(url, timeout=60)
-    resp.raise_for_status()
+    path = Path(path_str)
+    rta_config = RTA_CONFIG[rta]
+    parser = rta_config["parsers"].get(report_code)
 
-    out_dir = BASE_DIR / rta.lower() / report_code.lower()
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "done").mkdir(parents=True, exist_ok=True)
+    if parser is None:
+        sflog.record_failure(
+            source="mailback", stage="parse",
+            rta=rta, report=report_code, file=path.name,
+            msg=f"No parser mapped for {rta}-{report_code}",
+        )
+        return {"path": path_str, "ok": False, "msg": f"No parser mapped for {rta}-{report_code}"}
 
-    saved_files = []
     try:
-        with pyzipper.AESZipFile(io.BytesIO(resp.content)) as zf:
-            zf.setpassword(zip_password.encode())
-            names = zf.namelist()
-            if not names:
-                log.info("[%s-%s] ZIP is empty (0 entries) — nothing to import",
-                         rta, report_code)
-                return []
-            for name in names:
-                data = zf.read(name)
-                out_path = out_dir / Path(name).name
-                out_path.write_bytes(data)
-                saved_files.append(str(out_path))
-                log.info("[%s-%s] Extracted %s (%d bytes)", rta, report_code, out_path.name, len(data))
-    except RuntimeError as e:
-        log.error("[%s-%s] Zip extraction failed (bad password?): %s", rta, report_code, e)
-        raise
-    except pyzipper.zipfile.BadZipFile as e:
-        log.error("[%s-%s] Not a valid zip file: %s", rta, report_code, e)
-        raise
+        with open(path, "rb") as f:
+            ok, msg, _preview = parser(f, replace=False)
+    except Exception as e:
+        log.exception("[%s-%s] Parse failed for %s", rta, report_code, path.name)
+        sflog.record_failure(
+            source="mailback", stage="parse",
+            rta=rta, report=report_code, file=path.name,
+            msg=f"Exception during parse: {e}",
+        )
+        return {"path": path_str, "ok": False, "msg": f"Exception: {e}"}
 
-    return saved_files
+    # Empty data is not an error — treat as a successful no-op.
+    if not ok and "0 rows found" in str(msg):
+        log.info("[%s-%s] %s contains 0 data rows — moving to done (no-op)",
+                 rta, report_code, path.name)
+        done_dir = path.parent / "done"
+        done_dir.mkdir(parents=True, exist_ok=True)
+        dest = done_dir / path.name
+        if dest.exists():
+            dest = done_dir / f"{path.stem}_{int(time.time())}{path.suffix}"
+        path.rename(dest)
+        return {"path": str(dest), "ok": True, "msg": "empty (0 rows) — ignored"}
+
+    if not ok:
+        log.warning("[%s-%s] Parser returned error: %s", rta, report_code, msg)
+        sflog.record_failure(
+            source="mailback", stage="db_insert",
+            rta=rta, report=report_code, file=path.name,
+            msg=str(msg),
+        )
+        return {"path": path_str, "ok": False, "msg": msg}
+
+    done_dir = path.parent / "done"
+    done_dir.mkdir(parents=True, exist_ok=True)
+    dest = done_dir / path.name
+    if dest.exists():
+        dest = done_dir / f"{path.stem}_{int(time.time())}{path.suffix}"
+    path.rename(dest)
+    log.info("[%s-%s] Parsed and moved to %s", rta, report_code, dest)
+    return {"path": str(dest), "ok": True, "msg": msg}
 
 
 # ══════════════════════════════════════════════════════════════
@@ -662,6 +684,10 @@ def sync_once() -> dict:
 
     except Exception as e:
         log.exception("[MAILBACK-SYNC] Fatal error")
+        sflog.record_failure(
+            source="mailback", stage="unknown",
+            msg=f"Fatal error during sync: {e}",
+        )
         results["errors"].append(f"Fatal: {e}")
     finally:
         if imap:

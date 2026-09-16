@@ -27,6 +27,7 @@ import requests
 import streamlit as st
 
 import nav_data_ingestion
+import sync_failure_log as sflog
 
 log = logging.getLogger(__name__)
 
@@ -302,8 +303,18 @@ def download_and_save_nav_if_needed(force: bool = False) -> dict:
                     log.info("[NAV-DB] Success: %s", ingest_result.get('reason'))
                 else:
                     log.error("[NAV-DB] Failed: %s", ingest_result.get('reason'))
+                    sflog.record_failure(
+                        source="nav", stage="db_insert",
+                        file=result["path"],
+                        msg=f"NAV ingestion returned failure: {ingest_result.get('reason')}",
+                    )
             except Exception as e:
                 log.exception("[NAV-DB] Ingestion error: %s", e)
+                sflog.record_failure(
+                    source="nav", stage="db_insert",
+                    file=result["path"],
+                    msg=f"NAV DB ingestion exception: {e}",
+                )
         else:
             log.error("[NAV-DB] File path %s does not exist after download. Skipping ingestion.",
                       result["path"])
@@ -494,9 +505,19 @@ def sync_previous_business_day_nav(force: bool = False, timeout: int = 30,
             result = download_business_day_nav(target, timeout=timeout)
         except ValueError as e:
             log.error("[AMFI-HIST] Stopping lookback — %s", e)
+            sflog.record_failure(
+                source="nav", stage="fetch",
+                msg=str(e),
+                context={"requested_date": iso_date},
+            )
             return {"ran": True, "ok": False, "reason": str(e), "date": iso_date}
         except requests.RequestException:
             log.exception("[AMFI-HIST] Network error for %s", iso_date)
+            sflog.record_failure(
+                source="nav", stage="fetch",
+                msg="Network error",
+                context={"requested_date": iso_date},
+            )
             return {"ran": True, "ok": False, "reason": "network error", "date": iso_date}
 
         actual_date = result["actual_date"]
@@ -507,6 +528,11 @@ def sync_previous_business_day_nav(force: bool = False, timeout: int = 30,
                 nav_data_ingestion.ingest_nav_file_to_db(saved["path"])
             except Exception as e:
                 log.exception("[NAV-DB] Ingestion error: %s", e)
+                sflog.record_failure(
+                    source="nav", stage="db_insert",
+                    file=saved["path"],
+                    msg=f"NAV DB ingestion failed: {e}",
+                )
             return {"ran": True, "ok": True, "reason": "downloaded", **saved}
 
         log.info(
@@ -523,6 +549,11 @@ def sync_previous_business_day_nav(force: bool = False, timeout: int = 30,
             nav_data_ingestion.ingest_nav_file_to_db(saved["path"])
         except Exception as e:
             log.exception("[NAV-DB] Ingestion error: %s", e)
+            sflog.record_failure(
+                source="nav", stage="db_insert",
+                file=saved["path"],
+                msg=f"NAV DB ingestion failed: {e}",
+            )
         return {"ran": True, "ok": True,
                 "reason": f"requested {iso_date}, saved actual {actual_date}", **saved}
 
