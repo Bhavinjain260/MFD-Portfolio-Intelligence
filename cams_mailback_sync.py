@@ -42,6 +42,10 @@ IMAP_KEEPALIVE_INTERVAL = 300  # 5 min
 RTA_CONFIG = {
     "CAMS": {
         "sender": "donotreply@camsonline.com",
+        # IMAP-level subject filter. Only emails whose subject contains this
+        # substring are pulled. Real CAMS reports always include "WBR" in
+        # the subject; OTPs, empanelment notices, and circulars do not.
+        "subject_filter": "WBR",
         "reports": ["WBR2", "WBR9", "WBR49", "WBR77", "WBR4"],
         "parsers": {
             "WBR2": dm.parse_cams_wbr2_transaction,
@@ -54,6 +58,10 @@ RTA_CONFIG = {
     },
     "KFinTech": {
         "sender": "distributorcare@kfintech.com",
+        # Real KFinTech reports start with "Subscribed ...". This excludes
+        # the investor-master/transaction notifications that are actually
+        # just confirmations sent under a different email flow.
+        "subject_filter": "Subscribed",
         "reports": [
             "MFSD201", "MFSD211", "MFSD205", "MFSD243", "MFSD203",
             "MFSD307", "MFSD313", "MFSD311",
@@ -324,9 +332,189 @@ def _search_safe(imap, query: str, max_retries: int = 2) -> tuple[bool, list]:
     return False, []
 
 
+def _mark_seen_safe(
+    imap,
+    mid: bytes,
+    rta: str = "",
+    report: str = "",
+    subject: str = "",
+    max_retries: int = 3,
+) -> bool:
+    """
+    Mark an email as read (\\Seen). Retries a few times because IMAP
+    connections do occasionally drop mid-loop. Logs a failure record if
+    every attempt fails, so a stuck-in-unread-forever email shows up in
+    the Admin > Sync Failures panel instead of silently looping.
+
+    Returns True on success, False if all attempts failed.
+    """
+    for attempt in range(max_retries):
+        try:
+            status, _ = imap.store(mid, "+FLAGS", "\\Seen")
+            if status == "OK":
+                return True
+            log.warning(
+                "[IMAP-MARK-SEEN] attempt %d/%d: unexpected status %r for %s",
+                attempt + 1, max_retries, status, mid.decode(errors="replace"),
+            )
+        except (imaplib.IMAP4.abort, OSError, EOFError, BrokenPipeError) as e:
+            log.warning(
+                "[IMAP-MARK-SEEN] attempt %d/%d socket error for %s: %s",
+                attempt + 1, max_retries, mid.decode(errors="replace"), type(e).__name__,
+            )
+            if attempt < max_retries - 1:
+                time.sleep(0.5)
+                try:
+                    imap.noop()
+                except Exception:
+                    # noop() itself failed — bail and let the caller retry next cycle
+                    pass
+        except Exception as e:
+            log.warning(
+                "[IMAP-MARK-SEEN] attempt %d/%d unexpected error for %s: %s",
+                attempt + 1, max_retries, mid.decode(errors="replace"), e,
+            )
+
+    # Every attempt failed — record it so it's visible in the Admin panel.
+    log.error(
+        "[IMAP-MARK-SEEN] Could not mark %s as read after %d attempts (subject: %r)",
+        mid.decode(errors="replace"), max_retries, subject[:100],
+    )
+    sflog.record_failure(
+        source="mailback", stage="mark_seen",
+        rta=rta, report=report,
+        msg=f"Failed to mark email as read after {max_retries} attempts: {subject[:200]}",
+        context={"msg_id": mid.decode(errors="replace")},
+    )
+    return False
+
+
+def _mark_seen_safe(
+    imap,
+    mid: bytes,
+    rta: str = "",
+    report: str = "",
+    subject: str = "",
+    max_retries: int = 3,
+) -> bool:
+    """
+    Mark an email as read (\\Seen). Retries a few times because IMAP
+    connections do occasionally drop mid-loop. Logs a failure record if
+    every attempt fails, so a stuck-in-unread-forever email shows up in
+    the Admin > Sync Failures panel instead of silently looping.
+
+    Returns True on success, False if all attempts failed.
+    """
+    for attempt in range(max_retries):
+        try:
+            status, _ = imap.store(mid, "+FLAGS", "\\Seen")
+            if status == "OK":
+                return True
+            log.warning(
+                "[IMAP-MARK-SEEN] attempt %d/%d: unexpected status %r for %s",
+                attempt + 1, max_retries, status, mid.decode(errors="replace"),
+            )
+        except (imaplib.IMAP4.abort, OSError, EOFError, BrokenPipeError) as e:
+            log.warning(
+                "[IMAP-MARK-SEEN] attempt %d/%d socket error for %s: %s",
+                attempt + 1, max_retries, mid.decode(errors="replace"), type(e).__name__,
+            )
+            if attempt < max_retries - 1:
+                time.sleep(0.5)
+                try:
+                    imap.noop()
+                except Exception:
+                    # noop() itself failed — bail and let the caller retry next cycle
+                    pass
+        except Exception as e:
+            log.warning(
+                "[IMAP-MARK-SEEN] attempt %d/%d unexpected error for %s: %s",
+                attempt + 1, max_retries, mid.decode(errors="replace"), e,
+            )
+
+    # Every attempt failed — record it so it's visible in the Admin panel.
+    log.error(
+        "[IMAP-MARK-SEEN] Could not mark %s as read after %d attempts (subject: %r)",
+        mid.decode(errors="replace"), max_retries, subject[:100],
+    )
+    sflog.record_failure(
+        source="mailback", stage="mark_seen",
+        rta=rta, report=report,
+        msg=f"Failed to mark email as read after {max_retries} attempts: {subject[:200]}",
+        context={"msg_id": mid.decode(errors="replace")},
+    )
+    return False
+
+
 # ══════════════════════════════════════════════════════════════
 # DOWNLOAD + EXTRACT
 # ══════════════════════════════════════════════════════════════
+
+
+def _download_and_extract(url: str, rta: str, report_code: str, zip_password: str) -> list[str]:
+    """
+    Download zip, extract, return list of file paths.
+
+    Returns an empty list if the ZIP has zero entries — that's a
+    legitimate "no data" report, not an error. Callers should treat
+    an empty return as a no-op, not a failure.
+    """
+    log.info("[%s-%s] Downloading %s", rta, report_code, url)
+
+    try:
+        resp = requests.get(url, timeout=60)
+        resp.raise_for_status()
+    except Exception as e:
+        sflog.record_failure(
+            source="mailback", stage="fetch",
+            rta=rta, report=report_code,
+            msg=f"Download failed: {e}",
+            context={"url": url},
+        )
+        raise
+
+    out_dir = BASE_DIR / rta.lower() / report_code.lower()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "done").mkdir(parents=True, exist_ok=True)
+
+    saved_files = []
+    try:
+        with pyzipper.AESZipFile(io.BytesIO(resp.content)) as zf:
+            zf.setpassword(zip_password.encode())
+            names = zf.namelist()
+            if not names:
+                log.info("[%s-%s] ZIP is empty (0 entries) — nothing to import",
+                         rta, report_code)
+                return []
+            for name in names:
+                data = zf.read(name)
+                out_path = out_dir / Path(name).name
+                out_path.write_bytes(data)
+                saved_files.append(str(out_path))
+                log.info("[%s-%s] Extracted %s (%d bytes)", rta, report_code, out_path.name, len(data))
+    except RuntimeError as e:
+        log.error("[%s-%s] Zip extraction failed (bad password?): %s", rta, report_code, e)
+        sflog.record_failure(
+            source="mailback", stage="extract",
+            rta=rta, report=report_code,
+            msg=f"Zip extraction failed (bad password?): {e}",
+            context={"url": url},
+        )
+        raise
+    except Exception as e:
+        log.error("[%s-%s] Zip extract error: %s", rta, report_code, e)
+        sflog.record_failure(
+            source="mailback", stage="extract",
+            rta=rta, report=report_code,
+            msg=f"Zip extract error: {e}",
+            context={"url": url},
+        )
+        raise
+
+    return saved_files
+
+
+
 def _parse_and_move(path_str: str, rta: str, report_code: str) -> dict:
     """
     Parse one extracted file into the DB. On success: move to done/.
@@ -614,7 +802,12 @@ def sync_once() -> dict:
 
                 report_code = _extract_report_code(subject, body, rta)
                 if not report_code:
-                    log.warning("[%s] No report code found in subject/body for: %s", rta, subject[:80])
+                    # Not one of our report emails. Mark seen so we don't
+                    # re-scan it every cycle (which would happen indefinitely
+                    # otherwise, since there's no report code to match).
+                    log.info("[%s] Skipping non-report email (marking read): %s",
+                             rta, subject[:80])
+                    _mark_seen_safe(imap, mid, rta=rta, subject=subject)
                     continue
 
                 report_code = _resolve_report_code(rta, report_code)
@@ -623,10 +816,7 @@ def sync_once() -> dict:
                 if _is_no_data(body):
                     log.info("[%s-%s] No data — marking read, skipping", rta, report_code)
                     results["no_data"].append(f"{rta}: {subject}")
-                    try:
-                        imap.store(mid, "+FLAGS", "\\Seen")
-                    except:
-                        pass
+                    _mark_seen_safe(imap, mid, rta=rta, report=report_code, subject=subject)
                     continue
 
                 url = _extract_download_url(body)
@@ -634,14 +824,12 @@ def sync_once() -> dict:
                     # KFinTech sends "no update" emails where the report
                     # title is in the subject but the body contains no
                     # download link. This is a normal empty report, not an
-                    # error. Mark as no_data so the summary reflects reality.
+                    # error. Mark as no_data AND mark seen so we don't
+                    # re-scan it next cycle.
                     log.info("[%s-%s] No download URL — treating as empty report, marking read",
                              rta, report_code)
                     results["no_data"].append(f"{rta}: {subject}")
-                    try:
-                        imap.store(mid, "+FLAGS", "\\Seen")
-                    except:
-                        pass
+                    _mark_seen_safe(imap, mid, rta=rta, report=report_code, subject=subject)
                     continue
 
                 log.info("[%s-%s] Download URL found", rta, report_code)
@@ -651,12 +839,15 @@ def sync_once() -> dict:
                 except Exception as e:
                     results["errors"].append(f"{rta}: {subject} — {e}")
                     log.exception("[%s-%s] Download/extract failed", rta, report_code)
+                    # Leave this one UNREAD so the next cycle retries it.
+                    # Download failures are usually transient (expired URL,
+                    # network blip) and re-attempting is correct here.
                     continue
 
-                try:
-                    imap.store(mid, "+FLAGS", "\\Seen")
-                except:
-                    pass
+                # Download succeeded — mark the email as read now, so even
+                # if parsing later fails, we don't re-download the same zip
+                # every cycle. Failures are captured in sync_failures.log.
+                _mark_seen_safe(imap, mid, rta=rta, report=report_code, subject=subject)
 
                 # Empty ZIP → treat as no_data, not as a download
                 if not saved:

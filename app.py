@@ -32,6 +32,7 @@ import cams_mailback_sync
 import cams_mailback_sync as mail_sync
 import email_tempate
 import sync_failure_log as sflog
+import worker_launcher
 
 from xirr import compute_xirr_debug
 
@@ -7872,6 +7873,67 @@ elif mode == "⚙️ Admin Panel":
                   st.rerun()
               else:
                   st.error(f"❌ {result['reason']}")
+
+    # ══════════════════════════════════════════════════════════════
+    # ▶️ RUN BACKGROUND WORKER NOW
+    # ══════════════════════════════════════════════════════════════
+    st.divider()
+    st.subheader("▶️ Background Worker")
+
+    wc1, wc2 = st.columns([1, 4])
+
+    with wc1:
+        worker_busy = worker_launcher.is_worker_running()
+        run_now = st.button(
+            "▶️ Run Worker Now",
+            type="primary",
+            width="stretch",
+            disabled=worker_busy,
+            key="run_worker_now_btn",
+            help=(
+                "Spawns background_worker.py as a subprocess. Runs all tasks: "
+                "mailback poll, live NAV fetch, previous-day NAV sync. "
+                "If cron is already mid-run, this exits cleanly."
+            ),
+        )
+
+    with wc2:
+        if worker_busy:
+            st.warning("⏳ A worker is already running — wait for it to finish "
+                       "or the button will be a no-op.")
+        else:
+            st.caption(
+                "Manually trigger the same worker cron runs. "
+                "Typical duration: 30–120s. Output goes to `background_worker.log`."
+            )
+
+    if run_now and not worker_busy:
+        with st.spinner("⏳ Running background worker (this may take 1–2 minutes)..."):
+            result = worker_launcher.launch_worker(timeout_seconds=300)
+
+        if result["ok"]:
+            st.success(result["msg"])
+        else:
+            st.error(result["msg"])
+
+        # Always clear data caches — even a partial run may have added rows
+        get_enriched_folio_nav_df.clear()
+        get_folio_nav_summary_cached.clear()
+        load_previous_nav_map.clear()
+        get_all_folios_with_isin_and_nav.clear()
+        _amfi.load(force=True)
+
+        # Show the tail of the worker log inline so you don't have to open a terminal
+        with st.expander("📜 Worker log (last 60 lines)", expanded=not result["ok"]):
+            st.code(result.get("log_tail") or "(no log yet)", language="log")
+
+        # If the worker failed, surface stderr too
+        if not result["ok"] and result.get("stderr_tail"):
+            with st.expander("🐞 Worker stderr (last 10 lines)", expanded=True):
+                st.code(result["stderr_tail"], language="log")
+
+        st.rerun()
+
     st.divider()
 
 

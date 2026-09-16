@@ -4039,10 +4039,10 @@ Baroda BNP Paribas Mutual Fund
  
 DSP Mutual Fund
  
-148595;INF740KA1PP3;-;DSP Value Fund;Direct Plan;Growth;24.247;11-Sep-2026
-148596;INF740KA1PQ1;INF740KA1PR9;DSP Value Fund;Direct Plan;IDCW;18.365;11-Sep-2026
-148594;INF740KA1PM0;-;DSP Value Fund;Regular Plan;Growth;23.186;11-Sep-2026
-148597;INF740KA1PN8;INF740KA1PO6;DSP Value Fund;Regular Plan;IDCW;16.206;11-Sep-2026
+148595;INF740KA1PP3;-;DSP Value Fund;Direct Plan;Growth;24.0220;15-Sep-2026
+148596;INF740KA1PQ1;INF740KA1PR9;DSP Value Fund;Direct Plan;IDCW;18.1950;15-Sep-2026
+148594;INF740KA1PM0;-;DSP Value Fund;Regular Plan;Growth;22.9690;15-Sep-2026
+148597;INF740KA1PN8;INF740KA1PO6;DSP Value Fund;Regular Plan;IDCW;16.0540;15-Sep-2026
  
 Franklin Templeton Mutual Fund
  
@@ -5514,8 +5514,6 @@ UTI Mutual Fund
 135321;INF789FB1X58;-;UTI BSE Sensex ETF;Direct Plan;;820.8122;15-Sep-2026
 135320;INF789F1AZC0;-;UTI Nifty 50 ETF;Direct Plan;;256.6177;15-Sep-2026
 154602;INF789F1AG76;-;UTI Nifty 500 Exchange Traded Fund;;;36.1636;15-Sep-2026
-154604;INF789F1AG92;-;UTI Nifty 500 Index Fund;;;9.5559;15-Sep-2026
-154603;INF789F1AG84;-;UTI Nifty 500 Index Fund;;;9.5522;15-Sep-2026
 148173;INF789F1AUV1;-;UTI Nifty Bank ETF;Direct Plan;Growth;57.7924;15-Sep-2026
 152355;INF789F1AZD8;-;UTI Nifty IT ETF;Direct Plan;Growth;311.0922;15-Sep-2026
 152050;INF789F1AYX9;-;UTI Nifty Midcap 150 Exchange Traded Fund;Direct Plan;Growth;226.1515;15-Sep-2026
@@ -10014,7 +10012,7 @@ Kotak Mahindra Mutual Fund
  
 154608;INF174KA1E41;INF174KA1E25;Kotak Ultra Short Term Fund;Direct Plan;IDCW;10.0659;15-Sep-2026
 154513;INF174KA1C43;INF174KA1C27;Kotak Ultra Short Term Fund;Direct Plan;IDCW Weekly;10.0102;15-Sep-2026
-154607;INF174KA1E33;INF174KA1E58;Kotak Ultra Short Term Fund;Regular Plan;IDCW Weekly;10.004;15-Sep-2026
+154607;INF174KA1E33;INF174KA1E58;Kotak Ultra Short Term Fund;Regular Plan;IDCW;10.004;15-Sep-2026
 154514;INF174KA1C35;INF174KA1C50;Kotak Ultra Short Term Fund;Regular Plan;IDCW Weekly;10.0083;15-Sep-2026
 102591;INF174K01FD6;-;Kotak Ultra Short Term Fund;Regular Plan;Growth;46.0539;15-Sep-2026
 119750;INF174K01JP2;-;Kotak Ultra Short Term Fund;Direct Plan;Growth;48.5145;15-Sep-2026
@@ -10813,6 +10811,8 @@ UTI Mutual Fund
 148704;INF789F1AUS7;-;UTI Nifty 200 Momentum 30 Index Fund;Regular Plan;Growth;20.0837;15-Sep-2026
 152859;INF789F1AZH9;-;UTI Nifty 200 Quality 30 Index Fund;Direct Plan;Growth;8.5763;15-Sep-2026
 152858;INF789F1AZG1;-;UTI Nifty 200 Quality 30 Index Fund;Regular Plan;Growth;8.4906;15-Sep-2026
+154604;INF789F1AG92;-;UTI Nifty 500 Index Fund;;;9.5559;15-Sep-2026
+154603;INF789F1AG84;-;UTI Nifty 500 Index Fund;;;9.5522;15-Sep-2026
 151739;INF789F1AYN0;-;UTI Nifty 500 Value 50 Index Fund;Direct Plan;Growth;21.5756;15-Sep-2026
 151738;INF789F1AYO8;-;UTI Nifty 500 Value 50 Index Fund;Regular Plan;Growth;21.2362;15-Sep-2026
 153086;INF789F1AZM9;-;UTI Nifty Alpha Low-Volatility 30 Index Fund;Direct Plan;Growth;9.4104;15-Sep-2026
@@ -11305,10 +11305,10 @@ DSP Mutual Fund
 112126;INF740K01284;-;DSP Global Clean Energy Overseas Equity Omni FoF;Regular Plan;Growth;27.2879;15-Sep-2026
 112127;INF740K01292;INF740K01300;DSP Global Clean Energy Overseas Equity Omni FoF;Regular Plan;IDCW;18.9736;15-Sep-2026
 119275;INF740K01PC5;-;DSP Global Clean Energy Overseas Equity Omni FoF;Direct Plan;Growth;28.9232;15-Sep-2026
-149816;INF740KA1QP1;-;DSP Global Innovation Overseas Equity Omni FoF;Direct Plan;Growth;22.6895;11-Sep-2026
-149815;INF740KA1QQ9;INF740KA1QR7;DSP Global Innovation Overseas Equity Omni FoF;Direct Plan;IDCW;22.6895;11-Sep-2026
-149817;INF740KA1QM8;-;DSP Global Innovation Overseas Equity Omni FoF;Regular Plan;Growth;21.7687;11-Sep-2026
-149814;INF740KA1QN6;INF740KA1QO4;DSP Global Innovation Overseas Equity Omni FoF;Regular Plan;IDCW;21.7687;11-Sep-2026
+149816;INF740KA1QP1;-;DSP Global Innovation Overseas Equity Omni FoF;Direct Plan;Growth;22.3892;15-Sep-2026
+149815;INF740KA1QQ9;INF740KA1QR7;DSP Global Innovation Overseas Equity Omni FoF;Direct Plan;IDCW;22.3892;15-Sep-2026
+149817;INF740KA1QM8;-;DSP Global Innovation Overseas Equity Omni FoF;Regular Plan;Growth;21.4786;15-Sep-2026
+149814;INF740KA1QN6;INF740KA1QO4;DSP Global Innovation Overseas Equity Omni FoF;Regular Plan;IDCW;21.4786;15-Sep-2026
 152528;INF740KA1UJ6;-;DSP US Specific Debt Passive FoF;Direct Plan;Growth;12.3861;15-Sep-2026
 152529;INF740KA1UK4;INF740KA1UL2;DSP US Specific Debt Passive FoF;Direct Plan;IDCW;12.3861;15-Sep-2026
 152527;INF740KA1UG2;-;DSP US Specific Debt Passive FoF;Regular Plan;Growth;12.3706;15-Sep-2026
