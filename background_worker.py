@@ -36,13 +36,44 @@ LOG_FILE = os.environ.get("WORKER_LOG", "background_worker.log")
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s | %(message)s",
+    format="%(asctime)s [%(levelname)s] %(worker_trigger)s %(name)s | %(message)s",
     handlers=[
         logging.FileHandler(LOG_FILE),
         logging.StreamHandler(),
     ],
 )
 log = logging.getLogger("background_worker")
+
+
+# ══════════════════════════════════════════════════════════════
+# TRIGGER TAGGING
+# ══════════════════════════════════════════════════════════════
+# Every worker run is tagged with how it was started:
+#   "cron"   — launched by the scheduler (default when no --trigger passed)
+#   "manual" — launched by the Admin Panel "Run Worker Now" button
+#   "cli"    — launched by a human from the terminal
+#
+# The tag appears in every log line via a logging.Filter, so
+# `grep '\[manual\]' background_worker.log` isolates a single run type.
+
+_WORKER_TRIGGER = "cron"  # default; overridden by --trigger argv
+
+
+class _TriggerFilter(logging.Filter):
+    """Injects [<trigger>] into the log record's `worker_trigger` field."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.worker_trigger = f"[{_WORKER_TRIGGER}]"
+        return True
+
+
+def _install_trigger_filter() -> None:
+    """Apply the filter to the root logger and all handlers so it survives reconfig."""
+    f = _TriggerFilter()
+    root = logging.getLogger()
+    root.addFilter(f)
+    for h in root.handlers:
+        h.addFilter(f)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -233,9 +264,25 @@ def task_bse() -> dict:
 # ══════════════════════════════════════════════════════════════
 
 
-def run_all():
+def run_all(trigger: str | None = None):
+    """
+    Run every scheduled task once.
+
+    trigger: "cron" | "manual" | "cli"
+             If None, falls back to the module-level default ("cron") so
+             any existing caller (or an unmodified cron entry) behaves
+             exactly as before. The tag shows up in every log line and in
+             the banner so you can tell manual and scheduled runs apart.
+    """
+    global _WORKER_TRIGGER
+    if trigger:
+        _WORKER_TRIGGER = trigger
+
+    started_at = datetime.now().isoformat(timespec="seconds")
+
     log.info("=" * 70)
-    log.info("BACKGROUND WORKER RUN  @ %s", datetime.now().isoformat(timespec="seconds"))
+    log.info("BACKGROUND WORKER RUN  @ %s  (trigger=%s, pid=%d)",
+             started_at, _WORKER_TRIGGER, os.getpid())
     log.info("=" * 70)
 
     # ── Single-instance guard ──
@@ -246,12 +293,15 @@ def run_all():
     try:
         fcntl.flock(lock_fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        log.warning("[WORKER] Another instance is already running — exiting")
+        log.warning("[WORKER] Another instance is already running — exiting "
+                    "(this run was trigger=%s)", _WORKER_TRIGGER)
         lock_fp.close()
         return
 
     try:
-        lock_fp.write(str(os.getpid()))
+        # Write "pid trigger started_at" so anyone poking the lock file
+        # later can see what's holding it.
+        lock_fp.write(f"pid={os.getpid()} trigger={_WORKER_TRIGGER} started={started_at}\n")
         lock_fp.flush()
 
         try:
@@ -271,6 +321,9 @@ def run_all():
             except Exception:
                 log.exception("[%s] crashed", name)
 
+        finished_at = datetime.now().isoformat(timespec="seconds")
+        log.info("BACKGROUND WORKER RUN COMPLETE  @ %s  (trigger=%s)",
+                 finished_at, _WORKER_TRIGGER)
         log.info("=" * 70)
     finally:
         fcntl.flock(lock_fp, fcntl.LOCK_UN)
@@ -278,4 +331,15 @@ def run_all():
 
 
 if __name__ == "__main__":
-    run_all()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="MFD Portfolio Intelligence background worker")
+    parser.add_argument(
+        "--trigger",
+        choices=["cron", "manual", "cli"],
+        default="cron",
+        help="Tag this run so its log lines can be distinguished. "
+             "Defaults to 'cron' so existing schedulers keep working unchanged.",
+    )
+    args = parser.parse_args()
+    run_all(trigger=args.trigger)

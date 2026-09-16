@@ -62,10 +62,10 @@ def launch_worker(timeout_seconds: int = 300) -> dict:
     env.setdefault("WORKER_LOG", str(PROJECT_DIR / "background_worker.log"))
     env.setdefault("WORKER_LOCK", "/tmp/background_worker.lock")
 
-    log.info("[LAUNCHER] Spawning %s", WORKER_SCRIPT)
+    log.info("[LAUNCHER] Spawning %s --trigger manual", WORKER_SCRIPT)
     try:
         proc = subprocess.run(
-            [sys.executable, str(WORKER_SCRIPT)],
+            [sys.executable, str(WORKER_SCRIPT), "--trigger", "manual"],
             cwd=str(PROJECT_DIR),
             env=env,
             capture_output=True,
