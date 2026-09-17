@@ -1,0 +1,2 @@
+{"ts": "2026-09-17T11:58:11", "source": "manual_upload", "stage": "parse", "msg": "Missing TD_TRNO", "rta": "KFinTech", "report": "MFSD201", "file": "mailback_sync/kfintech/mfsd201/MFSD201_WBTRN30103177_427677.csv", "context": {}}
+{"ts": "2026-09-17T11:58:11", "source": "manual_upload", "stage": "parse", "msg": "Could not parse file", "rta": "KFinTech", "report": "MFSD201", "file": "mailback_sync/kfintech/mfsd201/MFSD201_WBTRN30111491_389017.txt", "context": {}}

@@ -219,17 +219,45 @@ def _clean_cols(df: pd.DataFrame) -> pd.DataFrame:
     ]
     return df
 
-
 def _read_csv_auto(file) -> pd.DataFrame | None:
-    for sep in ("\t", ",", ";"):
+    """
+    Tolerant CSV/TSV reader for RTA mailback files.
+
+    Tries multiple encodings + explicit separators, then falls back to
+    pandas' Python-engine separator sniffing.
+    """
+    ENCODINGS = ("utf-8-sig", "utf-16", "latin-1", "utf-8")
+
+    # Pass 1: explicit separators
+    for encoding in ENCODINGS:
+        for sep in ("\t", ",", ";"):
+            try:
+                file.seek(0)
+                df = pd.read_csv(
+                    file, sep=sep, dtype=str, quotechar='"',
+                    encoding=encoding, encoding_errors="replace",
+                    skip_blank_lines=True, on_bad_lines="skip",
+                )
+                if len(df.columns) > 5:
+                    return df
+            except Exception:
+                continue
+
+    # Pass 2: let pandas sniff the separator
+    for encoding in ENCODINGS:
         try:
             file.seek(0)
-            df = pd.read_csv(file, sep=sep, quotechar="'", dtype=str, encoding="utf-8", encoding_errors="replace")
-            if len(df.columns) > 5: return df
+            df = pd.read_csv(
+                file, sep=None, engine="python", dtype=str,
+                encoding=encoding, encoding_errors="replace",
+                skip_blank_lines=True, on_bad_lines="skip",
+            )
+            if len(df.columns) > 5:
+                return df
         except Exception:
             continue
-    return None
 
+    return None
 
 def _count_before_after(conn, table: str) -> int:
     return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -1468,25 +1496,108 @@ def parse_kfin_mfsd201_transaction(file, replace: bool) -> tuple[bool, str, dict
         sflog.record_failure(
             source="manual_upload", stage="parse",
             rta="KFinTech", report="MFSD201", file=getattr(file, "name", ""),
-            msg="Could not parse file",
+            msg="Could not parse file — no separator produced >5 columns",
         )
         return False, "Could not parse file", {}
+
     df = _clean_cols(df)
+
+    # ══════════════════════════════════════════════════════════════
+    # HEADER FAMILY DETECTION + MAPPING
+    # ══════════════════════════════════════════════════════════════
+    # KFinTech ships MFSD201 in two flavours:
+    #   1. BULK EXPORT — raw technical headers (td_trno, td_trdt, ...)
+    #      This is what the DB schema and this parser were written for.
+    #   2. MAILBACK REPORT — friendly headers
+    #      ("Product Code", "Transaction Number", "Transaction Date", ...)
+    #      This is what actually lands in mailback_sync/kfintech/mfsd201/
+    #
+    # Detect which family this file uses and rename friendly headers to
+    # their technical equivalents so the rest of the parser runs unchanged.
+    # ══════════════════════════════════════════════════════════════
+
+    MAILBACK_TO_TECHNICAL = {
+        "PRODUCT_CODE":       "FMCODE",
+        "FUND":               "TD_FUND",
+        "FOLIO_NUMBER":       "TD_ACNO",
+        "SCHEME_CODE":        "SMCODE",
+        "DIVIDEND_OPTION":    "DIVOPT",
+        "FUND_DESCRIPTION":   "FUNDDESC",
+        "TRANSACTION_HEAD":   "TD_PURRED",
+        "TRANSACTION_NUMBER": "TD_TRNO",
+        "INVESTOR_NAME":      "INVNAME",
+        "TRANSACTION_MODE":   "TRNMODE",
+        "TRANSACTION_STATUS": "TRNSTAT",
+        "BRANCH_NAME":        "TD_BRANCH",
+        "BRANCH_TRANSACTION_NO": "ISCTRNO",
+        "TRANSACTION_DATE":   "TD_TRDT",
+        "PROCESS_DATE":       "TD_PRDT",
+        "PRICE":              "TD_POP",
+        "LOAD_PERCENTAGE":    "LOADPER",
+        "UNITS":              "TD_UNITS",
+        "AMOUNT":             "TD_AMT",
+        "LOAD_AMOUNT":        "LOAD1",
+        "AGENT_CODE":         "TD_AGENT",
+        "SUB_BROKER_CODE":    "TD_BROKER",
+        "BROKERAGE_PERCENTAGE": "BROKPER",
+        "COMMISSION":         "BROKCOMM",
+        "INVESTOR_ID":        "INVID",
+        "REPORT_DATE":        "CRDATE",
+        "REPORT_TIME":        "CRTIME",
+        "TRANSACTION_SUB":    "TRNSUB",
+        "APPLICATION_NUMBER": "TD_APPNO",
+        "TRANSACTION_ID":     "UNQNO",
+        "TRANSACTION_DESCRIPTION": "TRDESC",
+        "TRANSACTION_TYPE":   "TD_TRTYPE",
+        "PURCHASE_DATE":      "PURDATE",
+        "PURCHASE_AMOUNT":    "PURAMT",
+        "PURCHASE_UNITS":     "PURUNITS",
+        "TRANSACTION_FLAG":   "TRFLAG",
+        "SWITCH_FUND_DATE":   "SFUNDDT",
+        "INSTRUMENT_DATE":    "CHQDATE",
+        "INSTRUMENT_BANK":    "CHQBANK",
+        "NAV":                "TD_NAV",
+        "PURCHASE_TRANSACTION_NO": "TD_PTRNO",
+        "STT":                "STT",
+        "IHNO":               "IHNO",
+        "BRANCH_CODE":        "BRANCHCODE",
+        "INWARD_NUMBER":      "INWARDNO",
+        "REMARKS":            "NCTREMARKS",
+        "PAN1":               "PAN1",
+        "TRCHARGES":          "TRCHARGES",
+        "SIP_REGN_DATE":      "SIPREGDT",
+        "DIVPER":             "DIVPER",
+        "GUARDPANNO":         "GUARDPANNO",
+        "INVESTORSTATE":      "INVSTATE",
+        "COMMON_ACCOUNT_NUMBER": "CAN",
+        "EXCHANGE_ORGTRTYPE": "EXCHORGTRTYPE",
+        "ELECTRONIC_TRANSACTION_FLAG": "ELECTRXNFLAG",
+        # "STATUS" collides with TRANSTAT — only map it if TRANSTAT is absent
+    }
+
+    # Detect family: if TD_TRNO is present, file is already technical.
+    # If TRANSACTION_NUMBER is present, it's a mailback report.
+    if "TD_TRNO" not in df.columns and "TRANSACTION_NUMBER" in df.columns:
+        df = df.rename(columns={k: v for k, v in MAILBACK_TO_TECHNICAL.items() if k in df.columns})
+
     if "TD_TRNO" not in df.columns:
+        cols_seen = list(df.columns)[:20]
         sflog.record_failure(
             source="manual_upload", stage="parse",
             rta="KFinTech", report="MFSD201", file=getattr(file, "name", ""),
-            msg="Missing TD_TRNO",
+            msg=f"Missing TD_TRNO after header mapping — columns seen: {cols_seen}",
         )
-        return False, "Missing TD_TRNO", {}
-    batch = _batch_id("KFIN_201", file.name);
+        return False, f"Missing TD_TRNO — columns seen: {cols_seen}", {}
+
+    batch = _batch_id("KFIN_201", file.name)
     rows, skipped = [], 0
     for _, row in df.iterrows():
         trno = raw_val(row.get("TD_TRNO", ""))
-        if not trno: skipped += 1; continue
+        if not trno:
+            skipped += 1
+            continue
         raw_td_trdt = raw_val(row.get("TD_TRDT", ""))
-        rows.append((raw_val(row.get("FMCODE", "")), raw_val(row.get("TD_FUND", "")), raw_val(row.get("TD_ACNO", "")),
-                     raw_val(row.get("SCHPLN", "")), raw_val(row.get("DIVOPT", "")), raw_val(row.get("FUNDDESC", "")),
+        rows.append((raw_val(row.get("FMCODE", "")), raw_val(row.get("TD_FUND", "")), raw_val(row.get("TD_ACNO", "")),raw_val(row.get("SCHPLN", "")), raw_val(row.get("DIVOPT", "")), raw_val(row.get("FUNDDESC", "")),
                      raw_val(row.get("TD_PURRED", "")), trno, raw_val(row.get("SMCODE", "")),
                      raw_val(row.get("CHQNO", "")), raw_val(row.get("INVNAME", "")), raw_val(row.get("TRNMODE", "")),
                      raw_val(row.get("TRNSTAT", "")), raw_val(row.get("TD_BRANCH", "")),
