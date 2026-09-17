@@ -1516,6 +1516,65 @@ def parse_kfin_mfsd201_transaction(file, replace: bool) -> tuple[bool, str, dict
     # their technical equivalents so the rest of the parser runs unchanged.
     # ══════════════════════════════════════════════════════════════
 
+
+    # Alternative naming pattern used by some KFinTech mailback exports
+    MAILBACK_TO_TECHNICAL_ALT = {
+        "PRODUCT":                    "FMCODE",
+        "CODE_FUND_FOLIO":           "TD_ACNO",
+        "FOLIO_NUMBER":              "TD_ACNO",
+        "NUMBER_SCHEME":             "SMCODE",
+        "CODE_DIVIDEND":             "DIVOPT",
+        "OPTION_FUND":               "FUNDDESC",
+        "DESCRIPTION_TRANSACTION":   "TRDESC",
+        "HEAD_TRANSACTION":          "TD_PURRED",
+        "NUMBER_SWITCH_REF":         "TD_PURRED",
+        "NO_INSTRUMENT":             "CHQNO",
+        "NUMBER_INVESTOR":           "INVNAME",
+        "NAME_TRANSACTION":          "TRNMODE",
+        "MODE_TRANSACTION":          "TRNMODE",
+        "STATUS_BRANCH":             "TRNSTAT",
+        "NAME_BRANCH":               "TD_BRANCH",
+        "NO_TRANSACTION":            "TD_TRNO",
+        "NUMBER_TRANSACTION":        "TD_TRNO",
+        "DATE_PROCESS":              "TD_PRDT",
+        "DATE_TRANSACTION":          "TD_TRDT",
+        "DATE_PRICE_LOAD":           "TD_POP",
+        "PERCENTAGE_UNITS_AMOUNT_LOAD": "LOADPER",
+        "AMOUNT_AGENT":              "TD_AGENT",
+        "AMOUNT_BROKER":             "TD_BROKER",
+        "PERCENTAGE_BROKER":         "BROKPER",
+        "AMOUNT_COMMISSION":         "BROKCOMM",
+        "DATE_CREATED":              "CRDATE",
+        "TIME_CREATED":              "CRTIME",
+        "ID_APPLICATION":            "TD_APPNO",
+        "ID_UNIQUE":                 "UNQNO",
+        "TYPE_TRANSACTION":          "TD_TRTYPE",
+        "DATE_PURCHASE":             "PURDATE",
+        "AMOUNT_PURCHASE":           "PURAMT",
+        "UNITS_PURCHASE":            "PURUNITS",
+        "FLAG_TRANSACTION":          "TRFLAG",
+        "DATE_SWITCH_FUND":          "SFUNDDT",
+        "DATE_CHEQUE":               "CHQDATE",
+        "BANK_CHEQUE":               "CHQBANK",
+        "NAV":                       "TD_NAV",
+        "NO_PREVIOUS_TRANSACTION":   "TD_PTRNO",
+        "CHARGE_TRANSACTION":        "TRCHARGES",
+        "DATE_SIP_REGISTRATION":     "SIPREGDT",
+        "NUMBER_SIP_SERIAL":         "SIPREGSLNO",
+        "PERCENTAGE_DIVIDEND":       "DIVPER",
+        "COMMON_ACCOUNT_NUMBER":     "CAN",
+        "NUMBER_INVESTOR_ID":        "INVID",
+        "PAN":                       "PAN1",
+        "REMARKS":                   "NCTREMARKS",
+        "STATE_INVESTOR":            "INVSTATE",
+        "FLAG_ELECTRONIC_TRANSACTION": "ELECTRXNFLAG",
+        "IHNO":                      "IHNO",
+        "BRANCHCODE":                "BRANCHCODE",
+        "INWARDNO":                  "INWARDNO",
+        "STT":                       "STT",
+    }
+
+
     MAILBACK_TO_TECHNICAL = {
         "PRODUCT_CODE":       "FMCODE",
         "FUND":               "TD_FUND",
@@ -1575,19 +1634,24 @@ def parse_kfin_mfsd201_transaction(file, replace: bool) -> tuple[bool, str, dict
         # "STATUS" collides with TRANSTAT — only map it if TRANSTAT is absent
     }
 
-    # Detect family: if TD_TRNO is present, file is already technical.
-    # If TRANSACTION_NUMBER is present, it's a mailback report.
-    if "TD_TRNO" not in df.columns and "TRANSACTION_NUMBER" in df.columns:
-        df = df.rename(columns={k: v for k, v in MAILBACK_TO_TECHNICAL.items() if k in df.columns})
-
+        # Detect family: if TD_TRNO is present, file is already technical.
     if "TD_TRNO" not in df.columns:
-        cols_seen = list(df.columns)[:20]
-        sflog.record_failure(
-            source="manual_upload", stage="parse",
-            rta="KFinTech", report="MFSD201", file=getattr(file, "name", ""),
-            msg=f"Missing TD_TRNO after header mapping — columns seen: {cols_seen}",
-        )
-        return False, f"Missing TD_TRNO — columns seen: {cols_seen}", {}
+        # Try standard mailback format first (TRANSACTION_NUMBER, FOLIO_NUMBER, etc.)
+        if "TRANSACTION_NUMBER" in df.columns:
+            df = df.rename(columns={k: v for k, v in MAILBACK_TO_TECHNICAL.items() if k in df.columns})
+        
+        # Try alternative naming convention if standard didn't work (NO_TRANSACTION, CODE_FUND_FOLIO, etc.)
+        if "TD_TRNO" not in df.columns and any(k in df.columns for k in ["NO_TRANSACTION", "NUMBER_TRANSACTION"]):
+            df = df.rename(columns={k: v for k, v in MAILBACK_TO_TECHNICAL_ALT.items() if k in df.columns})
+ 
+    if "TD_TRNO" not in df.columns:
+            cols_seen = list(df.columns)[:20]
+            sflog.record_failure(
+                source="manual_upload", stage="parse",
+                rta="KFinTech", report="MFSD201", file=getattr(file, "name", ""),
+                msg=f"Missing TD_TRNO after header mapping — columns seen: {cols_seen}",
+            )
+            return False, f"Missing TD_TRNO — columns seen: {cols_seen}", {}
 
     batch = _batch_id("KFIN_201", file.name)
     rows, skipped = [], 0
