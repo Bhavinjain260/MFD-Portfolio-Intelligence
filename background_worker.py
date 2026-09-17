@@ -68,12 +68,17 @@ class _TriggerFilter(logging.Filter):
 
 
 def _install_trigger_filter() -> None:
-    """Apply the filter to the root logger and all handlers so it survives reconfig."""
+    """Apply the filter to the root logger and all handlers so it survives
+    reconfig. Idempotent — safe to call on every worker run."""
     f = _TriggerFilter()
     root = logging.getLogger()
-    root.addFilter(f)
+
+    if not any(isinstance(x, _TriggerFilter) for x in root.filters):
+        root.addFilter(f)
+
     for h in root.handlers:
-        h.addFilter(f)
+        if not any(isinstance(x, _TriggerFilter) for x in h.filters):
+            h.addFilter(f)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -115,6 +120,9 @@ def _install_streamlit_shim():
 
 
 _install_streamlit_shim()
+
+# ← ADD THIS LINE
+_install_trigger_filter()
 
 
 # ══════════════════════════════════════════════════════════════
@@ -277,6 +285,10 @@ def run_all(trigger: str | None = None):
     global _WORKER_TRIGGER
     if trigger:
         _WORKER_TRIGGER = trigger
+
+    # Ensure the trigger filter is installed before the first log call.
+    # Idempotent, so safe to call every run.
+    _install_trigger_filter()
 
     started_at = datetime.now().isoformat(timespec="seconds")
 
