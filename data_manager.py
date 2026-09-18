@@ -28,18 +28,48 @@ log = logging.getLogger(__name__)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "mfd_local.db")
 
-# data_version.py
+# data_version.py — file-backed, so it works ACROSS processes.
+# background_worker.py runs in a separate process from Streamlit, so an
+# in-memory counter would never be visible to the app. Persisting to a
+# file means any process that bumps also notifies every other process.
 import threading
+from pathlib import Path
+
 _lock = threading.Lock()
-_version = 0
+_VERSION_FILE = Path(os.environ.get(
+    "DATA_VERSION_FILE",
+    str(Path(__file__).resolve().parent / ".data_version"),
+))
 
-def bump():
-    global _version
+
+def bump() -> int:
+    """Increment the persisted version counter. Returns the new value.
+
+    Safe to call from any process (UI, worker, cron). The file write is
+    the cross-process signal — app.py reads it via current() on every
+    rerun and clears its caches when it changes.
+    """
     with _lock:
-        _version += 1
+        try:
+            current_val = int(_VERSION_FILE.read_text().strip() or "0")
+        except Exception:
+            current_val = 0
+        new_val = current_val + 1
+        try:
+            _VERSION_FILE.write_text(str(new_val))
+        except Exception:
+            # File write failed — still return a distinct value so
+            # in-process callers that compare the return see a change.
+            pass
+        return new_val
 
-def current():
-    return _version
+
+def current() -> int:
+    """Read the persisted version. Returns 0 if the file is missing."""
+    try:
+        return int(_VERSION_FILE.read_text().strip() or "0")
+    except Exception:
+        return 0
 
 
 def set_db_path(path: str):
@@ -692,6 +722,10 @@ def parse_bse_client_master(file, replace: bool) -> tuple[bool, str]:
     msg = f"Imported {inserted} new clients"
     if updated:
         msg += f" | Updated {updated} existing"
+
+    if inserted or updated:
+        bump()
+
     return True, msg
 
 
@@ -840,6 +874,10 @@ def parse_bse_sip(file, replace: bool) -> tuple[bool, str, dict]:
         msg += f" | Skipped {skipped}"
     if updated:
         msg += f" | Updated {updated}"
+
+    if inserted or updated:
+        bump()
+
     return True, msg, {"rows": inserted, "skipped": skipped, "updated": updated, "active": active}
 
 
@@ -929,6 +967,9 @@ def parse_bse_scheme_master(file, replace: bool) -> tuple[bool, str, dict]:
             after = _count_before_after(conn, "bse_scheme_master")
             inserted = after - before
             updated = len(rows) - inserted
+    if inserted or updated:
+        bump()
+
     return True, f"Imported {inserted} new schemes | Updated {updated} | Skipped: {skipped}", \
         {"rows": inserted, "skipped": skipped, "updated": updated}
 
@@ -1319,6 +1360,13 @@ def _execute_cams_import(table: str, rows: list, batch: str, replace: bool, skip
         msg += f" | Updated {updated} existing"
     if skipped:
         msg += f" | Skipped {skipped}"
+
+    # Notify any listening process (Streamlit UI, worker) that data changed.
+    # Only bump when rows actually landed — a no-op parse shouldn't force
+    # every cache in the app to rebuild.
+    if inserted or updated:
+        bump()
+
     return True, msg, {"rows": inserted, "updated": updated, "skipped": skipped}
     
 
@@ -1981,6 +2029,10 @@ def _execute_kfin_import(table: str, rows: list, batch: str, replace: bool, skip
             context={"skipped": skipped},
         )
 
+    # Cross-process signal — see _execute_cams_import for rationale.
+    if inserted or updated:
+        bump()
+
     return True, msg, {"rows": inserted, "updated": updated, "skipped": skipped}
     
 
@@ -2064,6 +2116,8 @@ def parse_nav_file(file, replace: bool) -> tuple[bool, str, dict]:
         
         if result.get('ok'):
             msg = f"Imported {result['inserted']} NAV records | Skipped: {result['skipped']}"
+            if result['inserted']:
+                bump()
             return True, msg, {
                 "rows": result['inserted'], 
                 "skipped": result['skipped'], 

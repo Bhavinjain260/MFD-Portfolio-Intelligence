@@ -5,6 +5,7 @@ import time
 import requests
 import threading
 import warnings
+from pathlib import Path          # ← add this
 from datetime import datetime, timedelta, date as date_cls
 from datetime import timedelta, datetime as dt
 from datetime import time as time_cls
@@ -2968,6 +2969,104 @@ def _warm_caches_once() -> bool:
 
 
 _warm_caches_once()
+
+
+# ══════════════════════════════════════════════════════════════
+# CROSS-PROCESS REFRESH WATCHERS
+# ══════════════════════════════════════════════════════════════
+# Two independent signals can indicate data changed underneath us:
+#
+#   1. data_version() — bumped by any upload path (UI, mailback sync,
+#      worker). File-backed, so the worker's bump is visible here.
+#   2. The worker stamp file — human-readable record of the last worker
+#      run. Included so you can eyeball it via `cat` without SQL.
+#
+# If either moved, we clear every cache that reads the DB or NAV files.
+
+WORKER_STAMP_FILE = os.environ.get(
+    "WORKER_STAMP_FILE",
+    str(Path(__file__).resolve().parent / ".worker_run_stamp"),
+)
+
+
+@st.cache_resource(show_spinner=False)
+def _get_refresh_state() -> dict:
+    """Mutable holder, survives across reruns within a process."""
+    return {"data_version": None, "stamp": None}
+
+
+def _read_worker_stamp() -> str | None:
+    try:
+        p = Path(WORKER_STAMP_FILE)
+        return p.read_text().strip() if p.exists() else None
+    except Exception:
+        return None
+
+
+def _clear_all_data_caches() -> None:
+    """Single source of truth for which caches must die when data changes."""
+    get_enriched_folio_nav_df.clear()
+    get_folio_nav_summary_cached.clear()
+    load_previous_nav_map_cached.clear()
+    get_or_fetch_nav_for_date_cached.clear()
+    get_all_folios_with_isin_and_nav.clear()
+    load_all_clients_with_display.clear()
+    load_dashboard_summary.clear()
+    load_brokerage_report.clear()
+    # AMFI index is loaded from a NAV text file on disk — force a re-read.
+    _amfi.load(force=True)
+
+
+def _check_for_data_changes() -> None:
+    """Called on every rerun (and by the polling fragment). Cheap — reads
+    one file. Clears caches if either signal moved."""
+    state = _get_refresh_state()
+    current_ver = data_version()
+    current_stamp = _read_worker_stamp()
+
+    # First run in this process — record baselines, don't refresh.
+    if state["data_version"] is None:
+        state["data_version"] = current_ver
+        state["stamp"] = current_stamp
+        return
+
+    version_changed = current_ver != state["data_version"]
+    stamp_changed = current_stamp != state["stamp"]
+
+    if not (version_changed or stamp_changed):
+        return
+
+    if version_changed:
+        log.info("[REFRESH-WATCH] data_version %s → %s",
+                 state["data_version"], current_ver)
+    if stamp_changed:
+        log.info("[REFRESH-WATCH] worker stamp changed: %s", current_stamp)
+
+    state["data_version"] = current_ver
+    state["stamp"] = current_stamp
+
+    _clear_all_data_caches()
+    st.toast("🔄 Data updated — portfolio refreshed.")
+
+
+def _check_for_data_changes_on_rerun() -> None:
+    """Wrapper used at module scope. Logs failures instead of crashing the
+    whole app if a cache clear hiccups."""
+    try:
+        _check_for_data_changes()
+    except Exception:
+        log.exception("[REFRESH-WATCH] check failed")
+
+
+@st.fragment(run_every="60s")
+def _refresh_watcher_poller() -> None:
+    """Re-runs every 60s even without user interaction. Essential for a
+    24/7 wall-mounted dashboard that nobody touches between cron runs."""
+    _check_for_data_changes()
+
+
+# Check once immediately (fast — just file reads), then start the poller.
+_check_for_data_changes_on_rerun()
 
 
 # -------------------- THEME (native Streamlit System/Light/Dark) --------------------
@@ -7757,3 +7856,12 @@ elif mode == "⚙️ Admin Panel":
             st.markdown("**Other**")
             st.caption(f"monthly_brokerage: **{stats.get('monthly_brokerage', 0):,}**")
             st.caption(f"amc_code_map: **{stats.get('amc_code_map', 0):,}**")
+
+
+# ══════════════════════════════════════════════════════════════
+# START THE 60s REFRESH POLLER
+# ══════════════════════════════════════════════════════════════
+# Must be called AFTER every @st.cache_data function it references has
+# been defined, which is why it's here at the bottom of the module.
+# The decorator alone does nothing — the call is what schedules it.
+_refresh_watcher_poller()

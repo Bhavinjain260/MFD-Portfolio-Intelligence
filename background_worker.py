@@ -26,6 +26,15 @@ from pathlib import Path
 import fcntl
 
 LOCK_FILE = os.environ.get("WORKER_LOCK", "/tmp/background_worker.lock")
+
+# Human-readable record of the last successful worker run. Read by the
+# Streamlit app to decide whether to invalidate its caches. Separate from
+# data_version — this one exists so you can `cat` it from a shell.
+STAMP_FILE = os.environ.get(
+    "WORKER_STAMP_FILE",
+    str(Path(__file__).resolve().parent / ".worker_run_stamp"),
+)
+
 os.environ.setdefault("TZ", "Asia/Kolkata")
 _time.tzset()
 
@@ -337,6 +346,25 @@ def run_all(trigger: str | None = None):
         log.info("BACKGROUND WORKER RUN COMPLETE  @ %s  (trigger=%s)",
                  finished_at, _WORKER_TRIGGER)
         log.info("=" * 70)
+
+        # Cross-process signal to the Streamlit app: data_version just moved.
+        # Bumping here (rather than inside each task) means the app refreshes
+        # once per worker run, not once per task.
+        try:
+            from data_manager import bump as _bump_data_version
+            _bump_data_version()
+            log.info("[WORKER] data_version bumped")
+        except Exception:
+            log.exception("[WORKER] Could not bump data_version")
+
+        # Optional file-stamp — kept alongside the bump so you have a
+        # human-readable record of when the worker last finished.
+        try:
+            Path(STAMP_FILE).write_text(
+                f"{finished_at} trigger={_WORKER_TRIGGER} pid={os.getpid()}\n"
+            )
+        except Exception:
+            log.exception("[WORKER] Could not write worker stamp file")
     finally:
         fcntl.flock(lock_fp, fcntl.LOCK_UN)
         lock_fp.close()
