@@ -8017,3 +8017,150 @@ Arguments: ()
 2026-09-18 15:00:11,147 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-09-18T15:00:11  (trigger=cron)
 2026-09-18 15:00:11,147 [INFO] [cron] background_worker | ======================================================================
 ──── worker end   2026-09-18 15:00:11 IST (exit=0) ────
+──── worker start 2026-09-19 11:00:01 IST ────
+2026-09-19 11:00:03,749 [INFO] [cron] background_worker | ======================================================================
+2026-09-19 11:00:03,749 [INFO] [cron] background_worker | BACKGROUND WORKER RUN  @ 2026-09-19T11:00:03  (trigger=cron, pid=21569)
+2026-09-19 11:00:03,749 [INFO] [cron] background_worker | ======================================================================
+2026-09-19 11:00:03,788 [INFO] [cron] background_worker | [MAILBACK] Starting
+2026-09-19 11:00:08,175 [INFO] [cron] mailback_sync | [IMAP] Connected
+2026-09-19 11:00:08,684 [INFO] [cron] mailback_sync | [CAMS] Found 3 unread mailback emails
+2026-09-19 11:00:09,254 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR49. SIP/STP procured for the period, Request Id:220638803R49
+2026-09-19 11:00:09,270 [INFO] [cron] mailback_sync | [CAMS-WBR49] Report code resolved
+2026-09-19 11:00:09,274 [INFO] [cron] mailback_sync | [CAMS-WBR49] No data — marking read, skipping
+2026-09-19 11:00:10,323 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR9. Investor Static details feed - CRMS Format, Request
+ Id:220638757R9
+2026-09-19 11:00:10,327 [INFO] [cron] mailback_sync | [CAMS-WBR9] Report code resolved
+2026-09-19 11:00:10,329 [INFO] [cron] mailback_sync | [CAMS-WBR9] No data — marking read, skipping
+2026-09-19 11:00:11,249 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR2. Investor Transactions for a Period, Request Id:220638668R2
+2026-09-19 11:00:11,250 [INFO] [cron] mailback_sync | [CAMS-WBR2] Report code resolved
+2026-09-19 11:00:11,250 [INFO] [cron] mailback_sync | [CAMS-WBR2] No data — marking read, skipping
+2026-09-19 11:00:12,168 [INFO] [cron] mailback_sync | [KFinTech] Found 5 unread mailback emails
+2026-09-19 11:00:12,589 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Brokerage Report for Ref.no. WBBRR2857086
+2026-09-19 11:00:12,592 [INFO] [cron] mailback_sync | [KFinTech-MFSD205] Report code resolved
+2026-09-19 11:00:12,593 [INFO] [cron] mailback_sync | [KFinTech-MFSD205] Download URL found
+2026-09-19 11:00:12,594 [INFO] [cron] mailback_sync | [KFinTech-MFSD205] Downloading https://scdelivery.kfintech.com/c/?u=iuuqt%3B00ngt%2Flgjoufdi%2Fdpn0ngt0Ejtusjcvups0Sfrvftut0Sfr%60bmmsqutmjol%2Fbtqy%40rszuzqf%3EUUO9W1KDVmJzPEV4NEh3NUN2NEd2gEJxNkZxPUF5&p=qqttqbdb.bqeesknn--338144835-C79F488E-3CC8-4735-90FF-5EF0A74B6CA7.157.1&e=s1
+2026-09-19 11:00:13,754 [INFO] [cron] mailback_sync | [KFinTech-MFSD205] Extracted MFSD205_WBBRR2857086_part1.csv (235460 bytes)
+2026-09-19 11:00:14,520 [WARNING] [cron] data_manager | KFIN 205 COLUMNS FOUND: ['PRODUCT_CODE', 'FUND_DESCRIPTION', 'FUND', 'SCHEME', 'PLAN', 'OPTION', 'ACCOUNT_NUMBER', 'APPLICATION_NUMBER', 'INVESTOR_NAME', 'ADDRESS_1', 'ADDRESS_2', 'ADDRESS_3', 'CITY', 'PINCODE', 'TRANSACTION_DESCRIPTION', 'FROM_DATE', 'TO_DATE', 'AMOUNT_IN_RS', 'UNITS', 'TRANSACTION_DATE', 'PROCESS_DATE', 'PERCENTAGE', 'BROKERAGE_IN_RS', 'SUB_BROKER', 'ACCOUNT_TYPE', 'BROKERAGE_HEAD', 'BROKERAGE_TYPE', 'TRANSACTION_NUMBER', 'BRANCH_CODE', 'CHEQUE_NUMBER', 'STARTING_DATE', 'ENDING_DATE', 'WARRANT_NUMBER', 'WARRANT_DATE', 'DAILY_PRODUCT', 'CUMULATIVE_NAV', 'AVERAGE_ASSETS', 'TRANSACTION_ID', 'SCHEME_CODE', 'TRANSACTION_HEAD', 'FEE_TYPE', 'ADJUSTMENT_FLAG', 'SWITCH_FLAG', 'GROSSBROKERAGE', 'STTAMOUNT', 'EDUCESSAMOUNT', 'TRANTYPECODE']
+2026-09-19 11:00:14,523 [WARNING] [cron] data_manager | AMOUNT column: AMOUNT_IN_RS
+2026-09-19 11:00:14,523 [WARNING] [cron] data_manager | BROKERAGE column: BROKERAGE_IN_RS
+2026-09-19 11:00:14,523 [WARNING] [cron] data_manager | UNITS column: UNITS
+2026-09-19 11:00:14,537 [WARNING] [cron] data_manager | FIRST ROW RAW AMOUNT: '499.98'
+2026-09-19 11:00:14,537 [WARNING] [cron] data_manager | FIRST ROW RAW BROKERAGE: '0.320000'
+2026-09-19 11:00:14,538 [WARNING] [cron] data_manager | FIRST ROW RAW UNITS: '5.251'
+2026-09-19 11:00:14,538 [WARNING] [cron] data_manager | FIRST ROW TYPE AMOUNT: <class 'str'>
+2026-09-19 11:00:14,539 [WARNING] [cron] data_manager | PARSED AMOUNT: 499.98
+2026-09-19 11:00:14,539 [WARNING] [cron] data_manager | PARSED BROKERAGE: 0.32
+2026-09-19 11:00:14,539 [WARNING] [cron] data_manager | PARSED UNITS: 5.251
+2026-09-19 11:00:14,807 [ERROR] [cron] mailback_sync | [KFinTech-MFSD205] Parse failed for MFSD205_WBBRR2857086_part1.csv
+Traceback (most recent call last):
+  File "/root/projects/MFD-Portfolio-Intelligence/cams_mailback_sync.py", line 601, in _parse_and_move
+    ok, msg, _preview = parser(f, replace=False)
+                        ~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/root/projects/MFD-Portfolio-Intelligence/data_manager.py", line 1987, in parse_kfin_mfsd205_brokerage
+    conn.executemany(insert_sql, rows)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+sqlite3.OperationalError: ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint
+2026-09-19 11:00:15,239 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Subscribed Master AUM/Investor Master Details Report for Ref. No.
+ : WBMST9447075
+2026-09-19 11:00:15,242 [INFO] [cron] mailback_sync | [KFinTech-MFSD211] Report code resolved
+2026-09-19 11:00:15,242 [INFO] [cron] mailback_sync | [KFinTech-MFSD211] Download URL found
+2026-09-19 11:00:15,242 [INFO] [cron] mailback_sync | [KFinTech-MFSD211] Downloading https://scdelivery.kfintech.com/c/?u=iuuqt%3B00ngt%2Flgjoufdi%2Fdpn0ngt0Ejtusjcvups0Sfrvftut0Sfr%60bmmsqutmjol%2Fbtqy%40rszuzqf%3EV%7BO9W1KOV2R6OER4NEd2N%7BVxOURzgEJxNkZxPUF6&p=qqttqbdb.bqeesknn--338194809-B330202F-BE3F-4EBB-A29B-752CCFAF73AD.125.1&e=s1
+2026-09-19 11:00:16,172 [INFO] [cron] mailback_sync | [KFinTech-MFSD211] Extracted 0659235828766ST944707577.csv (4909 bytes)
+2026-09-19 11:00:16,843 [INFO] [cron] mailback_sync | [KFinTech-MFSD211] Parsed and moved to mailback_sync/kfintech/mfsd211/done/0659235828766ST944707577.csv
+2026-09-19 11:00:17,295 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Subscribed SIP Registration Report for Ref.No : WSREG8279819
+2026-09-19 11:00:17,298 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Subscribed SIP Registration Report for Ref.No : WSREG8279819
+2026-09-19 11:00:18,201 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Subscribed Transaction Feeds Report for Ref. No. : WBTRN29458988
+2026-09-19 11:00:18,210 [INFO] [cron] mailback_sync | [KFinTech-MFSD201] Report code resolved
+2026-09-19 11:00:18,212 [INFO] [cron] mailback_sync | [KFinTech-MFSD201] Download URL found
+2026-09-19 11:00:18,213 [INFO] [cron] mailback_sync | [KFinTech-MFSD201] Downloading https://scdelivery.kfintech.com/c/?u=iuuqt%3B00ngt%2Flgjoufdi%2Fdpn0ngt0Ejtusjcvups0Sfrvftut0Sfr%60bmmsqutmjol%2Fbtqy%40rszuzqf%3EV%7BO9W1KVVl5zPUR2PEl5PEdyOUhzNoxzNEJ3NElyPR%3E%3E&p=qqttqbdb.bqeesknn--338198290-106D342D-3010-48E5-AC2C-84AD6EC1F52F.151.1&e=s1
+2026-09-19 11:00:19,316 [INFO] [cron] mailback_sync | [KFinTech-MFSD201] Extracted MFSD307_WBTRN29458988_986503.csv (4027 bytes)
+2026-09-19 11:00:20,250 [INFO] [cron] mailback_sync | [KFinTech-MFSD201] Parsed and moved to mailback_sync/kfintech/mfsd201/done/MFSD307_WBTRN29458988_986503.csv
+2026-09-19 11:00:20,668 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Subscribed Transaction Feeds Report for Ref. No. : WBTRN29458988
+2026-09-19 11:00:20,675 [INFO] [cron] mailback_sync | [KFinTech-MFSD201] Report code resolved
+2026-09-19 11:00:20,676 [INFO] [cron] mailback_sync | [KFinTech-MFSD201] Download URL found
+2026-09-19 11:00:20,677 [INFO] [cron] mailback_sync | [KFinTech-MFSD201] Downloading https://scdelivery.kfintech.com/c/?u=iuuqt%3B00ngt%2Flgjoufdi%2Fdpn0ngt0Ejtusjcvups0Sfrvftut0Sfr%60bmmsqutmjol%2Fbtqy%40rszuzqf%3EV%7BO9W1KVVl5zPUR2PEl5PEdxNkl6O4xzNEJ3NElyPR%3E%3E&p=qqttqbdb.bqeesknn--338198293-86D067CE-008B-4E00-8C9E-B4F82DF46678.138.1&e=s1
+2026-09-19 11:00:23,743 [INFO] [cron] mailback_sync | [KFinTech-MFSD201] Extracted MFSD307_WBTRN29458988_973678.csv (4027 bytes)
+2026-09-19 11:00:24,388 [INFO] [cron] mailback_sync | [KFinTech-MFSD201] Parsed and moved to mailback_sync/kfintech/mfsd201/done/MFSD307_WBTRN29458988_973678.csv
+2026-09-19 11:00:24,460 [WARNING] [cron] data_manager | KFIN 205 COLUMNS FOUND: ['PRODUCT_CODE', 'FUND_DESCRIPTION', 'FUND', 'SCHEME', 'PLAN', 'OPTION', 'ACCOUNT_NUMBER', 'APPLICATION_NUMBER', 'INVESTOR_NAME', 'ADDRESS_1', 'ADDRESS_2', 'ADDRESS_3', 'CITY', 'PINCODE', 'TRANSACTION_DESCRIPTION', 'FROM_DATE', 'TO_DATE', 'AMOUNT_IN_RS', 'UNITS', 'TRANSACTION_DATE', 'PROCESS_DATE', 'PERCENTAGE', 'BROKERAGE_IN_RS', 'SUB_BROKER', 'ACCOUNT_TYPE', 'BROKERAGE_HEAD', 'BROKERAGE_TYPE', 'TRANSACTION_NUMBER', 'BRANCH_CODE', 'CHEQUE_NUMBER', 'STARTING_DATE', 'ENDING_DATE', 'WARRANT_NUMBER', 'WARRANT_DATE', 'DAILY_PRODUCT', 'CUMULATIVE_NAV', 'AVERAGE_ASSETS', 'TRANSACTION_ID', 'SCHEME_CODE', 'TRANSACTION_HEAD', 'FEE_TYPE', 'ADJUSTMENT_FLAG', 'SWITCH_FLAG', 'GROSSBROKERAGE', 'STTAMOUNT', 'EDUCESSAMOUNT', 'TRANTYPECODE']
+2026-09-19 11:00:24,462 [WARNING] [cron] data_manager | AMOUNT column: AMOUNT_IN_RS
+2026-09-19 11:00:24,462 [WARNING] [cron] data_manager | BROKERAGE column: BROKERAGE_IN_RS
+2026-09-19 11:00:24,463 [WARNING] [cron] data_manager | UNITS column: UNITS
+2026-09-19 11:00:24,470 [WARNING] [cron] data_manager | FIRST ROW RAW AMOUNT: '499.98'
+2026-09-19 11:00:24,471 [WARNING] [cron] data_manager | FIRST ROW RAW BROKERAGE: '0.320000'
+2026-09-19 11:00:24,471 [WARNING] [cron] data_manager | FIRST ROW RAW UNITS: '5.251'
+2026-09-19 11:00:24,471 [WARNING] [cron] data_manager | FIRST ROW TYPE AMOUNT: <class 'str'>
+2026-09-19 11:00:24,471 [WARNING] [cron] data_manager | PARSED AMOUNT: 499.98
+2026-09-19 11:00:24,471 [WARNING] [cron] data_manager | PARSED BROKERAGE: 0.32
+2026-09-19 11:00:24,471 [WARNING] [cron] data_manager | PARSED UNITS: 5.251
+2026-09-19 11:00:24,734 [ERROR] [cron] mailback_sync | [KFinTech-MFSD205] Parse failed for MFSD205_WBBRR2857086_part1.csv
+Traceback (most recent call last):
+  File "/root/projects/MFD-Portfolio-Intelligence/cams_mailback_sync.py", line 601, in _parse_and_move
+    ok, msg, _preview = parser(f, replace=False)
+                        ~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/root/projects/MFD-Portfolio-Intelligence/data_manager.py", line 1987, in parse_kfin_mfsd205_brokerage
+    conn.executemany(insert_sql, rows)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+sqlite3.OperationalError: ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint
+2026-09-19 11:00:25,604 [INFO] [cron] background_worker | [MAILBACK] checked=8 downloaded=4 parsed=3 failed=2 no_data=3 errors=0
+2026-09-19 11:00:25,605 [INFO] [cron] background_worker | [mailback] -> OK
+2026-09-19 11:00:25,605 [INFO] [cron] background_worker | [NAV-LIVE] Starting
+2026-09-19 11:00:25,611 [INFO] [cron] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-09-19 11:00:28,298 [INFO] [cron] nav_service | [NAV-PARSE] Parsed 13997 records | column counts seen: {8: 14134}
+2026-09-19 11:00:28,303 [INFO] [cron] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-09-18.txt: 1520844 bytes, 17852 rows (source=live)
+2026-09-19 11:00:28,312 [INFO] [cron] nav_service | [AMFI] NAV file created: nav_data/nav_2026-09-18.txt (1520844 bytes, 18102 lines) | NAV Date: 2026-09-18
+2026-09-19 11:00:28,315 [INFO] [cron] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-09-18.txt...
+2026-09-19 11:00:28,714 [INFO] [cron] nav_db | [NAV-DB] Ingested 4262 records (skipped 0) for date 2026-09-18
+2026-09-19 11:00:28,716 [INFO] [cron] nav_service | [NAV-DB] Success: Inserted 4262 NAV records
+2026-09-19 11:00:28,716 [INFO] [cron] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-09-19 11:00:28,717 [INFO] [cron] background_worker | [nav_live] -> OK
+2026-09-19 11:00:28,717 [INFO] [cron] background_worker | [NAV-PREV] Starting
+2026-09-19 11:00:28,727 [INFO] [cron] nav_service | [AMFI-HIST] Already have 2026-09-17 — skipping fetch
+2026-09-19 11:00:28,727 [INFO] [cron] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-09-17
+2026-09-19 11:00:28,727 [INFO] [cron] background_worker | [nav_previous] -> OK
+2026-09-19 11:00:28,727 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-09-19T11:00:28  (trigger=cron)
+2026-09-19 11:00:28,727 [INFO] [cron] background_worker | ======================================================================
+2026-09-19 11:00:28,730 [INFO] [cron] background_worker | [WORKER] data_version bumped
+──── worker end   2026-09-19 11:00:29 IST (exit=0) ────
+2026-09-19 11:51:32,029 [INFO] [manual] background_worker | ======================================================================
+2026-09-19 11:51:32,031 [INFO] [manual] background_worker | BACKGROUND WORKER RUN  @ 2026-09-19T11:51:32  (trigger=manual, pid=27549)
+2026-09-19 11:51:32,031 [INFO] [manual] background_worker | ======================================================================
+2026-09-19 11:51:32,068 [INFO] [manual] background_worker | [MAILBACK] Starting
+2026-09-19 11:51:36,330 [INFO] [manual] mailback_sync | [IMAP] Connected
+2026-09-19 11:51:36,653 [INFO] [manual] mailback_sync | [CAMS] Found 0 unread mailback emails
+2026-09-19 11:51:36,973 [INFO] [manual] mailback_sync | [KFinTech] Found 1 unread mailback emails
+2026-09-19 11:51:37,341 [INFO] [manual] mailback_sync | [KFinTech] Processing email: Brokerage Report for Ref.no. WBBRR2857086
+2026-09-19 11:51:37,343 [INFO] [manual] mailback_sync | [KFinTech-MFSD205] Report code resolved
+2026-09-19 11:51:37,344 [INFO] [manual] mailback_sync | [KFinTech-MFSD205] Download URL found
+2026-09-19 11:51:37,345 [INFO] [manual] mailback_sync | [KFinTech-MFSD205] Downloading https://scdelivery.kfintech.com/c/?u=iuuqt%3B00ngt%2Flgjoufdi%2Fdpn0ngt0Ejtusjcvups0Sfrvftut0Sfr%60bmmsqutmjol%2Fbtqy%40rszuzqf%3EUUO9W1KDVmJzPEV4NEh3NUN2NEd2gEJxNkZxPUF5&p=qqttqbdb.bqeesknn--338144835-C79F488E-3CC8-4735-90FF-5EF0A74B6CA7.157.1&e=s1
+2026-09-19 11:51:38,318 [INFO] [manual] mailback_sync | [KFinTech-MFSD205] Extracted MFSD205_WBBRR2857086_part1.csv (235460 bytes)
+2026-09-19 11:51:38,992 [WARNING] [manual] data_manager | KFIN 205 COLUMNS FOUND: ['PRODUCT_CODE', 'FUND_DESCRIPTION', 'FUND', 'SCHEME', 'PLAN', 'OPTION', 'ACCOUNT_NUMBER', 'APPLICATION_NUMBER', 'INVESTOR_NAME', 'ADDRESS_1', 'ADDRESS_2', 'ADDRESS_3', 'CITY', 'PINCODE', 'TRANSACTION_DESCRIPTION', 'FROM_DATE', 'TO_DATE', 'AMOUNT_IN_RS', 'UNITS', 'TRANSACTION_DATE', 'PROCESS_DATE', 'PERCENTAGE', 'BROKERAGE_IN_RS', 'SUB_BROKER', 'ACCOUNT_TYPE', 'BROKERAGE_HEAD', 'BROKERAGE_TYPE', 'TRANSACTION_NUMBER', 'BRANCH_CODE', 'CHEQUE_NUMBER', 'STARTING_DATE', 'ENDING_DATE', 'WARRANT_NUMBER', 'WARRANT_DATE', 'DAILY_PRODUCT', 'CUMULATIVE_NAV', 'AVERAGE_ASSETS', 'TRANSACTION_ID', 'SCHEME_CODE', 'TRANSACTION_HEAD', 'FEE_TYPE', 'ADJUSTMENT_FLAG', 'SWITCH_FLAG', 'GROSSBROKERAGE', 'STTAMOUNT', 'EDUCESSAMOUNT', 'TRANTYPECODE']
+2026-09-19 11:51:38,993 [WARNING] [manual] data_manager | AMOUNT column: AMOUNT_IN_RS
+2026-09-19 11:51:38,993 [WARNING] [manual] data_manager | BROKERAGE column: BROKERAGE_IN_RS
+2026-09-19 11:51:38,993 [WARNING] [manual] data_manager | UNITS column: UNITS
+2026-09-19 11:51:38,999 [WARNING] [manual] data_manager | FIRST ROW RAW AMOUNT: '499.98'
+2026-09-19 11:51:39,000 [WARNING] [manual] data_manager | FIRST ROW RAW BROKERAGE: '0.320000'
+2026-09-19 11:51:39,000 [WARNING] [manual] data_manager | FIRST ROW RAW UNITS: '5.251'
+2026-09-19 11:51:39,000 [WARNING] [manual] data_manager | FIRST ROW TYPE AMOUNT: <class 'str'>
+2026-09-19 11:51:39,000 [WARNING] [manual] data_manager | PARSED AMOUNT: 499.98
+2026-09-19 11:51:39,001 [WARNING] [manual] data_manager | PARSED BROKERAGE: 0.32
+2026-09-19 11:51:39,001 [WARNING] [manual] data_manager | PARSED UNITS: 5.251
+2026-09-19 11:51:39,310 [INFO] [manual] mailback_sync | [KFinTech-MFSD205] Parsed and moved to mailback_sync/kfintech/mfsd205/done/MFSD205_WBBRR2857086_part1.csv
+2026-09-19 11:51:39,938 [INFO] [manual] background_worker | [MAILBACK] checked=1 downloaded=1 parsed=1 failed=0 no_data=0 errors=0
+2026-09-19 11:51:39,939 [INFO] [manual] background_worker | [mailback] -> OK
+2026-09-19 11:51:39,939 [INFO] [manual] background_worker | [NAV-LIVE] Starting
+2026-09-19 11:51:39,949 [INFO] [manual] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-09-19 11:51:40,766 [INFO] [manual] nav_service | [NAV-PARSE] Parsed 13997 records | column counts seen: {8: 14134}
+2026-09-19 11:51:40,784 [INFO] [manual] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-09-18.txt: 1520848 bytes, 17852 rows (source=live)
+2026-09-19 11:51:40,799 [INFO] [manual] nav_service | [AMFI] NAV file overwritten: nav_data/nav_2026-09-18.txt (1520848 bytes, 18102 lines) | NAV Date: 2026-09-18
+2026-09-19 11:51:40,811 [INFO] [manual] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-09-18.txt...
+2026-09-19 11:51:41,288 [INFO] [manual] nav_db | [NAV-DB] Ingested 4262 records (skipped 0) for date 2026-09-18
+2026-09-19 11:51:41,290 [INFO] [manual] nav_service | [NAV-DB] Success: Inserted 4262 NAV records
+2026-09-19 11:51:41,290 [INFO] [manual] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-09-19 11:51:41,290 [INFO] [manual] background_worker | [nav_live] -> OK
+2026-09-19 11:51:41,290 [INFO] [manual] background_worker | [NAV-PREV] Starting
+2026-09-19 11:51:41,308 [INFO] [manual] nav_service | [AMFI-HIST] Already have 2026-09-17 — skipping fetch
+2026-09-19 11:51:41,308 [INFO] [manual] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-09-17
+2026-09-19 11:51:41,308 [INFO] [manual] background_worker | [nav_previous] -> OK
+2026-09-19 11:51:41,308 [INFO] [manual] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-09-19T11:51:41  (trigger=manual)
+2026-09-19 11:51:41,309 [INFO] [manual] background_worker | ======================================================================
+2026-09-19 11:51:41,322 [INFO] [manual] background_worker | [WORKER] data_version bumped

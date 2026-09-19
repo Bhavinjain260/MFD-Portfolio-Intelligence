@@ -1803,9 +1803,9 @@ def parse_kfin_mfsd205_brokerage(file, replace: bool) -> tuple[bool, str, dict]:
     acnt_col = _c("ACCOUNT_NUMBER", "ACCT_NO", "FOLIO", "FOLIO_NO")
     app_no_col = _c("APPLICATION_NUMBER", "APP_NO", "TRXN_NO")
     inv_name_col = _c("INVESTOR_NAME", "INV_NAME", "NAME")
-    addr1_col = _c("ADDRESS1", "ADDR1")
-    addr2_col = _c("ADDRESS2", "ADDR2")
-    addr3_col = _c("ADDRESS3", "ADDR3")
+    addr1_col = _c("ADDRESS1", "ADDR1", "ADDRESS_1")
+    addr2_col = _c("ADDRESS2", "ADDR2", "ADDRESS_2")
+    addr3_col = _c("ADDRESS3", "ADDR3", "ADDRESS_3")
     city_col = _c("CITY")
     pin_col = _c("PINCODE", "PIN")
     txn_desc_col = _c("TRANSACTION_DESCRIPTION", "TRXN_DESC", "DESCRIPTION")
@@ -1967,7 +1967,7 @@ def parse_kfin_mfsd205_brokerage(file, replace: bool) -> tuple[bool, str, dict]:
                     "average_assets", "transaction_id", "scheme_code", "transaction_head", "fee_type",
                     "adjustment_flag", "switch_flag", "gross_brokerage", "stt_amount", "educess_amount",
                     "tran_type_code", "upload_batch"]
-    conflict_cols = ["transaction_number", "account_number"]
+    conflict_cols = ["transaction_number", "account_number", "from_date", "percentage"]
     update_cols = [c for c in brok_columns if c not in conflict_cols]
     insert_sql = (
             f"INSERT INTO kfin_mfsd205_brokerage ({', '.join(brok_columns)}) "
