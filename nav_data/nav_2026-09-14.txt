@@ -358,10 +358,6 @@ ITI Mutual Fund
 147156;INF00XX01267;INF00XX01234;ITI Liquid Fund - Regular Plan - Monthly IDCW Option;1000.7692;14-Sep-2026
 147164;;INF00XX01218;ITI Liquid Fund - Regular Plan - Weekly IDCW Option;1001.8270;14-Sep-2026
 
-JM Financial Mutual Fund
-101549;INF192K01890;;JM Liquid Fund (Regular) - Bonus Option - Principal Units;24.5325;14-Sep-2026
-101078;;INF192K01833;JM Liquid Fund (Regular) - Daily IDCW;10.4302;14-Sep-2026
-
 LIC Mutual Fund
 120248;INF767K01DL5;INF767K01DM3;LIC MF Liquid Fund-Direct Plan-Daily IDCW;1035.2975;14-Sep-2026
 120249;INF767K01DN1;;LIC MF Liquid Fund-Direct Plan-Growth;5159.1648;14-Sep-2026
@@ -822,6 +818,8 @@ JM Financial Mutual Fund
 120406;INF192K01CM6;;JM Liquid Fund (Direct) - Growth Option;77.5287;14-Sep-2026
 120408;INF192K01CK0;INF192K01CL8;JM Liquid Fund (Direct) - Quarterly IDCW;44.0162;14-Sep-2026
 120407;INF192K01CI4;INF192K01CJ2;JM Liquid Fund (Direct) - Weekly IDCW;11.0154;14-Sep-2026
+101549;INF192K01890;;JM Liquid Fund (Regular) - Bonus Option - Principal Units;24.5325;14-Sep-2026
+101078;;INF192K01833;JM Liquid Fund (Regular) - Daily IDCW;10.4302;14-Sep-2026
 100244;INF192K01866;INF192K01874;JM Liquid Fund (Regular) - Quarterly IDCW;43.3651;14-Sep-2026
 100247;INF192K01981;;JM Liquid Fund (Regular) - Super Institutional Plan - Growth Option;44.0528;14-Sep-2026
 100233;INF192K01841;INF192K01858;JM Liquid Fund (Regular) - Weekly IDCW;11.0127;14-Sep-2026
