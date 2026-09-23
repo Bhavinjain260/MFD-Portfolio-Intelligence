@@ -79,7 +79,20 @@ class Match:
 
     @property
     def is_ltcg(self) -> bool:
-        return self.holding_days >= EQUITY_HOLDING_DAYS
+        """
+        Equity LTCG: holding period must exceed 12 calendar months.
+        e.g. bought 16-Jan-2026 -> LTCG from 17-Jan-2027 onwards.
+        Naive >=365-day check is off by one on leap-year boundaries.
+        """
+        buy = self.buy_date
+        sell = self.sell_date
+        try:
+            anniversary = buy.replace(year=buy.year + 1)
+            # If Feb 29 -> Feb 29 next year doesn't exist, shift to Mar 1
+            # (Python's date.replace handles this by raising ValueError)
+        except ValueError:
+            anniversary = buy.replace(year=buy.year + 1, month=3, day=1)
+        return sell > anniversary
 
 
 def _consume_fifo(lots: list[Lot], sell_units: float, sell_date: date, sell_rate: float) -> list[Match]:

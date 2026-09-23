@@ -696,7 +696,10 @@ def get_kfin_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
     with get_conn() as conn:
         df = pd.read_sql("""
             SELECT COALESCE(txn_date_iso, td_trdt) AS traddate,
-                   td_units AS units, td_pop AS purprice, td_amt AS amount
+                   td_purred   AS trxntype,
+                   td_units    AS units,
+                   td_pop      AS purprice,
+                   td_amt      AS amount
             FROM kfin_mfsd201_transaction
             WHERE td_acno = ? AND UPPER(TRIM(fmcode)) = ?
         """, conn, params=(folio_no, product_code.strip().upper()))
@@ -797,12 +800,33 @@ def calc_units_upto(txn_df: pd.DataFrame, product_code: str,
 
 def calc_invested_upto(txn_df: pd.DataFrame, product_code: str,
                        as_of_date: pd.Timestamp) -> float:
+    """
+    FIFO cost basis of units STILL HELD as of as_of_date.
+
+    Matches the 'Invested' figure shown in the Client tab, which the previous
+    implementation did not — it summed only purchases and ignored redemptions,
+    so any folio that had ever redeemed showed a wildly wrong gain/loss.
+
+    Falls back to net cash flow (IN sum minus OUT sum) if FIFO replay fails.
+    """
     mask = (
         (txn_df['product_code'] == product_code)
         & (txn_df['_date'] <= as_of_date)
-        & (txn_df['direction'] == 'IN')
     )
-    return float(txn_df.loc[mask, 'amount'].sum())
+    subset = txn_df.loc[mask].copy()
+    if subset.empty:
+        return 0.0
+
+    try:
+        lots, _ = cg_row.replay_folio_scheme(subset)
+        return float(sum(l.remaining_units * l.rate for l in lots))
+    except Exception as e:
+        log.warning("[VALUATION] FIFO replay failed for %s: %s — "
+                    "falling back to net cash flow", product_code, e)
+        in_mask  = subset['direction'] == 'IN'
+        out_mask = subset['direction'] == 'OUT'
+        return float(subset.loc[in_mask, 'amount'].sum()
+                     - subset.loc[out_mask, 'amount'].sum())
 
 
 
@@ -846,11 +870,28 @@ def _shorten_scheme_for_summary(name: str) -> str:
     """
     if not name:
         return ""
-    # Find the last occurrence of the whole word FUND
-    m = re.search(r'\bFUND\b', name, flags=re.IGNORECASE)
-    if m:
-        return name[:m.end()].strip()
+    # Find the LAST occurrence of the whole word FUND
+    matches = list(re.finditer(r'\bFUND\b', name, flags=re.IGNORECASE))
+    if matches:
+        return name[:matches[-1].end()].strip()
     return name.strip()
+
+def _truncate_to_width(pdf, text: str, max_width_mm: float) -> str:
+    """
+    Truncate `text` with an ellipsis so it fits within `max_width_mm`.
+    Uses fpdf2's own string-width measurement — correct across fonts
+    and fontsizes, unlike a naive character count.
+    """
+    if not text:
+        return ""
+    text = str(text)
+    if pdf.get_string_width(text) <= max_width_mm:
+        return text
+    for i in range(len(text) - 1, 0, -1):
+        candidate = text[:i].rstrip() + "…"
+        if pdf.get_string_width(candidate) <= max_width_mm:
+            return candidate
+    return "…"
 
 def generate_capital_gain_pdf(
     client_name: str,
@@ -862,7 +903,7 @@ def generate_capital_gain_pdf(
     total_sale: float,
     total_gain: float,
 ) -> bytes | None:
-    """PDF version of the capital gain report (FIFO realized gains, CAMS). Landscape — 11 columns."""
+    """PDF version of the capital gain report (FIFO realized gains, CAMS). Landscape — 13 columns."""
     try:
         from fpdf import FPDF
     except ImportError:
@@ -878,127 +919,150 @@ def generate_capital_gain_pdf(
     pdf.add_font('Main', 'B', bold_path, uni=True)
     pdf.set_margins(12, 12, 12)
 
-    BLUE   = (41, 128, 185)
-    DARK   = (44, 62, 80)
-    GREY   = (127, 140, 141)
-    LIGHT  = (236, 240, 241)
-    WHITE  = (255, 255, 255)
-    GREEN  = (39, 174, 96)
-    RED    = (192, 57, 43)
-    PAGE_W = 297 - 24  # A4 landscape width minus margins = 273
+    BLUE, DARK, GREY = (41, 128, 185), (44, 62, 80), (127, 140, 141)
+    LIGHT, WHITE = (236, 240, 241), (255, 255, 255)
+    GREEN, RED   = (39, 174, 96), (192, 57, 43)
+    PAGE_W = 297 - 24
 
-    def _fmt_inr(val) -> str:
-        try:
-            return f"\u20b9{float(val):,.2f}"
-        except (TypeError, ValueError):
-            return "N/A"
-
-    def _fmt_units(val) -> str:
-        try:
-            return f"{float(val):.4f}"
-        except (TypeError, ValueError):
-            return "N/A"
-
-    def _fmt_date(val) -> str:
-        if val is None:
-            return ""
-        try:
-            return val.strftime("%d-%m-%Y")
-        except AttributeError:
-            return str(val)
+    def _fmt_inr(val):
+        try:    return f"\u20b9{float(val):,.2f}"
+        except (TypeError, ValueError): return "N/A"
+    def _fmt_units(val):
+        try:    return f"{float(val):.4f}"
+        except (TypeError, ValueError): return "N/A"
+    def _fmt_date(val):
+        if val is None: return ""
+        try:    return val.strftime("%d-%m-%Y")
+        except AttributeError: return str(val)
 
     pdf.add_page()
 
-    pdf.set_font('Main', 'B', 16)
-    pdf.set_text_color(*DARK)
+    # ── Header ──
+    pdf.set_font('Main', 'B', 16); pdf.set_text_color(*DARK)
     pdf.cell(PAGE_W, 10, 'Capital Gain Report', align='C', new_x="LMARGIN", new_y="NEXT")
     pdf.ln(3)
-
-    pdf.set_font('Main', '', 9)
-    pdf.set_text_color(*GREY)
+    pdf.set_font('Main', '', 9); pdf.set_text_color(*GREY)
     pdf.cell(PAGE_W, 5, f'Client: {client_name}', new_x="LMARGIN", new_y="NEXT")
     pdf.cell(PAGE_W, 5, f'PAN: {pan or "N/A"}   |   Code: {client_code}   |   FY: {fy_str}',
              new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 5,
+             'Scope: CAMS folios only. KFinTech redemption tracking not yet implemented.',
+             new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
 
+    # ── Metric cards: Purchase / Redemption / Gain ──
     pdf.set_fill_color(*LIGHT)
     col_w = PAGE_W / 3
-    pdf.set_font('Main', 'B', 8)
-    pdf.set_text_color(*GREY)
-    pdf.cell(col_w, 5, 'Total Buy', border=0, fill=True, new_x="RIGHT")
-    pdf.cell(col_w, 5, 'Total Sale', border=0, fill=True, new_x="RIGHT")
-    pdf.cell(col_w, 5, 'Total Gain / Loss', border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
-
-    pdf.set_font('Main', 'B', 11)
-    pdf.set_text_color(*DARK)
-    pdf.cell(col_w, 7, _fmt_inr(total_buy), border=0, fill=True, new_x="RIGHT")
+    pdf.set_font('Main', 'B', 8); pdf.set_text_color(*GREY)
+    pdf.cell(col_w, 5, 'Total Purchase',   border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Total Redemption', border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Total Gain / Loss',border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font('Main', 'B', 11); pdf.set_text_color(*DARK)
+    pdf.cell(col_w, 7, _fmt_inr(total_buy),  border=0, fill=True, new_x="RIGHT")
     pdf.cell(col_w, 7, _fmt_inr(total_sale), border=0, fill=True, new_x="RIGHT")
-    gain_color = GREEN if total_gain >= 0 else RED
-    pdf.set_text_color(*gain_color)
+    pdf.set_text_color(*(GREEN if total_gain >= 0 else RED))
     pdf.cell(col_w, 7, _fmt_inr(total_gain), border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(*DARK)
-    pdf.ln(6)
+    pdf.ln(3)
 
-    pdf.set_font('Main', 'B', 11)
-    pdf.set_text_color(*BLUE)
+    # ── Tax summary ──
+    stcg = sum(r.get("Gain/Loss", 0) for r in detail_rows if (r.get("Holding Days") or 0) < 365)
+    ltcg = sum(r.get("Gain/Loss", 0) for r in detail_rows if (r.get("Holding Days") or 0) >= 365)
+    LTCG_EXEMPTION = 125000
+    ltcg_taxable   = max(ltcg - LTCG_EXEMPTION, 0)
+
+    pdf.set_font('Main', 'B', 8); pdf.set_text_color(*GREY)
+    pdf.cell(col_w, 5, 'STCG (held < 12m)',              border=0, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'LTCG (held >= 12m)',             border=0, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Taxable LTCG (after 1.25L exemption)', border=0, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font('Main', 'B', 10); pdf.set_text_color(*DARK)
+    pdf.cell(col_w, 6, _fmt_inr(stcg),         border=0, new_x="RIGHT")
+    pdf.cell(col_w, 6, _fmt_inr(ltcg),         border=0, new_x="RIGHT")
+    pdf.cell(col_w, 6, _fmt_inr(ltcg_taxable), border=0, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+
+    # ── Grandfathering warning ──
+    if any(r.get("Purchase Date") and r["Purchase Date"] < date_cls(2018, 1, 31) for r in detail_rows):
+        pdf.set_font('Main', 'B', 8); pdf.set_text_color(*RED)
+        pdf.cell(PAGE_W, 5,
+                 'WARNING: Some purchases predate 31-Jan-2018. '
+                 'Grandfathering (FMV) rules NOT applied - LTCG cost basis may be understated.',
+                 new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(*DARK)
+        pdf.ln(2)
+
+    # ── Detail table (13 cols) ──
+    pdf.set_font('Main', 'B', 11); pdf.set_text_color(*BLUE)
     pdf.cell(PAGE_W, 6, 'Realized Gains — Transaction Detail', new_x="LMARGIN", new_y="NEXT")
     pdf.ln(2)
 
-    headers = ['Scheme', 'Folio', 'Buy Date', 'Buy Units', 'Buy NAV', 'Buy Value',
-               'Sale Date', 'Sell Units', 'Sell NAV', 'Sell Value', 'Gain/Loss']
-    widths  = [55, 28, 20, 18, 18, 22, 20, 18, 18, 22, 0]
+    # Abbreviated labels so they fit in the narrow columns at 7pt.
+    # "Purchase Date" at 7pt is ~22mm; the column is only 15mm, so we
+    # use "Pur." / "Red." which any CA familiar with RTA reports reads instantly.
+    headers = ['Scheme', 'Folio',
+               'Pur. Date', 'Pur. Units', 'Pur. NAV', 'Pur. Value',
+               'Red. Date', 'Red. Units', 'Red. NAV', 'Red. Value',
+               'Days', 'Type', 'Gain/Loss']
+    # Sum must equal PAGE_W exactly. Rebalanced so the Scheme column
+    # has 78mm (~140 chars at 7pt) and the numeric columns are wide
+    # enough for both the abbreviated header and the value.
+    widths  = [78, 22, 15, 15, 13, 16, 15, 15, 13, 16, 12, 12, 0]
     widths[-1] = PAGE_W - sum(widths[:-1])
-    aligns  = ['L', 'C', 'C', 'R', 'R', 'R', 'C', 'R', 'R', 'R', 'R']
+    if widths[-1] <= 0:
+        raise ValueError(
+            f"Column widths exceed page width by {-widths[-1]:.1f}mm "
+            f"(PAGE_W={PAGE_W:.1f}, used={sum(widths[:-1]):.1f})"
+        )
+    aligns  = ['L', 'C', 'C', 'R', 'R', 'R', 'C', 'R', 'R', 'R', 'C', 'C', 'R']
 
     row_h = 6
-    pdf.set_font('Main', 'B', 7)
-    pdf.set_fill_color(*BLUE)
-    pdf.set_text_color(*WHITE)
+    pdf.set_font('Main', 'B', 7); pdf.set_fill_color(*BLUE); pdf.set_text_color(*WHITE)
     for h, w in zip(headers, widths):
         pdf.cell(w, row_h, h, border=1, align='C', fill=True)
     pdf.ln()
 
-    rows_sorted = sorted(
-        detail_rows,
-        key=lambda r: (r.get("Sale Date") or date_cls.min),
-        reverse=True,
-    )
-
-    pdf.set_font('Main', '', 7)
-    pdf.set_text_color(*DARK)
+    rows_sorted = sorted(detail_rows, key=lambda r: (r.get("Redemption Date") or date_cls.min))
+    pdf.set_font('Main', '', 7); pdf.set_text_color(*DARK)
     for i, row in enumerate(rows_sorted):
         fill = (i % 2 == 1)
         if fill:
             pdf.set_fill_color(*LIGHT)
-
-        gl = row.get('Gain/Loss')
+        # Scheme is truncated by ACTUAL rendered width, not char count.
+        # Leave 1mm of padding so the text never touches the cell border.
+        scheme_txt = _truncate_to_width(
+            pdf, row.get('Scheme', ''), widths[0] - 1.0
+        )
         vals = [
-            str(row.get('Scheme', ''))[:40],
+            scheme_txt,
             str(row.get('Folio', '')),
-            _fmt_date(row.get('Buy Date')),
-            _fmt_units(row.get('Buy Units')),
-            _fmt_units(row.get('Buy NAV')),
-            _fmt_inr(row.get('Buy Value')),
-            _fmt_date(row.get('Sale Date')),
-            _fmt_units(row.get('Sell Units')),
-            _fmt_units(row.get('Sell NAV')),
-            _fmt_inr(row.get('Sell Value')),
-            _fmt_inr(gl),
+            _fmt_date(row.get('Purchase Date')),
+            _fmt_units(row.get('Purchase Units')),
+            _fmt_units(row.get('Purchase NAV')),
+            _fmt_inr(row.get('Purchase Value')),
+            _fmt_date(row.get('Redemption Date')),
+            _fmt_units(row.get('Redemption Units')),
+            _fmt_units(row.get('Redemption NAV')),
+            _fmt_inr(row.get('Redemption Value')),
+            str(row.get('Holding Days', '')),
+            str(row.get('Type', '')),
+            _fmt_inr(row.get('Gain/Loss')),
         ]
         for v, w, a in zip(vals, widths, aligns):
             pdf.cell(w, row_h, v, border=1, align=a, fill=fill)
         pdf.ln()
 
-    pdf.set_font('Main', 'B', 7)
-    pdf.set_fill_color(200, 200, 200)
-    total_vals = ['TOTAL', '', '', '', '', _fmt_inr(total_buy), '', '', '', _fmt_inr(total_sale), _fmt_inr(total_gain)]
+    pdf.set_font('Main', 'B', 7); pdf.set_fill_color(200, 200, 200)
+    total_vals = ['TOTAL', '', '', '', '', _fmt_inr(total_buy), '', '', '', _fmt_inr(total_sale),
+                  '', '', _fmt_inr(total_gain)]
     for v, w, a in zip(total_vals, widths, aligns):
         pdf.cell(w, row_h, v, border=1, align=a, fill=True)
     pdf.ln(8)
 
-    pdf.set_font('Main', '', 7)
-    pdf.set_text_color(*GREY)
-    pdf.cell(PAGE_W, 4, f'Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}',
+    pdf.set_font('Main', '', 7); pdf.set_text_color(*GREY)
+    pdf.cell(PAGE_W, 4,
+             f'Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}  |  '
+             f'Assumes equity taxation (STCG 20%, LTCG 12.5% above 1.25L exemption). '
+             f'Indicative only - consult your tax advisor.',
              align='C', new_x="LMARGIN", new_y="NEXT")
 
     return bytes(pdf.output())
@@ -1015,29 +1079,45 @@ def generate_capital_gain_html(
 ) -> str:
     """Generate self-contained HTML for Capital Gain Report (email-friendly)."""
     def fi(v):
-        try:
-            return f"₹{float(v):,.2f}"
-        except:
-            return "N/A"
+        try:    return f"₹{float(v):,.2f}"
+        except: return "N/A"
+    def fd(v):
+        if v is None: return ""
+        try:    return v.strftime("%d-%m-%Y")
+        except: return str(v)
 
     gain_cls = "positive" if total_gain >= 0 else "negative"
+
+    # Tax split
+    stcg = sum(r.get("Gain/Loss", 0) for r in detail_rows if (r.get("Holding Days") or 0) < 365)
+    ltcg = sum(r.get("Gain/Loss", 0) for r in detail_rows if (r.get("Holding Days") or 0) >= 365)
+    LTCG_EXEMPTION = 125000
+    ltcg_taxable = max(ltcg - LTCG_EXEMPTION, 0)
+
+    pre_2018 = [r for r in detail_rows
+                if r.get("Purchase Date") and r["Purchase Date"] < date_cls(2018, 1, 31)]
 
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Capital Gain Report - {client_name}</title>
 <style>
-  @page {{ size: A4; margin: 12mm; }}
+  @page {{ size: A4 landscape; margin: 12mm; }}
   body {{ font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #2c3e50; margin: 0; padding: 15px; }}
   h1 {{ font-size: 17px; text-align: center; margin: 0 0 3px 0; }}
   .meta {{ text-align: center; color: #7f8c8d; font-size: 9px; margin-bottom: 12px; }}
-  .metrics {{ display: flex; gap: 10px; margin-bottom: 14px; }}
+  .metrics {{ display: flex; gap: 10px; margin-bottom: 8px; }}
   .metric-box {{ flex: 1; background: #ecf0f1; padding: 8px; border-radius: 4px; text-align: center; }}
   .metric-box .label {{ font-size: 8px; color: #7f8c8d; text-transform: uppercase; }}
   .metric-box .value {{ font-size: 14px; font-weight: bold; margin-top: 2px; }}
+  .tax-row {{ display: flex; gap: 10px; margin-bottom: 14px; }}
+  .tax-box {{ flex: 1; background: #eaf2f8; padding: 6px 8px; border-radius: 4px; text-align: center; border-left: 3px solid #2980b9; }}
+  .tax-box .label {{ font-size: 8px; color: #7f8c8d; text-transform: uppercase; }}
+  .tax-box .value {{ font-size: 12px; font-weight: bold; margin-top: 2px; color: #2c3e50; }}
   .positive {{ color: #27ae60; }}
   .negative {{ color: #c0392b; }}
-  table {{ border-collapse: collapse; width: 100%; margin-bottom: 10px; font-size: 9px; }}
-  th {{ background: #2980b9; color: white; padding: 4px 5px; text-align: center; font-weight: bold; }}
-  td {{ padding: 3px 5px; border: 1px solid #dcdcdc; }}
+  .warn {{ background: #fdecea; border-left: 4px solid #c0392b; padding: 8px; font-size: 9px; margin-bottom: 12px; border-radius: 3px; }}
+  table {{ border-collapse: collapse; width: 100%; margin-bottom: 10px; font-size: 8.5px; }}
+  th {{ background: #2980b9; color: white; padding: 4px 4px; text-align: center; font-weight: bold; }}
+  td {{ padding: 3px 4px; border: 1px solid #dcdcdc; }}
   tr:nth-child(even) {{ background: #f7fafc; }}
   .total-row {{ font-weight: bold; background: #e0e0e0 !important; }}
   .right {{ text-align: right; }}
@@ -1046,47 +1126,62 @@ def generate_capital_gain_html(
 </style></head><body>
 <h1>Capital Gain Report</h1>
 <div class="meta">
-  {client_name} &nbsp;|&nbsp; PAN: {pan or "N/A"} &nbsp;|&nbsp; Code: {client_code} &nbsp;|&nbsp; FY: {fy_str}
+  {client_name} &nbsp;|&nbsp; PAN: {pan or "N/A"} &nbsp;|&nbsp; Code: {client_code} &nbsp;|&nbsp; FY: {fy_str}<br>
+  Scope: CAMS folios only. KFinTech redemption tracking not yet implemented.
 </div>
 <div class="metrics">
-  <div class="metric-box"><div class="label">Total Buy</div><div class="value">{fi(total_buy)}</div></div>
-  <div class="metric-box"><div class="label">Total Sale</div><div class="value">{fi(total_sale)}</div></div>
+  <div class="metric-box"><div class="label">Total Purchase</div><div class="value">{fi(total_buy)}</div></div>
+  <div class="metric-box"><div class="label">Total Redemption</div><div class="value">{fi(total_sale)}</div></div>
   <div class="metric-box"><div class="label">Gain / Loss</div><div class="value {gain_cls}">{fi(total_gain)}</div></div>
 </div>
-<table>
+<div class="tax-row">
+  <div class="tax-box"><div class="label">STCG (held &lt; 12m)</div><div class="value">{fi(stcg)}</div></div>
+  <div class="tax-box"><div class="label">LTCG (held ≥ 12m)</div><div class="value">{fi(ltcg)}</div></div>
+  <div class="tax-box"><div class="label">LTCG Exemption Used</div><div class="value">{fi(min(max(ltcg,0), LTCG_EXEMPTION))}</div></div>
+  <div class="tax-box"><div class="label">Taxable LTCG</div><div class="value">{fi(ltcg_taxable)}</div></div>
+</div>
+"""
+    if pre_2018:
+        html += (
+            f'<div class="warn">⚠️ <strong>{len(pre_2018)} purchase(s) predate 31-Jan-2018.</strong> '
+            f'Grandfathering (FMV) rules are NOT applied — LTCG cost basis may be understated. '
+            f'Verify before filing.</div>'
+        )
+
+    html += """<table>
 <tr>
   <th class="left">Scheme</th>
   <th class="center">Folio</th>
-  <th class="center">Buy Date</th>
-  <th class="right">Buy Units</th>
-  <th class="right">Buy NAV</th>
-  <th class="right">Buy Value</th>
-  <th class="center">Sale Date</th>
-  <th class="right">Sell Units</th>
-  <th class="right">Sell NAV</th>
-  <th class="right">Sell Value</th>
+  <th class="center">Purchase Date</th>
+  <th class="right">Purchase Units</th>
+  <th class="right">Purchase NAV</th>
+  <th class="right">Purchase Value</th>
+  <th class="center">Redemption Date</th>
+  <th class="right">Redemption Units</th>
+  <th class="right">Redemption NAV</th>
+  <th class="right">Redemption Value</th>
+  <th class="center">Holding Days</th>
+  <th class="center">Type</th>
   <th class="right">Gain/Loss</th>
 </tr>
 """
 
-    for r in sorted(detail_rows, key=lambda x: x.get('Sale Date') or '', reverse=True):
+    for r in sorted(detail_rows, key=lambda x: x.get('Redemption Date') or date_cls.min):
         gl = r.get('Gain/Loss')
         gl_cls = "positive" if gl and gl >= 0 else ("negative" if gl and gl < 0 else "")
-        
-        buy_date = r['Buy Date'].strftime('%d-%m-%Y') if r.get('Buy Date') else ''
-        sale_date = r['Sale Date'].strftime('%d-%m-%Y') if r.get('Sale Date') else ''
-        
         html += f"""<tr>
   <td>{r.get('Scheme', '')}</td>
   <td class="center">{r.get('Folio', '')}</td>
-  <td class="center">{buy_date}</td>
-  <td class="right">{r.get('Buy Units', 0):.4f}</td>
-  <td class="right">{r.get('Buy NAV', 0):.4f}</td>
-  <td class="right">{fi(r.get('Buy Value'))}</td>
-  <td class="center">{sale_date}</td>
-  <td class="right">{r.get('Sell Units', 0):.4f}</td>
-  <td class="right">{r.get('Sell NAV', 0):.4f}</td>
-  <td class="right">{fi(r.get('Sell Value'))}</td>
+  <td class="center">{fd(r.get('Purchase Date'))}</td>
+  <td class="right">{r.get('Purchase Units', 0):.4f}</td>
+  <td class="right">{r.get('Purchase NAV', 0):.4f}</td>
+  <td class="right">{fi(r.get('Purchase Value'))}</td>
+  <td class="center">{fd(r.get('Redemption Date'))}</td>
+  <td class="right">{r.get('Redemption Units', 0):.4f}</td>
+  <td class="right">{r.get('Redemption NAV', 0):.4f}</td>
+  <td class="right">{fi(r.get('Redemption Value'))}</td>
+  <td class="center">{r.get('Holding Days', '')}</td>
+  <td class="center">{r.get('Type', '')}</td>
   <td class="right {gl_cls}">{fi(gl)}</td>
 </tr>"""
 
@@ -1095,13 +1190,42 @@ def generate_capital_gain_html(
   <td class="right">{fi(total_buy)}</td>
   <td colspan="3"></td>
   <td class="right">{fi(total_sale)}</td>
+  <td colspan="2"></td>
   <td class="right {gain_cls}">{fi(total_gain)}</td>
 </tr>
 </table>
-<div class="footer">Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}</div>
+<div class="footer">
+  Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")} &nbsp;|&nbsp;
+  Assumes equity taxation (STCG 20%, LTCG 12.5% above ₹1.25L exemption). Indicative only — consult your tax advisor.
+</div>
 </body></html>"""
     return html
 
+
+def _txn_type_label(row) -> str:
+    """
+    Human-readable transaction type. Prefers the `direction` field
+    (IN/OUT/NEUTRAL) which is set for both RTAs, and falls back to the
+    raw trxntype code if direction is missing.
+    """
+    direction = str(row.get('direction', '')).strip().upper()
+    if direction == 'IN':
+        return 'Purchase'
+    if direction == 'OUT':
+        return 'Redemption'
+    if direction == 'NEUTRAL':
+        return 'Reversal'
+
+    raw = str(row.get('trxntype', '')).strip().upper()
+    if not raw:
+        return ''
+    if raw.startswith('R'):
+        return 'Redemption'
+    if raw.startswith('P'):
+        return 'Purchase'
+    if 'SWITCH' in raw:
+        return 'Switch In' if 'IN' in raw else 'Switch Out'
+    return raw
 
 def generate_valuation_html(
     client_name: str,
@@ -1209,8 +1333,21 @@ def generate_valuation_html(
 <td class="right">{fi(total_invested)}</td><td class="right">{fi(total_value)}</td>
 <td class="right {gain_cls}">{fi(total_gain)}</td><td class="right">{total_ret}</td></tr>
 </table>
+"""
 
-<h2>Transactions</h2>"""
+    # Missing-NAV footnote
+    missing = [r for r in summary_rows if r.get('Value') is None]
+    if missing:
+        html += (
+            f'<div style="background:#fdecea;border-left:4px solid #c0392b;'
+            f'padding:8px;font-size:9px;margin-bottom:12px;border-radius:3px;">'
+            f'⚠️ <strong>{len(missing)} of {len(summary_rows)} scheme(s)</strong> have '
+            f'no NAV available for the valuation date. Total Value is understated. '
+            f'Affected: {", ".join(r.get("Scheme","?") for r in missing[:5])}'
+            f'{"..." if len(missing) > 5 else ""}</div>'
+        )
+
+    html += """<h2>Transactions</h2>"""
 
     all_entries = rta_txns.get('CAMS', []) + rta_txns.get('KFinTech', [])
     all_entries.sort(key=lambda e: e['label'])
@@ -1235,7 +1372,7 @@ def generate_valuation_html(
                     price = row.get('td_pop', None)
                 html += f"""<tr>
 <td class="center">{d}</td>
-<td class="left">{row.get('trxntype','')}</td>
+<td class="left">{_txn_type_label(row)}</td>
 <td class="right">{fu(row.get('signed_units',0))}</td>
 <td class="right">{fu(price) if pd.notna(price) else ''}</td>
 <td class="right">{fi(row.get('amount',0))}</td>
@@ -1243,7 +1380,12 @@ def generate_valuation_html(
 
             html += "</table>"
 
-    html += f"""<div class="footer">Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}</div>
+    html += f"""<div class="footer">
+Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}<br>
+Valuations are based on AMFI NAVs as of the valuation date (or latest available)
+and are for information only. Past performance is not indicative of future results.
+Consult your financial advisor before making investment decisions.
+</div>
 </body></html>"""
     return html
 
@@ -1491,7 +1633,7 @@ def generate_valuation_pdf(
 
                 vals = [
                     date_str,
-                    str(row.get('trxntype', '')),
+                    _truncate_to_width(pdf, _txn_type_label(row), t_widths[1] - 1.0),
                     _fmt_units(row.get('signed_units', 0)),
                     _fmt_units(price) if pd.notna(price) else '',
                     _fmt_inr(amount),
@@ -1509,41 +1651,62 @@ def generate_valuation_pdf(
     pdf.cell(PAGE_W, 4,
              f'Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}',
              align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(1)
+    pdf.set_font('Main', '', 6.5)
+    pdf.multi_cell(
+        PAGE_W, 3.5,
+        'Valuations are based on AMFI NAVs as of the valuation date (or latest '
+        'available) and are for information only. Past performance is not '
+        'indicative of future results. Consult your financial advisor before '
+        'making investment decisions.',
+        align='C',
+    )
 
     return bytes(pdf.output())
 
 
 
-def generate_email_body(client_name: str, report_type: str) -> str:
-    """Professional HTML email wrapper — used for both Capital Gain & Valuation emails."""
-    greeting = f"Dear {client_name},"
-    
-    if report_type == "Capital Gain":
-        intro = f"""
-<p>We are pleased to share your <strong>Capital Gain Report</strong> for review. This report details all realized 
-capital gains/losses from your mutual fund investments, calculated using the FIFO (First In First Out) method.</p>
+def generate_email_body(client_name: str, report_type: str,
+                        period_str: str | None = None) -> str:
+    """
+    Professional HTML email wrapper — used for both Capital Gain & Valuation emails.
 
-<p><strong>Report Highlights:</strong></p>
+    period_str: human-readable period label, e.g. "FY 2025-26" or
+                "01-Apr-2026 to 23-Sep-2026". Shown in the header so the
+                recipient knows which report they're looking at without
+                opening the attachment.
+    """
+    greeting = f"Dear {client_name},"
+    period_line = f"<br><strong>Period:</strong> {period_str}" if period_str else ""
+
+    if report_type == "Capital Gain":
+        intro = """
+<p>Please find attached your <strong>Capital Gain Report</strong>. This report
+details realized capital gains/losses on your mutual fund redemptions, computed
+using the <strong>FIFO (First In, First Out)</strong> cost-basis method.</p>
+
+<p><strong>What's in the report:</strong></p>
 <ul>
-    <li>Summary of all buy and sell transactions</li>
-    <li>Cost basis and realized gains/losses per transaction</li>
-    <li>Useful for income tax filing and investment tracking</li>
+    <li>Purchase and redemption details for every matched lot</li>
+    <li>STCG / LTCG classification by holding period</li>
+    <li>Realized gain/loss per transaction</li>
+    <li>Tax summary (equity assumption)</li>
 </ul>
 """
     else:  # Valuation
-        intro = f"""
-<p>We are pleased to share your <strong>Portfolio Valuation Report</strong> for review. This report provides a 
-comprehensive snapshot of your mutual fund holdings, current valuations, and investment performance as of the 
-valuation date mentioned in the report.</p>
+        intro = """
+<p>Please find attached your <strong>Portfolio Valuation Report</strong>. This
+report gives a snapshot of your mutual fund holdings, current valuations, and
+investment performance as of the valuation date.</p>
 
-<p><strong>Report Highlights:</strong></p>
+<p><strong>What's in the report:</strong></p>
 <ul>
-    <li>Scheme-wise investment summary and current NAV-based valuations</li>
-    <li>Gain/Loss analysis across all holdings</li>
-    <li>Detailed transaction history for each holding</li>
+    <li>Scheme-wise investment summary with current valuations</li>
+    <li>Gain/loss analysis across holdings</li>
+    <li>Detailed transaction history for the selected period</li>
 </ul>
 """
-    
+
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -1551,98 +1714,39 @@ valuation date mentioned in the report.</p>
     <style>
         body {{
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            margin: 0;
-            padding: 20px;
+            line-height: 1.6; color: #333; margin: 0; padding: 20px;
             background-color: #f9f9f9;
         }}
         .email-container {{
-            max-width: 700px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
+            max-width: 700px; margin: 0 auto; background: white;
+            padding: 30px; border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }}
-        .header {{
-            border-bottom: 3px solid #2980b9;
-            padding-bottom: 15px;
-            margin-bottom: 20px;
-        }}
-        .header h2 {{
-            color: #2980b9;
-            margin: 0;
-            font-size: 24px;
-        }}
-        .greeting {{
-            font-size: 16px;
-            color: #2c3e50;
-            margin-bottom: 15px;
-        }}
+        .header {{ border-bottom: 3px solid #2980b9; padding-bottom: 15px; margin-bottom: 20px; }}
+        .header h2 {{ color: #2980b9; margin: 0; font-size: 24px; }}
+        .greeting {{ font-size: 16px; color: #2c3e50; margin-bottom: 15px; }}
         .intro-section {{
-            background: #ecf0f1;
-            padding: 15px;
-            border-left: 4px solid #2980b9;
-            margin: 20px 0;
-            border-radius: 4px;
+            background: #ecf0f1; padding: 15px;
+            border-left: 4px solid #2980b9; margin: 20px 0; border-radius: 4px;
         }}
-        .intro-section p {{
-            margin: 10px 0;
-            color: #2c3e50;
-            font-size: 14px;
-        }}
-        .intro-section ul {{
-            margin: 10px 0;
-            padding-left: 20px;
-            color: #2c3e50;
-            font-size: 14px;
-        }}
-        .intro-section li {{
-            margin: 8px 0;
-        }}
+        .intro-section p, .intro-section li {{ color: #2c3e50; font-size: 14px; }}
+        .intro-section ul {{ margin: 10px 0; padding-left: 20px; }}
         .attachment-note {{
-            background: #d5f4e6;
-            border-left: 4px solid #27ae60;
-            padding: 15px;
-            margin: 25px 0;
-            border-radius: 4px;
+            background: #d5f4e6; border-left: 4px solid #27ae60;
+            padding: 15px; margin: 25px 0; border-radius: 4px;
         }}
-        .attachment-note strong {{
-            color: #27ae60;
-        }}
+        .attachment-note strong {{ color: #27ae60; }}
         .feedback-section {{
-            background: #fff3cd;
-            border-left: 4px solid #f39c12;
-            padding: 15px;
-            margin: 25px 0;
-            border-radius: 4px;
+            background: #fff3cd; border-left: 4px solid #f39c12;
+            padding: 15px; margin: 25px 0; border-radius: 4px;
         }}
-        .feedback-section h3 {{
-            color: #e67e22;
-            margin-top: 0;
-            font-size: 16px;
-        }}
-        .feedback-section p {{
-            margin: 8px 0;
-            color: #7d6608;
-            font-size: 14px;
-        }}
+        .feedback-section h3 {{ color: #e67e22; margin-top: 0; font-size: 16px; }}
+        .feedback-section p {{ margin: 8px 0; color: #7d6608; font-size: 14px; }}
         .footer {{
-            border-top: 1px solid #ddd;
-            padding-top: 20px;
-            margin-top: 30px;
-            color: #7f8c8d;
-            font-size: 12px;
+            border-top: 1px solid #ddd; padding-top: 20px; margin-top: 30px;
+            color: #7f8c8d; font-size: 12px;
         }}
-        .signature {{
-            margin-top: 20px;
-            color: #2c3e50;
-        }}
-        .report-attached {{
-            color: #27ae60;
-            font-weight: bold;
-        }}
+        .signature {{ margin-top: 20px; color: #2c3e50; }}
     </style>
 </head>
 <body>
@@ -1650,55 +1754,50 @@ valuation date mentioned in the report.</p>
         <div class="header">
             <h2>📊 {report_type} Report</h2>
         </div>
-        
+
         <div class="greeting">
-            {greeting}
+            {greeting}{period_line}
         </div>
-        
+
         <div class="intro-section">
             {intro}
         </div>
-        
+
         <div class="attachment-note">
             <strong>✓ Report Attached</strong><br>
-            Your <strong>{report_type} Report</strong> is attached below as a PDF file. 
-            You can download, print, or save it for your records.
+            Your <strong>{report_type} Report</strong> is attached to this email
+            as a PDF. You can download, print, or save it for your records.
         </div>
-        
+
         <div class="feedback-section">
-            <h3>⏰ Action Required</h3>
+            <h3>⏰ Please Review Within 24–48 Hours</h3>
             <p>
-                Please review the attached report carefully. If you notice any discrepancies, 
-                errors in transaction details, or have any questions, <strong>please revert within 24-48 hours</strong>.
-            </p>
-            <p>
-                This will help us ensure accuracy in your portfolio records and make any necessary corrections 
-                at the earliest.
+                Kindly review the attached report carefully. If you notice any
+                discrepancy — a missing transaction, incorrect folio number, or
+                a valuation that doesn't match your records — please reply to
+                this email within 24–48 hours so we can correct it.
             </p>
         </div>
-        
-        <p style="color: #2c3e50; margin: 20px 0;">
-            <strong>What to Look For:</strong>
-        </p>
+
+        <p style="color: #2c3e50; margin: 20px 0;"><strong>What to check:</strong></p>
         <ul style="color: #2c3e50; margin: 10px 0;">
-            <li>Verify all folio numbers and scheme names</li>
-            <li>Check transaction dates and amounts</li>
-            <li>Confirm NAV values and current holdings</li>
-            <li>Review valuation dates and calculation methods</li>
+            <li>Folio numbers and scheme names</li>
+            <li>Transaction dates, units, and amounts</li>
+            <li>NAV values used and valuation date</li>
+            <li>For Capital Gain reports: purchase and redemption dates per matched lot</li>
         </ul>
-        
+
         <div class="footer">
             <p>
-                <strong>Contact Information:</strong><br>
-                If you have any questions or need clarification on any aspect of this report, 
-                please don't hesitate to reach out to us.
+                <strong>Contact:</strong> If you have any questions about this
+                report, please reply to this email.
             </p>
             <p>
-                <strong>Report Generated:</strong> {datetime.now().strftime("%d %B %Y at %I:%M %p")}<br>
-                This is an automated report. For support, contact our team.
+                <strong>Generated:</strong> {datetime.now().strftime("%d %B %Y at %I:%M %p")}<br>
+                This is an automated report from the Portfolio Intelligence platform.
             </p>
             <p style="margin-top: 20px; color: #34495e;">
-                Thank you for your trust in our services.
+                Thank you for your continued trust.
             </p>
             <div class="signature">
                 <strong>Best Regards,</strong><br>
@@ -1956,6 +2055,7 @@ def render_email_report_button(
     client_name: str,
     report_type: str,  # "Capital Gain" or "Valuation"
     fy_str: str = None,
+    period_str: str = None,
     html_content: str = None,
     pdf_content: bytes = None,
     key_prefix: str = "email",
@@ -2030,7 +2130,7 @@ def render_email_report_button(
                 success, msg = mail_sync.send_report_email(
                     to_email=recipient_email,
                     subject=subject,
-                    html_body=generate_email_body(client_name, report_type),
+                    html_body=generate_email_body(client_name, report_type, period_str),
                     pdf_bytes=pdf_content,
                     pdf_filename=filename,
                     cc_emails=cc_list,
@@ -6782,9 +6882,25 @@ elif mode == "📊 Reports":
         sm_df = pd.DataFrame(all_scheme_rows)
         sm_df = sm_df.sort_values('Invested', ascending=False, na_position='last').reset_index(drop=True)
 
+        # Count rows where NAV lookup failed — Value is NaN
+        missing_mask = sm_df["Value"].isna()
+        n_missing    = int(missing_mask.sum())
+
         t_inv  = sm_df['Invested'].sum()
-        t_val  = sm_df['Value'].sum()
+        t_val  = sm_df['Value'].sum(skipna=True)
         t_gain = t_val - t_inv if t_val is not None else None
+
+        if n_missing:
+            st.error(
+                f"⚠️ **{n_missing} of {len(sm_df)} scheme(s)** have no NAV "
+                f"available for **{val_iso}**. Total Value is **understated** "
+                f"by the value of these holdings. Affected schemes:"
+            )
+            st.dataframe(
+                sm_df.loc[missing_mask, ["Scheme", "Folio", "RTA", "Invested"]]
+                       .rename(columns={"Invested": "Invested (₹)"}),
+                width="stretch", hide_index=True,
+            )
 
         m1, m2, m3 = st.columns(3)
         m1.metric("Total Invested", format_aum(t_inv))
@@ -6917,21 +7033,42 @@ elif mode == "📊 Reports":
             show_investor=(report_scope == "family"),
         )
 
-        if pdf_bytes:
+        dl_col1, dl_col2 = st.columns(2)
+
+        with dl_col1:
+            if pdf_bytes:
+                st.download_button(
+                    label="📑 Download PDF",
+                    data=pdf_bytes,
+                    file_name=f"Valuation_{report_display_name.replace(' ', '_')}_{selected_fy}.pdf",
+                    mime="application/pdf",
+                    width="stretch",
+                )
+            else:
+                st.warning("PDF generation unavailable (fpdf2/font missing).")
+
+        with dl_col2:
+            csv_bytes = sm_df[summary_cols].to_csv(index=False).encode("utf-8")
             st.download_button(
-                label="📑 Download PDF",
-                data=pdf_bytes,
-                file_name=f"Valuation_{report_display_name.replace(' ', '_')}_{selected_fy}.pdf",
-                mime="application/pdf",
+                label="📊 Download CSV",
+                data=csv_bytes,
+                file_name=f"Valuation_{report_display_name.replace(' ', '_')}_{val_iso}.csv",
+                mime="text/csv",
                 width="stretch",
             )
-        else:
-            st.warning("PDF generation unavailable (fpdf2/font missing).")
+
+        st.caption(
+            "ℹ️ Portfolio valuations are based on AMFI NAVs as of the valuation date "
+            "(or latest available) and are for information only. Past performance is "
+            "not indicative of future results. Consult your financial advisor before "
+            "making investment decisions."
+        )
 
         render_email_report_button(
             client_code=report_email_lookup_code,
             client_name=report_display_name,
             report_type="Valuation",
+            period_str=f"{from_iso} to {val_iso}",
             html_content=html_content,
             pdf_content=pdf_bytes,
             key_prefix="val_email",
@@ -6973,6 +7110,28 @@ elif mode == "📊 Reports":
             cgr_from, cgr_to = date_cls(fy_start_year, 4, 1), date_cls(fy_start_year + 1, 3, 31)
         else:
             cgr_from = cgr_to = None
+
+                # ── KFinTech coverage warning ──
+        with get_conn() as conn:
+            if is_minor:
+                kfin_count = conn.execute(
+                    "SELECT COUNT(*) FROM kfin_mfsd211_folio "
+                    "WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                    (name_clean,)
+                ).fetchone()[0]
+            else:
+                kfin_count = conn.execute(
+                    "SELECT COUNT(*) FROM kfin_mfsd211_folio "
+                    "WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
+                    (str(match_pan).upper(), name_clean)
+                ).fetchone()[0]
+
+        if kfin_count:
+            st.warning(
+                f"⚠️ This client has **{kfin_count} KFinTech folio(s)** which are "
+                f"**not included** in this Capital Gain Report. Figures below are "
+                f"**CAMS-only**. KFinTech redemption tracking is not yet implemented."
+            )
 
         def _extract_match_dates(m):
             """
@@ -7039,24 +7198,27 @@ elif mode == "📊 Reports":
                     continue
 
                 for m in matches:
-                    buy_date, sale_date = _extract_match_dates(m)
-                    sd = sale_date.date() if sale_date is not None else None
+                    buy_date = m.buy_date
+                    sale_date = m.sell_date
+                    sd = sale_date if isinstance(sale_date, date_cls) else None
 
                     if cgr_from and sd and not (cgr_from <= sd <= cgr_to):
                         continue
 
                     detail_rows.append({
-                        "Scheme": scheme_name,
-                        "Folio": folio_no,
-                        "Buy Date": buy_date.date() if buy_date is not None else None,
-                        "Buy Units": m.units,
-                        "Buy NAV": (m.cost / m.units) if m.units else 0,
-                        "Buy Value": m.cost,
-                        "Sale Date": sd,
-                        "Sell Units": m.units,
-                        "Sell NAV": (m.proceeds / m.units) if m.units else 0,
-                        "Sell Value": m.proceeds,
-                        "Gain/Loss": m.gain,
+                        "Scheme":           scheme_name,
+                        "Folio":            folio_no,
+                        "Purchase Date":    buy_date,
+                        "Purchase Units":   m.units,
+                        "Purchase NAV":     (m.cost / m.units) if m.units else 0,
+                        "Purchase Value":   m.cost,
+                        "Redemption Date":  sale_date,
+                        "Redemption Units": m.units,
+                        "Redemption NAV":   (m.proceeds / m.units) if m.units else 0,
+                        "Redemption Value": m.proceeds,
+                        "Holding Days":     m.holding_days,
+                        "Type":             "LTCG" if m.is_ltcg else "STCG",
+                        "Gain/Loss":        m.gain,
                     })
 
         if not detail_rows:
@@ -7064,9 +7226,19 @@ elif mode == "📊 Reports":
             st.stop()
 
         detail_df = pd.DataFrame(detail_rows)
-        d_buy = detail_df["Buy Value"].sum()
-        d_sale = detail_df["Sell Value"].sum()
+        d_buy  = detail_df["Purchase Value"].sum()
+        d_sale = detail_df["Redemption Value"].sum()
         d_gain = d_sale - d_buy
+
+        # ── Tax summary: STCG / LTCG split ──
+        stcg_rows = [r for r in detail_rows if (r.get("Holding Days") or 0) < 365]
+        ltcg_rows = [r for r in detail_rows if (r.get("Holding Days") or 0) >= 365]
+        stcg_gain = sum(r["Gain/Loss"] for r in stcg_rows)
+        ltcg_gain = sum(r["Gain/Loss"] for r in ltcg_rows)
+
+        LTCG_EXEMPTION = 125000
+        ltcg_exempt_used = min(max(ltcg_gain, 0), LTCG_EXEMPTION)
+        ltcg_taxable     = max(ltcg_gain - LTCG_EXEMPTION, 0)
 
         # ═══════════════════════════════════════════════
         #  REPORT HEADER
@@ -7087,28 +7259,55 @@ elif mode == "📊 Reports":
         #  METRICS
         # ═══════════════════════════════════════════════
         m1, m2, m3 = st.columns(3)
-        m1.metric("Total Buy", format_currency(d_buy))
-        m2.metric("Total Sale", format_currency(d_sale))
+        m1.metric("Total Purchase", format_currency(d_buy))
+        m2.metric("Total Redemption", format_currency(d_sale))
         m3.metric("Total Gain/Loss", format_currency(d_gain))
+
+        st.markdown("#### 🧾 Tax Summary (Equity assumption)")
+        st.caption(
+            "Assumes equity taxation (STCG 20%, LTCG 12.5% above ₹1.25L exemption). "
+            "Debt / hybrid funds are taxed at slab rate — use the Capital Gains tab for those. "
+            "This is indicative only; confirm with your CA."
+        )
+        ts1, ts2, ts3, ts4 = st.columns(4)
+        ts1.metric("STCG (held < 12m)",       format_currency(stcg_gain))
+        ts2.metric("LTCG (held ≥ 12m)",       format_currency(ltcg_gain))
+        ts3.metric("LTCG Exemption Used",     format_currency(ltcg_exempt_used))
+        ts4.metric("Taxable LTCG",            format_currency(ltcg_taxable))
+
+        # ── Grandfathering warning (pre-31-Jan-2018 purchases) ──
+        GRANDFATHER_CUTOFF = date_cls(2018, 1, 31)
+        pre_2018 = [r for r in detail_rows
+                    if r.get("Purchase Date") and r["Purchase Date"] < GRANDFATHER_CUTOFF]
+        if pre_2018:
+            st.warning(
+                f"⚠️ **{len(pre_2018)} purchase(s) predate 31-Jan-2018.** "
+                f"Grandfathering rules (FMV as of 31-Jan-2018) are **not** applied — "
+                f"LTCG cost basis may be **understated** for those rows. "
+                f"Verify before filing."
+            )
 
         # ═══════════════════════════════════════════════
         #  DETAIL TABLE
         # ═══════════════════════════════════════════════
-        cols = ["Scheme", "Folio", "Buy Date", "Buy Units", "Buy NAV", "Buy Value",
-                "Sale Date", "Sell Units", "Sell NAV", "Sell Value", "Gain/Loss"]
+        cols = ["Scheme", "Folio",
+                "Purchase Date", "Purchase Units", "Purchase NAV", "Purchase Value",
+                "Redemption Date", "Redemption Units", "Redemption NAV", "Redemption Value",
+                "Holding Days", "Type", "Gain/Loss"]
 
         st.dataframe(
-            detail_df[cols].sort_values("Sale Date", ascending=False, na_position="last"),
+            detail_df[cols].sort_values("Redemption Date", ascending=True, na_position="last"),
             width="stretch",
             hide_index=True,
             column_config={
-                "Buy Units": st.column_config.NumberColumn(format="%.4f"),
-                "Buy NAV": st.column_config.NumberColumn(format="₹ %.4f"),
-                "Buy Value": st.column_config.NumberColumn(format="₹ %.2f"),
-                "Sell Units": st.column_config.NumberColumn(format="%.4f"),
-                "Sell NAV": st.column_config.NumberColumn(format="₹ %.4f"),
-                "Sell Value": st.column_config.NumberColumn(format="₹ %.2f"),
-                "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Purchase Units":   st.column_config.NumberColumn(format="%.4f"),
+                "Purchase NAV":     st.column_config.NumberColumn(format="₹ %.4f"),
+                "Purchase Value":   st.column_config.NumberColumn(format="₹ %.2f"),
+                "Redemption Units": st.column_config.NumberColumn(format="%.4f"),
+                "Redemption NAV":   st.column_config.NumberColumn(format="₹ %.4f"),
+                "Redemption Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Holding Days":     st.column_config.NumberColumn(format="%d"),
+                "Gain/Loss":        st.column_config.NumberColumn(format="₹ %.2f"),
             }
         )
 
@@ -7156,6 +7355,7 @@ elif mode == "📊 Reports":
             client_name=client_name,
             report_type="Capital Gain",
             fy_str=cgr_fy,
+            period_str=f"FY {cgr_fy}" if cgr_fy != "All Time" else "All Time",
             html_content=html_content,
             pdf_content=pdf_bytes,
             key_prefix="cg_email",
