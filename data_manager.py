@@ -1989,6 +1989,9 @@ def parse_kfin_mfsd205_brokerage(file, replace: bool) -> tuple[bool, str, dict]:
             inserted = after - before
             updated = len(rows) - inserted
 
+    if inserted or updated:
+        bump()
+
     msg = f"Imported {inserted} new | Updated {updated} existing | Skipped: {skipped}"
     return True, msg, {"rows": inserted, "skipped": skipped, "updated": updated}
 

@@ -3201,7 +3201,7 @@ with st.sidebar:
     st.markdown("## 📊 MFD Portfolio")
     st.divider()
 
-    nav_options = ["📊 Dashboard", "👥 Clients", "📋 Transactions", "💰 Brokerage Report", "📊 Reports", "🧮 Capital Gains", "⚙️ Admin Panel"]
+    nav_options = ["📊 Dashboard", "👥 Clients", "📋 Transactions", "💰 Brokerages & Sub Brokers Report", "📊 Reports", "🧮 Capital Gains", "⚙️ Admin Panel"]
 
     if "nav_mode" not in st.session_state or st.session_state["nav_mode"] not in nav_options:
         st.session_state["nav_mode"] = "📊 Dashboard"
@@ -3222,6 +3222,1227 @@ with st.sidebar:
     st.caption("Minimal UI v2.0")
 
 mode = st.session_state.get("nav_mode", "📊 Dashboard")
+
+# ══════════════════════════════════════════════════════════════
+# SUB-BROKER SCHEMA
+# ══════════════════════════════════════════════════════════════
+def ensure_sub_broker_tables() -> None:
+    with get_conn() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sub_brokers (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                name         TEXT NOT NULL,
+                email        TEXT,
+                phone        TEXT,
+                role         TEXT NOT NULL DEFAULT 'Sub-Broker',
+                sharing_pct  REAL NOT NULL DEFAULT 50.0,
+                is_active    INTEGER DEFAULT 1,
+                notes        TEXT,
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sub_broker_clients (
+                sub_broker_id INTEGER NOT NULL,
+                client_code   TEXT NOT NULL UNIQUE,
+                assigned_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (sub_broker_id, client_code)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sub_broker_payouts (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                sub_broker_id      INTEGER NOT NULL,
+                period_type        TEXT NOT NULL,
+                period_key         TEXT NOT NULL,
+                brokerage_generated REAL NOT NULL DEFAULT 0,
+                share_amount       REAL NOT NULL DEFAULT 0,
+                transferred_amount REAL NOT NULL DEFAULT 0,
+                transfer_date      TEXT,
+                transfer_reference TEXT,
+                transfer_notes     TEXT,
+                status             TEXT NOT NULL DEFAULT 'pending',
+                created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(sub_broker_id, period_type, period_key)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sbc_sub    ON sub_broker_clients(sub_broker_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sbc_client ON sub_broker_clients(client_code)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sbp_sub    ON sub_broker_payouts(sub_broker_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sbp_period ON sub_broker_payouts(period_type, period_key)")
+
+
+# ══════════════════════════════════════════════════════════════
+# SUB-BROKER CRUD
+# ══════════════════════════════════════════════════════════════
+def list_sub_brokers() -> pd.DataFrame:
+    with get_conn() as conn:
+        return pd.read_sql("""
+            SELECT sb.id, sb.name, sb.email, sb.phone, sb.role,
+                   sb.sharing_pct, sb.is_active, sb.notes, sb.created_at,
+                   (SELECT COUNT(*) FROM sub_broker_clients sbc
+                    WHERE sbc.sub_broker_id = sb.id) AS client_count
+            FROM sub_brokers sb
+            ORDER BY sb.is_active DESC, sb.name
+        """, conn)
+
+
+def create_sub_broker(name: str, email: str, phone: str,
+                      sharing_pct: float, notes: str = "") -> int:
+    with get_conn() as conn:
+        cur = conn.execute("""
+            INSERT INTO sub_brokers (name, email, phone, role, sharing_pct, notes)
+            VALUES (?, ?, ?, 'Sub-Broker', ?, ?)
+        """, (name.strip(), email.strip() or None, phone.strip() or None,
+              float(sharing_pct), notes.strip() or None))
+        return cur.lastrowid
+
+
+def update_sub_broker(sb_id: int, **kwargs) -> None:
+    allowed = {"name", "email", "phone", "sharing_pct", "is_active", "notes"}
+    fields = {k: v for k, v in kwargs.items() if k in allowed}
+    if not fields:
+        return
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    with get_conn() as conn:
+        conn.execute(f"UPDATE sub_brokers SET {set_clause} WHERE id = ?",
+                     list(fields.values()) + [sb_id])
+
+
+def delete_sub_broker(sb_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM sub_broker_clients WHERE sub_broker_id = ?", (sb_id,))
+        conn.execute("DELETE FROM sub_broker_payouts WHERE sub_broker_id = ?", (sb_id,))
+        conn.execute("DELETE FROM sub_brokers WHERE id = ?", (sb_id,))
+
+
+def assign_clients_to_sub_broker(sb_id: int, client_codes: list) -> None:
+    with get_conn() as conn:
+        for cc in client_codes:
+            conn.execute("DELETE FROM sub_broker_clients WHERE client_code = ?", (cc,))
+            conn.execute("""
+                INSERT INTO sub_broker_clients (sub_broker_id, client_code)
+                VALUES (?, ?)
+            """, (sb_id, cc))
+
+
+def unassign_client_from_sub_broker(sb_id: int, client_code: str) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM sub_broker_clients WHERE sub_broker_id = ? AND client_code = ?",
+            (sb_id, client_code)
+        )
+
+
+def get_clients_for_sub_broker(sb_id: int) -> pd.DataFrame:
+    with get_conn() as conn:
+        return pd.read_sql("""
+            SELECT sbc.client_code,
+                   COALESCE(
+                       NULLIF(TRIM(COALESCE(bcm.primary_holder_first_name,'') || ' ' ||
+                                   COALESCE(bcm.primary_holder_last_name,'')), ''),
+                       sbc.client_code
+                   ) AS name,
+                   bcm.primary_holder_pan AS pan,
+                   bcm.indian_mobile_no   AS mobile,
+                   bcm.email,
+                   sbc.assigned_at
+            FROM sub_broker_clients sbc
+            LEFT JOIN bse_client_master bcm ON sbc.client_code = bcm.client_code
+            WHERE sbc.sub_broker_id = ?
+            ORDER BY name
+        """, conn, params=(sb_id,))
+
+
+def get_client_to_sub_broker_map() -> dict:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT client_code, sub_broker_id FROM sub_broker_clients"
+        ).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def get_folio_to_client_code_map(_v: int) -> dict:
+    """Map folio_id → client_code via PAN matching (adults + minor/guardian)."""
+    with get_conn() as conn:
+        cams = pd.read_sql("""
+            SELECT foliochk AS folio, UPPER(TRIM(pan_no)) AS pan
+            FROM cams_wbr9_folio
+            WHERE pan_no IS NOT NULL AND TRIM(pan_no) != ''
+            UNION ALL
+            SELECT foliochk AS folio, UPPER(TRIM(guard_pan)) AS pan
+            FROM cams_wbr9_folio
+            WHERE guard_pan IS NOT NULL AND TRIM(guard_pan) != ''
+        """, conn)
+        kfin = pd.read_sql("""
+            SELECT folio AS folio, UPPER(TRIM(pan_number)) AS pan
+            FROM kfin_mfsd211_folio
+            WHERE pan_number IS NOT NULL AND TRIM(pan_number) != ''
+        """, conn)
+        clients = pd.read_sql("""
+            SELECT client_code,
+                   UPPER(TRIM(primary_holder_pan)) AS pan
+            FROM bse_client_master
+            WHERE primary_holder_pan IS NOT NULL AND TRIM(primary_holder_pan) != ''
+            UNION ALL
+            SELECT client_code,
+                   UPPER(TRIM(guardian_pan)) AS pan
+            FROM bse_client_master
+            WHERE guardian_pan IS NOT NULL AND TRIM(guardian_pan) != ''
+        """, conn)
+
+    folios  = pd.concat([cams, kfin], ignore_index=True).drop_duplicates("folio")
+    clients = clients.drop_duplicates("pan", keep="first")
+    merged  = folios.merge(clients, on="pan", how="left")
+    return dict(zip(merged["folio"].astype(str), merged["client_code"]))
+
+
+# ══════════════════════════════════════════════════════════════
+# SUB-BROKER PAYOUT RECORDS
+# ══════════════════════════════════════════════════════════════
+def list_payouts(sub_broker_id: int | None = None) -> pd.DataFrame:
+    q = """
+        SELECT p.id, p.sub_broker_id, sb.name AS sub_broker_name,
+               p.period_type, p.period_key,
+               p.brokerage_generated, p.share_amount,
+               p.transferred_amount, p.transfer_date,
+               p.transfer_reference, p.transfer_notes,
+               p.status, p.created_at, p.updated_at
+        FROM sub_broker_payouts p
+        LEFT JOIN sub_brokers sb ON p.sub_broker_id = sb.id
+    """
+    params = []
+    if sub_broker_id is not None:
+        q += " WHERE p.sub_broker_id = ?"
+        params.append(sub_broker_id)
+    q += " ORDER BY p.period_key DESC, sb.name"
+    with get_conn() as conn:
+        return pd.read_sql(q, conn, params=params)
+
+
+def record_payout(sb_id: int, period_type: str, period_key: str,
+                  brokerage_generated: float, share_amount: float,
+                  transferred_amount: float, transfer_date: str,
+                  transfer_reference: str = "", transfer_notes: str = "") -> None:
+    if transferred_amount <= 0:
+        status = "pending"
+    elif transferred_amount + 0.01 >= share_amount:
+        status = "transferred"
+    else:
+        status = "partial"
+
+    with get_conn() as conn:
+        conn.execute("""
+            INSERT INTO sub_broker_payouts
+                (sub_broker_id, period_type, period_key,
+                 brokerage_generated, share_amount,
+                 transferred_amount, transfer_date, transfer_reference,
+                 transfer_notes, status, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(sub_broker_id, period_type, period_key) DO UPDATE SET
+                brokerage_generated = excluded.brokerage_generated,
+                share_amount        = excluded.share_amount,
+                transferred_amount  = excluded.transferred_amount,
+                transfer_date       = excluded.transfer_date,
+                transfer_reference  = excluded.transfer_reference,
+                transfer_notes      = excluded.transfer_notes,
+                status              = excluded.status,
+                updated_at          = CURRENT_TIMESTAMP
+        """, (sb_id, period_type, period_key,
+              float(brokerage_generated), float(share_amount),
+              float(transferred_amount), transfer_date,
+              transfer_reference.strip() or None,
+              transfer_notes.strip() or None, status))
+
+
+def delete_payout(payout_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM sub_broker_payouts WHERE id = ?", (payout_id,))
+
+
+# ══════════════════════════════════════════════════════════════
+# BROKERAGE ATTRIBUTION + SHARING COMPUTATION
+# ══════════════════════════════════════════════════════════════
+def _attribute_brokerage(period_type: str, period_key: str) -> pd.DataFrame:
+    """Return brokerage detail rows for the period, enriched with sub_broker_id."""
+    data = load_brokerage_report(get_conn, data_version())
+    detail = data["detail"].copy()
+    if detail.empty:
+        return detail
+
+    if period_type == "month":
+        detail = detail[detail["month"] == period_key]
+    else:  # year
+        detail = detail[detail["month"].astype(str).str.startswith(period_key + "-")]
+
+    if detail.empty:
+        return detail
+
+    folio_client = get_folio_to_client_code_map(data_version())
+    client_sb    = get_client_to_sub_broker_map()
+
+    detail["client_code"]   = detail["folio"].astype(str).map(folio_client)
+    detail["sub_broker_id"] = detail["client_code"].map(client_sb)
+    return detail
+
+
+def compute_sub_broker_summary(period_type: str, period_key: str) -> pd.DataFrame:
+    """One row per sub-broker with their brokerage + share for the period."""
+    detail = _attribute_brokerage(period_type, period_key)
+    sbs    = list_sub_brokers()
+    if detail.empty or sbs.empty:
+        return pd.DataFrame()
+
+    sb_lookup = sbs.set_index("id").to_dict("index")
+    assigned  = detail[detail["sub_broker_id"].notna()]
+
+    rows = []
+    for sb_id, grp in assigned.groupby("sub_broker_id"):
+        if sb_id not in sb_lookup:
+            continue
+        sb = sb_lookup[sb_id]
+        pct  = float(sb["sharing_pct"] or 0.0)
+        brok = float(grp["brokerage_amount"].sum())
+        share = brok * pct / 100.0
+        rows.append({
+            "sub_broker_id":    int(sb_id),
+            "name":             sb["name"],
+            "sharing_pct":      pct,
+            "clients":          int(grp["client_code"].nunique()),
+            "total_brokerage":  brok,
+            "sub_broker_share": share,
+            "my_share":         brok - share,
+        })
+    return pd.DataFrame(rows)
+
+
+def get_available_brokerage_periods() -> tuple[list, list]:
+    data = load_brokerage_report(get_conn, data_version())
+    detail = data["detail"]
+    if detail.empty:
+        return [], []
+    months = sorted(
+        [m for m in detail["month"].dropna().unique() if m and m != "Unknown"],
+        reverse=True,
+    )
+    years = sorted({m[:4] for m in months if len(m) >= 4}, reverse=True)
+    return months, years
+
+
+# ══════════════════════════════════════════════════════════════
+# PDF / EXCEL GENERATION FOR SHARING REPORT
+# ══════════════════════════════════════════════════════════════
+def _period_label(period_type: str, period_key: str) -> str:
+    if period_type == "year":
+        return f"Year {period_key}"
+    try:
+        from datetime import datetime as _dt
+        return _dt.strptime(period_key, "%Y-%m").strftime("%B %Y")
+    except Exception:
+        return period_key
+
+
+def generate_brokerage_sharing_pdf(
+    sub_broker_name: str,
+    sharing_pct: float,
+    period_label: str,
+    client_rows: list[dict],
+    total_brokerage: float,
+    sub_broker_share: float,
+    my_share: float,
+    transfer: dict | None = None,
+) -> bytes | None:
+    try:
+        from fpdf import FPDF
+    except ImportError:
+        return None
+
+    reg_path, bold_path = _find_font_path()
+    if not reg_path:
+        return None
+
+    pdf = FPDF(orientation='P', unit='mm', format='A4')
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_font('Main', '', reg_path, uni=True)
+    pdf.add_font('Main', 'B', bold_path, uni=True)
+    pdf.set_margins(12, 12, 12)
+
+    BLUE, DARK, GREY = (41, 128, 185), (44, 62, 80), (127, 140, 141)
+    LIGHT, WHITE = (236, 240, 241), (255, 255, 255)
+    GREEN, RED, AMBER = (39, 174, 96), (192, 57, 43), (243, 156, 18)
+    PAGE_W = 210 - 24
+
+    def _inr(v):
+        try:    return f"\u20b9{float(v):,.2f}"
+        except Exception: return "N/A"
+
+    pdf.add_page()
+
+    pdf.set_font('Main', 'B', 15); pdf.set_text_color(*DARK)
+    pdf.cell(PAGE_W, 9, 'Sub-Broker Brokerage Sharing Report', align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+
+    pdf.set_font('Main', '', 10); pdf.set_text_color(*GREY)
+    pdf.cell(PAGE_W, 5, f'Sub-Broker: {sub_broker_name}', new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 5, f'Period: {period_label}   |   Sharing: {sharing_pct:.2f}%',
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+
+    # Metric cards
+    pdf.set_fill_color(*LIGHT); col_w = PAGE_W / 3
+    pdf.set_font('Main', 'B', 8); pdf.set_text_color(*GREY)
+    pdf.cell(col_w, 5, 'Total Brokerage',   border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Sub-Broker Share',  border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Your Net Share',    border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font('Main', 'B', 12); pdf.set_text_color(*DARK)
+    pdf.cell(col_w, 8, _inr(total_brokerage),  border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 8, _inr(sub_broker_share), border=0, fill=True, new_x="RIGHT")
+    pdf.set_text_color(*GREEN)
+    pdf.cell(col_w, 8, _inr(my_share), border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(*DARK)
+    pdf.ln(5)
+
+    # Transfer status
+    if transfer:
+        status = transfer.get("status", "pending")
+        if status == "transferred":
+            bg, fg = (212, 239, 223), GREEN
+        elif status == "partial":
+            bg, fg = (252, 243, 207), AMBER
+        else:
+            bg, fg = (250, 219, 216), RED
+
+        pdf.set_fill_color(*bg); pdf.set_text_color(*DARK)
+        pdf.set_font('Main', 'B', 9)
+        pdf.cell(PAGE_W, 6,
+                 f"Transfer Status: {status.upper()}   |   "
+                 f"Transferred: {_inr(transfer.get('transferred_amount', 0))}   |   "
+                 f"Date: {transfer.get('transfer_date') or '-'}",
+                 border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+        if transfer.get("transfer_reference"):
+            pdf.set_font('Main', '', 8); pdf.set_text_color(*GREY)
+            pdf.cell(PAGE_W, 4, f"Reference: {transfer['transfer_reference']}",
+                     new_x="LMARGIN", new_y="NEXT")
+        if transfer.get("transfer_notes"):
+            pdf.set_font('Main', '', 8); pdf.set_text_color(*GREY)
+            pdf.cell(PAGE_W, 4, f"Notes: {transfer['transfer_notes']}",
+                     new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(3)
+
+    # Client table
+    pdf.set_font('Main', 'B', 11); pdf.set_text_color(*BLUE)
+    pdf.cell(PAGE_W, 6, 'Client-wise Breakdown', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(1)
+
+    headers = ['Client Code', 'Client Name', 'Txns', 'Brokerage', 'Sub-Broker Share', 'My Share']
+    widths  = [30, 60, 15, 27, 30, 24]
+    widths[-1] = PAGE_W - sum(widths[:-1])
+    aligns  = ['L', 'L', 'C', 'R', 'R', 'R']
+
+    row_h = 6
+    pdf.set_font('Main', 'B', 8); pdf.set_fill_color(*BLUE); pdf.set_text_color(*WHITE)
+    for h, w in zip(headers, widths):
+        pdf.cell(w, row_h, h, border=1, align='C', fill=True)
+    pdf.ln()
+
+    pdf.set_font('Main', '', 8); pdf.set_text_color(*DARK)
+    for i, r in enumerate(client_rows):
+        fill = (i % 2 == 1)
+        if fill:
+            pdf.set_fill_color(*LIGHT)
+        vals = [
+            str(r.get("client_code", "")),
+            _truncate_to_width(pdf, str(r.get("client_name", "")), widths[1] - 1.0),
+            str(r.get("txns", "")),
+            _inr(r.get("brokerage", 0)),
+            _inr(r.get("sub_broker_share", 0)),
+            _inr(r.get("my_share", 0)),
+        ]
+        for v, w, a in zip(vals, widths, aligns):
+            pdf.cell(w, row_h, v, border=1, align=a, fill=fill)
+        pdf.ln()
+
+    # Total row
+    pdf.set_font('Main', 'B', 8); pdf.set_fill_color(200, 200, 200)
+    totals = ['', 'TOTAL', str(sum(int(r.get("txns", 0)) for r in client_rows)),
+              _inr(total_brokerage), _inr(sub_broker_share), _inr(my_share)]
+    for v, w, a in zip(totals, widths, aligns):
+        pdf.cell(w, row_h, v, border=1, align=a, fill=True)
+    pdf.ln(8)
+
+    pdf.set_font('Main', '', 7); pdf.set_text_color(*GREY)
+    pdf.cell(PAGE_W, 4,
+             f"Generated on {datetime.now().strftime('%d/%m/%Y %H:%M')}  |  "
+             f"Brokerage attributed via PAN matching on folio master. Indicative only.",
+             align='C', new_x="LMARGIN", new_y="NEXT")
+
+    return bytes(pdf.output())
+
+
+def generate_brokerage_sharing_excel(
+    sub_broker_name: str,
+    sharing_pct: float,
+    period_label: str,
+    client_rows: list[dict],
+    total_brokerage: float,
+    sub_broker_share: float,
+    my_share: float,
+    transfer: dict | None = None,
+) -> bytes | None:
+    """Returns xlsx bytes. Falls back to CSV bytes if openpyxl unavailable."""
+    summary = pd.DataFrame([
+        {"Field": "Sub-Broker",       "Value": sub_broker_name},
+        {"Field": "Period",           "Value": period_label},
+        {"Field": "Sharing %",        "Value": sharing_pct},
+        {"Field": "Total Brokerage",  "Value": total_brokerage},
+        {"Field": "Sub-Broker Share", "Value": sub_broker_share},
+        {"Field": "My Net Share",     "Value": my_share},
+    ])
+    if transfer:
+        summary = pd.concat([summary, pd.DataFrame([
+            {"Field": "Transfer Status",    "Value": transfer.get("status", "")},
+            {"Field": "Amount Transferred", "Value": transfer.get("transferred_amount", 0)},
+            {"Field": "Transfer Date",      "Value": transfer.get("transfer_date", "")},
+            {"Field": "Transfer Reference", "Value": transfer.get("transfer_reference", "")},
+            {"Field": "Transfer Notes",     "Value": transfer.get("transfer_notes", "")},
+        ])], ignore_index=True)
+
+    detail = pd.DataFrame(client_rows)
+
+    try:
+        import io
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+            summary.to_excel(writer, sheet_name="Summary", index=False)
+            detail.to_excel(writer,  sheet_name="Client Detail", index=False)
+        return buf.getvalue()
+    except Exception:
+        csv = f"SUMMARY\n{summary.to_csv(index=False)}\n\nDETAIL\n{detail.to_csv(index=False)}"
+        return csv.encode("utf-8")
+
+
+# ══════════════════════════════════════════════════════════════
+# EMAIL SENDING FOR SHARING REPORT
+# ══════════════════════════════════════════════════════════════
+def generate_brokerage_email_body(
+    sub_broker_name: str,
+    period_label: str,
+    total_brokerage: float,
+    sub_broker_share: float,
+    my_share: float,
+    transfer: dict | None = None,
+) -> str:
+    def fi(v):
+        try:    return f"₹{float(v):,.2f}"
+        except Exception: return "—"
+
+    transfer_block = ""
+    if transfer:
+        status = (transfer.get("status") or "pending").lower()
+        if status == "transferred":
+            colour, label = "#27ae60", "✅ Transferred"
+        elif status == "partial":
+            colour, label = "#f39c12", "⏳ Partially Transferred"
+        else:
+            colour, label = "#c0392b", "⏰ Pending"
+        transfer_block = f"""
+        <div style="background:#f8f9fa;border-left:4px solid {colour};padding:14px 18px;margin:20px 0;border-radius:4px;">
+          <div style="font-size:13px;font-weight:bold;color:{colour};margin-bottom:8px;">{label}</div>
+          <table style="width:100%;font-size:13px;color:#2c3e50;">
+            <tr><td style="padding:3px 0;">Amount Transferred</td>
+                <td style="text-align:right;font-weight:bold;">{fi(transfer.get('transferred_amount', 0))}</td></tr>
+            <tr><td style="padding:3px 0;">Transfer Date</td>
+                <td style="text-align:right;">{transfer.get('transfer_date') or '—'}</td></tr>
+            <tr><td style="padding:3px 0;">Reference</td>
+                <td style="text-align:right;">{transfer.get('transfer_reference') or '—'}</td></tr>
+            <tr><td style="padding:3px 0;">Notes</td>
+                <td style="text-align:right;">{transfer.get('transfer_notes') or '—'}</td></tr>
+          </table>
+        </div>
+        """
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="font-family:'Segoe UI',Tahoma,sans-serif;color:#333;background:#f9f9f9;padding:20px;margin:0;">
+  <div style="max-width:680px;margin:0 auto;background:#fff;padding:30px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div style="border-bottom:3px solid #2980b9;padding-bottom:14px;margin-bottom:20px;">
+      <h2 style="color:#2980b9;margin:0;font-size:22px;">💹 Brokerage Sharing Statement</h2>
+      <div style="color:#7f8c8d;font-size:13px;margin-top:6px;">Period: <strong>{period_label}</strong></div>
+    </div>
+
+    <p style="font-size:15px;color:#2c3e50;">Dear <strong>{sub_broker_name}</strong>,</p>
+
+    <p style="font-size:14px;color:#2c3e50;line-height:1.6;">
+      Please find below the brokerage generated on your assigned clients for <strong>{period_label}</strong>,
+      along with your share and the transfer status.
+    </p>
+
+    <table style="width:100%;border-collapse:collapse;margin:22px 0;font-size:14px;">
+      <tr style="background:#ecf0f1;">
+        <td style="padding:12px 16px;color:#7f8c8d;font-size:12px;text-transform:uppercase;">Total Brokerage</td>
+        <td style="padding:12px 16px;text-align:right;font-weight:bold;color:#2c3e50;">{fi(total_brokerage)}</td>
+      </tr>
+      <tr style="background:#eaf2f8;">
+        <td style="padding:12px 16px;color:#7f8c8d;font-size:12px;text-transform:uppercase;">Your Share</td>
+        <td style="padding:12px 16px;text-align:right;font-weight:bold;color:#27ae60;">{fi(sub_broker_share)}</td>
+      </tr>
+      <tr>
+        <td style="padding:12px 16px;color:#7f8c8d;font-size:12px;text-transform:uppercase;">Firm's Share</td>
+        <td style="padding:12px 16px;text-align:right;font-weight:bold;color:#2c3e50;">{fi(my_share)}</td>
+      </tr>
+    </table>
+
+    {transfer_block}
+
+    <div style="background:#d5f4e6;border-left:4px solid #27ae60;padding:12px 16px;margin:20px 0;border-radius:4px;font-size:13px;color:#1e7e46;">
+      <strong>✓ Detailed report attached</strong><br>
+      Please review the attached PDF for the full client-wise breakdown.
+    </div>
+
+    <p style="font-size:13px;color:#7f8c8d;line-height:1.6;">
+      If you notice any discrepancy in the amounts, client attribution, or sharing percentage,
+      please reply to this email within 24–48 hours so we can correct it.
+    </p>
+
+    <div style="border-top:1px solid #ddd;padding-top:16px;margin-top:26px;color:#7f8c8d;font-size:12px;">
+      Generated: {datetime.now().strftime('%d %B %Y at %I:%M %p')}<br>
+      This is an automated statement from the Portfolio Intelligence platform.
+    </div>
+  </div>
+</body></html>"""
+
+
+def send_brokerage_sharing_email(
+    to_email: str,
+    subject: str,
+    html_body: str,
+    pdf_bytes: bytes | None = None,
+    pdf_filename: str = "sharing.pdf",
+    excel_bytes: bytes | None = None,
+    excel_filename: str = "sharing.xlsx",
+    cc_emails: list | None = None,
+) -> tuple[bool, str]:
+    """Sends an email with both PDF and Excel attachments. Requires Gmail creds
+    to be configured in Admin → Mailback Auto-Sync."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.application import MIMEApplication
+    import cams_mailback_sync as cms
+
+    creds = cms.get_credentials()
+    if not creds["imap_user"] or not creds["imap_app_password"]:
+        return False, "Gmail not configured — set up in Admin → Mailback Auto-Sync."
+    if not to_email or "@" not in to_email:
+        return False, "Invalid recipient email."
+
+    try:
+        msg = MIMEMultipart("mixed")
+        msg["From"]    = creds["imap_user"]
+        msg["To"]      = to_email
+        msg["Subject"] = subject
+        if cc_emails:
+            msg["Cc"] = ", ".join(cc_emails)
+
+        alt = MIMEMultipart("alternative")
+        alt.attach(MIMEText("Please view this email in HTML mode.", "plain", "utf-8"))
+        alt.attach(MIMEText(html_body, "html", "utf-8"))
+        msg.attach(alt)
+
+        if pdf_bytes:
+            part = MIMEApplication(pdf_bytes, Name=pdf_filename)
+            part["Content-Disposition"] = f'attachment; filename="{pdf_filename}"'
+            msg.attach(part)
+        if excel_bytes:
+            part = MIMEApplication(excel_bytes, Name=excel_filename)
+            part["Content-Disposition"] = f'attachment; filename="{excel_filename}"'
+            msg.attach(part)
+
+        recipients = [to_email] + (cc_emails or [])
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as server:
+            server.login(creds["imap_user"], creds["imap_app_password"])
+            server.send_message(msg, to_addrs=recipients)
+        log.info("[BROK-EMAIL] Sent '%s' to %s", subject, to_email)
+        return True, f"✅ Email sent to {to_email}"
+    except smtplib.SMTPAuthenticationError:
+        return False, "❌ Authentication failed. Check Gmail App Password."
+    except Exception as e:
+        log.exception("[BROK-EMAIL] Failed")
+        return False, f"❌ Failed to send: {e}"
+
+
+# ══════════════════════════════════════════════════════════════
+# UI: SUB-BROKERS MANAGEMENT
+# ══════════════════════════════════════════════════════════════
+def render_sub_brokers_ui() -> None:
+    st.subheader("👥 Sub Brokers")
+    st.caption("Create sub-brokers, set their sharing percentage, and assign clients.")
+
+    with st.expander("➕ Create New Sub-Broker", expanded=False):
+        with st.form("create_sb_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                sb_name  = st.text_input("Name *")
+                sb_email = st.text_input("Email")
+                sb_phone = st.text_input("Phone")
+            with c2:
+                sb_pct = st.number_input(
+                    "Brokerage Sharing % *", 0.0, 100.0, 50.0, 1.0,
+                    help="Percentage of brokerage generated on this sub-broker's "
+                         "assigned clients that goes to the sub-broker."
+                )
+                sb_notes = st.text_input("Notes (optional)")
+            if st.form_submit_button("Create Sub-Broker", type="primary"):
+                if not sb_name.strip():
+                    st.error("Name is required.")
+                else:
+                    create_sub_broker(sb_name, sb_email, sb_phone, sb_pct, sb_notes)
+                    st.success(f"Created sub-broker: {sb_name}")
+                    st.rerun()
+
+    sbs = list_sub_brokers()
+    if sbs.empty:
+        st.info("No sub-brokers yet. Create one above.")
+        return
+
+    st.markdown("### All Sub-Brokers")
+    st.dataframe(
+        sbs[["id", "name", "email", "phone", "role",
+             "sharing_pct", "client_count", "is_active", "notes"]].rename(columns={
+            "id": "ID", "name": "Name", "email": "Email", "phone": "Phone",
+            "role": "Role", "sharing_pct": "Sharing %",
+            "client_count": "Clients", "is_active": "Active", "notes": "Notes",
+        }),
+        width="stretch", hide_index=True,
+        column_config={
+            "Sharing %": st.column_config.NumberColumn(format="%.2f%%"),
+            "Active":    st.column_config.CheckboxColumn(),
+        },
+    )
+
+    st.divider()
+    st.markdown("### 🎯 Client Assignment")
+
+    sb_options = {
+        f"{row['name']} — {row['sharing_pct']:.0f}% ({row['client_count']} clients)": row["id"]
+        for _, row in sbs.iterrows()
+    }
+    sel_label = st.selectbox("Select Sub-Broker", list(sb_options.keys()), key="sb_manage_sel")
+    sel_sb_id = sb_options[sel_label]
+
+    assigned = get_clients_for_sub_broker(sel_sb_id)
+
+    ac1, ac2 = st.columns([3, 2])
+    with ac1:
+        st.markdown(f"**Assigned Clients ({len(assigned)})**")
+        if not assigned.empty:
+            st.dataframe(
+                assigned[["client_code", "name", "pan", "email", "mobile"]].rename(columns={
+                    "client_code": "Code", "name": "Name", "pan": "PAN",
+                    "email": "Email", "mobile": "Mobile",
+                }),
+                width="stretch", hide_index=True,
+            )
+        else:
+            st.caption("No clients assigned yet.")
+
+    with ac2:
+        st.markdown("**Add Clients**")
+        all_clients = load_all_clients_with_display(data_version())
+        assigned_codes = set(assigned["client_code"].tolist()) if not assigned.empty else set()
+        addable = all_clients[~all_clients["client_code"].isin(assigned_codes)].copy()
+        addable["display"] = addable.apply(
+            lambda r: f"{r['name']} | {r['client_code']}", axis=1
+        )
+        sel_clients = st.multiselect(
+            "Search and select clients",
+            addable["display"].tolist(),
+            key=f"sb_add_clients_{sel_sb_id}",
+        )
+        if st.button("➕ Assign Selected", key=f"sb_assign_btn_{sel_sb_id}", type="primary"):
+            codes = [s.rsplit(" | ", 1)[-1] for s in sel_clients]
+            if codes:
+                assign_clients_to_sub_broker(sel_sb_id, codes)
+                st.success(f"Assigned {len(codes)} client(s).")
+                st.rerun()
+            else:
+                st.warning("No clients selected.")
+
+    st.divider()
+    st.markdown("### ⚙️ Edit or Delete")
+
+    edit_label = st.selectbox("Select Sub-Broker to Edit", list(sb_options.keys()), key="sb_edit_sel")
+    edit_sb_id = sb_options[edit_label]
+    edit_row   = sbs[sbs["id"] == edit_sb_id].iloc[0]
+
+    with st.form(f"edit_sb_{edit_sb_id}"):
+        ec1, ec2 = st.columns(2)
+        with ec1:
+            new_name  = st.text_input("Name", value=edit_row["name"])
+            new_email = st.text_input("Email", value=edit_row["email"] or "")
+            new_phone = st.text_input("Phone", value=edit_row["phone"] or "")
+        with ec2:
+            new_pct = st.number_input(
+                "Sharing %", 0.0, 100.0, float(edit_row["sharing_pct"]), 1.0,
+            )
+            new_active = st.checkbox("Active", value=bool(edit_row["is_active"]))
+            new_notes  = st.text_input("Notes", value=edit_row["notes"] or "")
+        if st.form_submit_button("💾 Save Changes", type="primary"):
+            update_sub_broker(
+                edit_sb_id,
+                name=new_name, email=new_email, phone=new_phone,
+                sharing_pct=new_pct, is_active=1 if new_active else 0, notes=new_notes,
+            )
+            st.success("Updated.")
+            st.rerun()
+
+    if st.button("🗑️ Delete Sub-Broker", key=f"del_sb_{edit_sb_id}"):
+        delete_sub_broker(edit_sb_id)
+        st.success("Deleted.")
+        st.rerun()
+
+    if not assigned.empty:
+        st.divider()
+        st.markdown("**Remove a client assignment**")
+        rem_choice = st.selectbox(
+            "Client to unassign",
+            assigned["client_code"].tolist(),
+            key=f"sb_unassign_{sel_sb_id}",
+        )
+        if st.button("Remove Assignment", key=f"sb_unassign_btn_{sel_sb_id}"):
+            unassign_client_from_sub_broker(sel_sb_id, rem_choice)
+            st.success("Removed.")
+            st.rerun()
+
+
+# ══════════════════════════════════════════════════════════════
+# UI: SUB-BROKER SHARING REPORT
+# ══════════════════════════════════════════════════════════════
+def render_sub_broker_sharing_report() -> None:
+    st.subheader("💹 Sub-Broker Sharing Report")
+    st.caption(
+        "Brokerage generated on clients assigned to a sub-broker is split by "
+        "the sub-broker's sharing percentage. Record transfers here and email "
+        "monthly/yearly statements to sub-brokers."
+    )
+
+    months, years = get_available_brokerage_periods()
+    if not months and not years:
+        st.info("No brokerage data yet. Upload CAMS WBR77 / KFin MFSD205 files first.")
+        return
+
+    # ── Period selector ──
+    pc1, pc2 = st.columns([1, 2])
+    with pc1:
+        period_type = st.radio("Period Type", ["Monthly", "Yearly"],
+                               horizontal=True, key="sb_period_type")
+    period_type = "month" if period_type == "Monthly" else "year"
+    with pc2:
+        if period_type == "month":
+            period_key = st.selectbox("Month", months, key="sb_month_pick")
+        else:
+            period_key = st.selectbox("Year", years, key="sb_year_pick")
+
+    period_label = _period_label(period_type, period_key)
+
+    # ── Scope selector: firm-wide, or one specific sub-broker ──
+    sbs_all = list_sub_brokers()
+    scope_options = ["🏢 Firm-wide (all clients)"]
+    if not sbs_all.empty:
+        scope_options += [
+            f"👤 {row['name']} ({row['sharing_pct']:.0f}%)"
+            for _, row in sbs_all.iterrows()
+        ]
+
+    scope_col, spacer_col = st.columns([1, 1])
+    with scope_col:
+        sb_scope = st.selectbox("View Scope", scope_options, key="sb_scope_pick")
+
+    selected_sb_id = None
+    if not sb_scope.startswith("🏢"):
+        sb_name_pick = sb_scope[2:].rsplit(" (", 1)[0]
+        match = sbs_all[sbs_all["name"] == sb_name_pick]
+        if not match.empty:
+            selected_sb_id = int(match.iloc[0]["id"])
+            st.caption(
+                f"Scoped to **{sb_name_pick}** — only this sub-broker's assigned "
+                f"clients are included below. Unassigned brokerage is excluded."
+            )
+
+    detail = _attribute_brokerage(period_type, period_key)
+    if detail.empty:
+        st.info(f"No brokerage found for {period_label}.")
+        return
+
+    # Apply scope filter
+    if selected_sb_id is not None:
+        detail = detail[detail["sub_broker_id"] == selected_sb_id].copy()
+
+    total_brok      = float(detail["brokerage_amount"].sum())
+    assigned        = detail[detail["sub_broker_id"].notna()]
+    unassigned_brok = float(detail[detail["sub_broker_id"].isna()]["brokerage_amount"].sum())
+
+    summary = compute_sub_broker_summary(period_type, period_key)
+
+    # Attach transfer records
+    payouts = list_payouts()
+    payouts_period = payouts[
+        (payouts["period_type"] == period_type) &
+        (payouts["period_key"]  == period_key)
+    ] if not payouts.empty else pd.DataFrame()
+    payout_map = (
+        payouts_period.set_index("sub_broker_id").to_dict("index")
+        if not payouts_period.empty else {}
+    )
+
+    total_sb_share = float(summary["sub_broker_share"].sum()) if not summary.empty else 0.0
+    total_my_share = total_brok - total_sb_share
+
+    # ── KPIs ──
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("📄 Total Brokerage",       format_brokerage_inr(total_brok))
+    c2.metric("👥 Sub-Brokers' Share",    format_brokerage_inr(total_sb_share))
+    c3.metric("💼 Your Net Share",        format_brokerage_inr(total_my_share))
+    c4.metric("❔ Unassigned Brokerage",  format_brokerage_inr(unassigned_brok),
+              help="Folios whose clients aren't assigned to any sub-broker.")
+
+    st.divider()
+
+    if summary.empty:
+        st.info("No sub-brokers have assigned clients with brokerage in this period.")
+    else:
+        # Build display table with transfer status
+        rows = []
+        for _, r in summary.iterrows():
+            sb_id = int(r["sub_broker_id"])
+            pay   = payout_map.get(sb_id, {})
+            transferred = float(pay.get("transferred_amount", 0) or 0)
+            rows.append({
+                "Sub-Broker":       r["name"],
+                "Sharing %":        r["sharing_pct"],
+                "Clients":          int(r["clients"]),
+                "Total Brokerage":  r["total_brokerage"],
+                "Sub-Broker Share": r["sub_broker_share"],
+                "My Share":         r["my_share"],
+                "Transferred":      transferred,
+                "Status":           (pay.get("status") or "pending").upper(),
+                "Transfer Date":    pay.get("transfer_date") or "—",
+            })
+        summary_df = pd.DataFrame(rows).sort_values("Total Brokerage", ascending=False)
+
+        st.markdown("### 📊 Summary")
+        st.dataframe(
+            summary_df, width="stretch", hide_index=True,
+            column_config={
+                "Sharing %":        st.column_config.NumberColumn(format="%.2f%%"),
+                "Total Brokerage":  st.column_config.NumberColumn(format="₹ %.2f"),
+                "Sub-Broker Share": st.column_config.NumberColumn(format="₹ %.2f"),
+                "My Share":         st.column_config.NumberColumn(format="₹ %.2f"),
+                "Transferred":      st.column_config.NumberColumn(format="₹ %.2f"),
+            },
+        )
+
+        # ── RECORD TRANSFER ──
+        st.divider()
+        st.markdown("### 💸 Record / Update Transfer")
+        st.caption(
+            "Record when you've actually paid the sub-broker. This is stored per "
+            "sub-broker and period — you can update it any time."
+        )
+
+        t_col1, t_col2 = st.columns([1, 2])
+        sb_pick = {
+            f"{r['name']} (share: {format_brokerage_inr(r['sub_broker_share'])})": int(r["sub_broker_id"])
+            for _, r in summary.iterrows()
+        }
+        with t_col1:
+            sb_choice_label = st.selectbox("Sub-Broker", list(sb_pick.keys()), key="sb_transfer_sb")
+            sb_choice_id    = sb_pick[sb_choice_label]
+            current_row     = summary[summary["sub_broker_id"] == sb_choice_id].iloc[0]
+            current_pay     = payout_map.get(sb_choice_id, {})
+
+        with t_col2:
+            with st.form(f"transfer_form_{sb_choice_id}_{period_key}"):
+                f1, f2 = st.columns(2)
+                with f1:
+                    t_amount = st.number_input(
+                        "Amount Transferred (₹)",
+                        min_value=0.0,
+                        value=float(current_pay.get("transferred_amount", 0) or 0),
+                        step=100.0,
+                    )
+                    t_date = st.date_input(
+                        "Transfer Date",
+                        value=(
+                            datetime.strptime(current_pay["transfer_date"], "%Y-%m-%d").date()
+                            if current_pay.get("transfer_date") else date_cls.today()
+                        ),
+                    )
+                with f2:
+                    t_ref = st.text_input(
+                        "Reference (UTR / Cheque No.)",
+                        value=current_pay.get("transfer_reference", "") or "",
+                    )
+                    t_notes = st.text_input(
+                        "Notes",
+                        value=current_pay.get("transfer_notes", "") or "",
+                    )
+
+                if st.form_submit_button("💾 Save Transfer Record", type="primary"):
+                    record_payout(
+                        sb_id=sb_choice_id,
+                        period_type=period_type,
+                        period_key=period_key,
+                        brokerage_generated=float(current_row["total_brokerage"]),
+                        share_amount=float(current_row["sub_broker_share"]),
+                        transferred_amount=t_amount,
+                        transfer_date=t_date.strftime("%Y-%m-%d"),
+                        transfer_reference=t_ref,
+                        transfer_notes=t_notes,
+                    )
+                    st.success("Transfer recorded.")
+                    st.rerun()
+
+        # ── DRILLDOWN ──
+        st.divider()
+        st.markdown("### 🔍 Client-level Drill-down")
+
+        drill_options = ["All Sub-Brokers"] + summary["name"].tolist()
+        sel_sb_name = st.selectbox("Select Sub-Broker", drill_options, key="sb_drilldown_sel")
+
+        sbs_df    = list_sub_brokers()
+        sb_lookup = sbs_df.set_index("id").to_dict("index")
+        target_id = next((sid for sid, v in sb_lookup.items() if v["name"] == sel_sb_name), None)
+
+        if sel_sb_name == "All Sub-Brokers":
+            drill = assigned.copy()
+        else:
+            drill = assigned[assigned["sub_broker_id"] == target_id].copy()
+
+        drill["sub_broker_name"] = drill["sub_broker_id"].map(
+            lambda x: sb_lookup.get(x, {}).get("name", "?")
+        )
+        drill["sharing_pct"] = drill["sub_broker_id"].map(
+            lambda x: float(sb_lookup.get(x, {}).get("sharing_pct", 0.0))
+        )
+
+        client_grouped = (
+            drill.groupby(["sub_broker_name", "client_code", "sharing_pct"], dropna=False)
+            .agg(brokerage=("brokerage_amount", "sum"),
+                 txns=("brokerage_amount", "count"))
+            .reset_index()
+        )
+        client_grouped["sub_broker_share"] = (
+            client_grouped["brokerage"] * client_grouped["sharing_pct"] / 100.0
+        )
+        client_grouped["my_share"] = (
+            client_grouped["brokerage"] - client_grouped["sub_broker_share"]
+        )
+
+        with get_conn() as conn:
+            clients_master = pd.read_sql("""
+                SELECT client_code,
+                       COALESCE(
+                           NULLIF(TRIM(COALESCE(primary_holder_first_name,'') || ' ' ||
+                                       COALESCE(primary_holder_last_name,'')), ''),
+                           client_code
+                       ) AS client_name
+                FROM bse_client_master
+            """, conn)
+        client_grouped = client_grouped.merge(clients_master, on="client_code", how="left")
+
+        st.dataframe(
+            client_grouped.rename(columns={
+                "sub_broker_name":  "Sub-Broker",
+                "client_code":      "Client Code",
+                "client_name":      "Client Name",
+                "brokerage":        "Brokerage",
+                "txns":             "Txns",
+                "sharing_pct":      "Sharing %",
+                "sub_broker_share": "Sub-Broker Share",
+                "my_share":         "My Share",
+            })[["Sub-Broker", "Client Code", "Client Name", "Txns",
+                "Brokerage", "Sharing %", "Sub-Broker Share", "My Share"]],
+            width="stretch", hide_index=True,
+            column_config={
+                "Brokerage":        st.column_config.NumberColumn(format="₹ %.2f"),
+                "Sharing %":        st.column_config.NumberColumn(format="%.2f%%"),
+                "Sub-Broker Share": st.column_config.NumberColumn(format="₹ %.2f"),
+                "My Share":         st.column_config.NumberColumn(format="₹ %.2f"),
+            },
+        )
+
+        # ── SEND EMAIL ──
+        st.divider()
+        st.markdown("### 📧 Email Statement")
+        st.caption(
+            "Send the sharing statement for this period to a sub-broker. "
+            "PDF + Excel attached, includes the current transfer status."
+        )
+
+        email_sb_label = st.selectbox("Send to Sub-Broker",
+                                      list(sb_pick.keys()), key="sb_email_sb")
+        email_sb_id    = sb_pick[email_sb_label]
+        email_sb_row   = sbs_df[sbs_df["id"] == email_sb_id].iloc[0]
+        email_sb_name  = email_sb_row["name"]
+
+        # Build per-sub-broker client rows for attachment
+        sb_client_rows = (
+            client_grouped[client_grouped["sub_broker_name"] == email_sb_name]
+            .to_dict("records")
+        )
+        if not sb_client_rows:
+            st.info(f"No client brokerage found for {email_sb_name} in {period_label}.")
+        else:
+            summary_row = summary[summary["sub_broker_id"] == email_sb_id].iloc[0]
+            transfer_info = payout_map.get(email_sb_id)
+
+            ec1, ec2 = st.columns([2, 1])
+            with ec1:
+                to_email = st.text_input(
+                    "Recipient Email",
+                    value=email_sb_row["email"] or "",
+                    placeholder="sub-broker@example.com",
+                    key=f"sb_email_to_{email_sb_id}_{period_key}",
+                )
+                cc_input = st.text_input(
+                    "CC (optional, comma separated)",
+                    placeholder="advisor@example.com",
+                    key=f"sb_email_cc_{email_sb_id}_{period_key}",
+                )
+            with ec2:
+                st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                send_clicked = st.button(
+                    "📤 Send Email", type="primary", width="stretch",
+                    key=f"sb_email_send_{email_sb_id}_{period_key}",
+                    disabled=not to_email,
+                )
+
+            if send_clicked and to_email:
+                with st.spinner("Generating and sending..."):
+                    pdf_bytes = generate_brokerage_sharing_pdf(
+                        sub_broker_name=email_sb_name,
+                        sharing_pct=float(email_sb_row["sharing_pct"]),
+                        period_label=period_label,
+                        client_rows=sb_client_rows,
+                        total_brokerage=float(summary_row["total_brokerage"]),
+                        sub_broker_share=float(summary_row["sub_broker_share"]),
+                        my_share=float(summary_row["my_share"]),
+                        transfer=transfer_info,
+                    )
+                    excel_bytes = generate_brokerage_sharing_excel(
+                        sub_broker_name=email_sb_name,
+                        sharing_pct=float(email_sb_row["sharing_pct"]),
+                        period_label=period_label,
+                        client_rows=sb_client_rows,
+                        total_brokerage=float(summary_row["total_brokerage"]),
+                        sub_broker_share=float(summary_row["sub_broker_share"]),
+                        my_share=float(summary_row["my_share"]),
+                        transfer=transfer_info,
+                    )
+                    html_body = generate_brokerage_email_body(
+                        sub_broker_name=email_sb_name,
+                        period_label=period_label,
+                        total_brokerage=float(summary_row["total_brokerage"]),
+                        sub_broker_share=float(summary_row["sub_broker_share"]),
+                        my_share=float(summary_row["my_share"]),
+                        transfer=transfer_info,
+                    )
+                    safe_name = "".join(c if c.isalnum() else "_" for c in email_sb_name)
+                    safe_period = period_key.replace("-", "_")
+                    pdf_name = f"Brokerage_{safe_name}_{safe_period}.pdf"
+                    xlsx_name = f"Brokerage_{safe_name}_{safe_period}.xlsx"
+                    subject = f"Brokerage Sharing Statement — {period_label}"
+                    cc_list = [e.strip() for e in cc_input.split(",") if e.strip()] if cc_input else None
+
+                    ok, msg = send_brokerage_sharing_email(
+                        to_email=to_email,
+                        subject=subject,
+                        html_body=html_body,
+                        pdf_bytes=pdf_bytes,
+                        pdf_filename=pdf_name,
+                        excel_bytes=excel_bytes,
+                        excel_filename=xlsx_name,
+                        cc_emails=cc_list,
+                    )
+                if ok:
+                    st.success(msg)
+                else:
+                    st.error(msg)
+
+        # ── TRANSFER HISTORY ──
+        st.divider()
+        st.markdown("### 📜 Transfer History")
+
+        all_payouts = list_payouts()
+        if all_payouts.empty:
+            st.info("No transfers recorded yet.")
+        else:
+            h1, h2 = st.columns([3, 1])
+            with h1:
+                hist = all_payouts.copy()
+                hist["period"] = hist.apply(
+                    lambda r: _period_label(r["period_type"], r["period_key"]),
+                    axis=1,
+                )
+            st.dataframe(
+                hist[["sub_broker_name", "period", "brokerage_generated",
+                      "share_amount", "transferred_amount", "transfer_date",
+                      "transfer_reference", "status", "transfer_notes"]].rename(columns={
+                    "sub_broker_name":     "Sub-Broker",
+                    "period":              "Period",
+                    "brokerage_generated": "Brokerage",
+                    "share_amount":        "Share",
+                    "transferred_amount":  "Transferred",
+                    "transfer_date":       "Date",
+                    "transfer_reference":  "Reference",
+                    "status":              "Status",
+                    "transfer_notes":      "Notes",
+                }),
+                width="stretch", hide_index=True,
+                column_config={
+                    "Brokerage":   st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Share":       st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Transferred": st.column_config.NumberColumn(format="₹ %.2f"),
+                },
+            )
+
+            del_payout_id = st.selectbox(
+                "Delete a record (by ID)",
+                [None] + all_payouts["id"].tolist(),
+                key="sb_delete_payout_sel",
+            )
+            if del_payout_id and st.button("🗑️ Delete Selected Transfer Record",
+                                           key="sb_delete_payout_btn"):
+                delete_payout(int(del_payout_id))
+                st.success("Deleted.")
+                st.rerun()
+
+    if unassigned_brok > 0:
+        with st.expander(f"❔ Unassigned Brokerage Breakdown — {format_brokerage_inr(unassigned_brok)}"):
+            unassigned_clients = (
+                detail[detail["sub_broker_id"].isna()]
+                .groupby("client_code", dropna=False)["brokerage_amount"].sum()
+                .sort_values(ascending=False)
+            )
+            st.caption(
+                "These folios couldn't be attributed to a sub-broker. Common reasons: "
+                "no PAN in folio master, or the client isn't assigned to any sub-broker."
+            )
+            st.dataframe(
+                unassigned_clients.reset_index().rename(columns={
+                    "client_code": "Client Code",
+                    "brokerage_amount": "Brokerage",
+                }),
+                width="stretch", hide_index=True,
+                column_config={"Brokerage": st.column_config.NumberColumn(format="₹ %.2f")},
+            )
+
+
+# Initialize the sub-broker tables now that the function is defined above.
+ensure_sub_broker_tables()
 
 # ==================== 📊 DASHBOARD ====================
 if mode == "📊 Dashboard":
@@ -6291,9 +7512,33 @@ elif mode == "📋 Transactions":
     #     key="txn_all_download"
     # )
 
-# ==================== 💰 BROKERAGE REPORT ====================
-elif mode == "💰 Brokerage Report":
-    st.header("💰 Brokerage Report")
+# ==================== 💰 BROKERAGES & SUB BROKERS REPORT ====================
+elif mode == "💰 Brokerages & Sub Brokers Report":
+    st.header("💰 Brokerages & Sub Brokers Report")
+
+    sub_options = ["📊 Brokerage Report", "👥 Sub Brokers", "💹 Sub-Broker Sharing"]
+    if "brok_sub_mode" not in st.session_state:
+        st.session_state["brok_sub_mode"] = sub_options[0]
+
+    sub_mode = st.radio(
+        "View", sub_options,
+        index=sub_options.index(st.session_state["brok_sub_mode"]),
+        horizontal=True, label_visibility="collapsed",
+    )
+    if sub_mode != st.session_state["brok_sub_mode"]:
+        st.session_state["brok_sub_mode"] = sub_mode
+        st.rerun()
+
+    st.divider()
+
+    if sub_mode == "👥 Sub Brokers":
+        render_sub_brokers_ui()
+        st.stop()
+    elif sub_mode == "💹 Sub-Broker Sharing":
+        render_sub_broker_sharing_report()
+        st.stop()
+
+    # ── Sub-view 1: existing Brokerage Report body continues below ──
     st.caption(
         "File-reported brokerage (CAMS + KFin), AMC names resolved the same way as your Dashboard (AMFI-canonical via "
         "ISIN)."

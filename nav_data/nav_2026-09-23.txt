@@ -2957,17 +2957,6 @@ Motilal Oswal Mutual Fund
 152651;INF247L01CL8;-;Motilal Oswal Multi Cap Fund;;;15.6806;23-Sep-2026
 152652;INF247L01CM6;INF247L01CN4;Motilal Oswal Multi Cap Fund;;;15.4501;23-Sep-2026
  
-Nippon India Mutual Fund
- 
-118652;INF204K01XD4;INF204K01XE2;Nippon India Multi Cap Fund;Direct Plan;IDCW Option;85.7573;23-Sep-2026
-118651;INF204K01D55;-;Nippon India Multi Cap Fund;Direct Plan;Bonus Option;331.4289;23-Sep-2026
-118650;INF204K01XF9;-;Nippon India Multi Cap Fund;Direct Plan;Growth Option;331.4289;23-Sep-2026
-101163;INF204K01455;INF204K01463;Nippon India Multi Cap Fund;Regular Plan;IDCW Option;58.9713;23-Sep-2026
-106252;INF204K01414;INF204K01422;Nippon India Multi Cap Fund;Regular Plan;Institutional Dividend Plan;44.8994;13-Jul-2016
-106253;INF204K01448;-;Nippon India Multi Cap Fund;Regular Plan;Institutional Plan Growth Plan;21.9544;25-Apr-2017
-101162;INF204K01471;-;Nippon India Multi Cap Fund;Regular Plan;Bonus Option;299.3600;23-Sep-2026
-101161;INF204K01489;-;Nippon India Multi Cap Fund;Regular Plan;Growth Option;299.3600;23-Sep-2026
- 
 PGIM India Mutual Fund
  
 152815;INF663L01Z03;-;PGIM India Multi Cap Fund;Direct Plan;Direct Growth;11.1;23-Sep-2026
@@ -4034,10 +4023,10 @@ Baroda BNP Paribas Mutual Fund
  
 DSP Mutual Fund
  
-148595;INF740KA1PP3;-;DSP Value Fund;Direct Plan;Growth;24.3890;22-Sep-2026
-148596;INF740KA1PQ1;INF740KA1PR9;DSP Value Fund;Direct Plan;IDCW;18.4730;22-Sep-2026
-148594;INF740KA1PM0;-;DSP Value Fund;Regular Plan;Growth;23.3160;22-Sep-2026
-148597;INF740KA1PN8;INF740KA1PO6;DSP Value Fund;Regular Plan;IDCW;16.2960;22-Sep-2026
+148595;INF740KA1PP3;-;DSP Value Fund;Direct Plan;Growth;24.4330;23-Sep-2026
+148596;INF740KA1PQ1;INF740KA1PR9;DSP Value Fund;Direct Plan;IDCW;18.5070;23-Sep-2026
+148594;INF740KA1PM0;-;DSP Value Fund;Regular Plan;Growth;23.3580;23-Sep-2026
+148597;INF740KA1PN8;INF740KA1PO6;DSP Value Fund;Regular Plan;IDCW;16.3260;23-Sep-2026
  
 Franklin Templeton Mutual Fund
  
@@ -4822,6 +4811,17 @@ Mirae Asset Mutual Fund
 151811;INF769K01KL6;INF769K01KM4;Mirae Asset Multicap Fund;Direct Plan;IDCW;15.441;23-Sep-2026
 151812;INF769K01KH4;-;Mirae Asset Multicap Fund;Regular Plan;Growth;14.754;23-Sep-2026
 151813;INF769K01KI2;INF769K01KJ0;Mirae Asset Multicap Fund;Regular Plan;IDCW;14.743;23-Sep-2026
+ 
+Nippon India Mutual Fund
+ 
+118652;INF204K01XD4;INF204K01XE2;Nippon India Multi Cap Fund;Direct Plan;IDCW Option;85.7573;23-Sep-2026
+118651;INF204K01D55;-;Nippon India Multi Cap Fund;Direct Plan;Bonus Option;331.4289;23-Sep-2026
+118650;INF204K01XF9;-;Nippon India Multi Cap Fund;Direct Plan;Growth Option;331.4289;23-Sep-2026
+101163;INF204K01455;INF204K01463;Nippon India Multi Cap Fund;Regular Plan;IDCW Option;58.9713;23-Sep-2026
+106252;INF204K01414;INF204K01422;Nippon India Multi Cap Fund;Regular Plan;Institutional Dividend Plan;44.8994;13-Jul-2016
+106253;INF204K01448;-;Nippon India Multi Cap Fund;Regular Plan;Institutional Plan Growth Plan;21.9544;25-Apr-2017
+101162;INF204K01471;-;Nippon India Multi Cap Fund;Regular Plan;Bonus Option;299.3600;23-Sep-2026
+101161;INF204K01489;-;Nippon India Multi Cap Fund;Regular Plan;Growth Option;299.3600;23-Sep-2026
  
 The Wealth Company Mutual Fund
  
@@ -11367,10 +11367,10 @@ DSP Mutual Fund
 112126;INF740K01284;-;DSP Global Clean Energy Overseas Equity Omni FoF;Regular Plan;Growth;27.7964;23-Sep-2026
 112127;INF740K01292;INF740K01300;DSP Global Clean Energy Overseas Equity Omni FoF;Regular Plan;IDCW;19.3272;23-Sep-2026
 119275;INF740K01PC5;-;DSP Global Clean Energy Overseas Equity Omni FoF;Direct Plan;Growth;29.4656;23-Sep-2026
-149816;INF740KA1QP1;-;DSP Global Innovation Overseas Equity Omni FoF;Direct Plan;Growth;23.4535;22-Sep-2026
-149815;INF740KA1QQ9;INF740KA1QR7;DSP Global Innovation Overseas Equity Omni FoF;Direct Plan;IDCW;23.4535;22-Sep-2026
-149817;INF740KA1QM8;-;DSP Global Innovation Overseas Equity Omni FoF;Regular Plan;Growth;22.4958;22-Sep-2026
-149814;INF740KA1QN6;INF740KA1QO4;DSP Global Innovation Overseas Equity Omni FoF;Regular Plan;IDCW;22.4958;22-Sep-2026
+149816;INF740KA1QP1;-;DSP Global Innovation Overseas Equity Omni FoF;Direct Plan;Growth;23.2960;23-Sep-2026
+149815;INF740KA1QQ9;INF740KA1QR7;DSP Global Innovation Overseas Equity Omni FoF;Direct Plan;IDCW;23.2960;23-Sep-2026
+149817;INF740KA1QM8;-;DSP Global Innovation Overseas Equity Omni FoF;Regular Plan;Growth;22.3442;23-Sep-2026
+149814;INF740KA1QN6;INF740KA1QO4;DSP Global Innovation Overseas Equity Omni FoF;Regular Plan;IDCW;22.3442;23-Sep-2026
 152528;INF740KA1UJ6;-;DSP US Specific Debt Passive FoF;Direct Plan;Growth;12.2784;23-Sep-2026
 152529;INF740KA1UK4;INF740KA1UL2;DSP US Specific Debt Passive FoF;Direct Plan;IDCW;12.2784;23-Sep-2026
 152527;INF740KA1UG2;-;DSP US Specific Debt Passive FoF;Regular Plan;Growth;12.2629;23-Sep-2026

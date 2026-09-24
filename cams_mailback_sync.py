@@ -27,6 +27,7 @@ import pyzipper
 import requests
 
 import data_manager as dm
+import sync_failure_log as sflog
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 log = logging.getLogger("mailback_sync")
@@ -389,61 +390,61 @@ def _mark_seen_safe(
     return False
 
 
-def _mark_seen_safe(
-    imap,
-    mid: bytes,
-    rta: str = "",
-    report: str = "",
-    subject: str = "",
-    max_retries: int = 3,
-) -> bool:
-    """
-    Mark an email as read (\\Seen). Retries a few times because IMAP
-    connections do occasionally drop mid-loop. Logs a failure record if
-    every attempt fails, so a stuck-in-unread-forever email shows up in
-    the Admin > Sync Failures panel instead of silently looping.
+# def _mark_seen_safe(
+#     imap,
+#     mid: bytes,
+#     rta: str = "",
+#     report: str = "",
+#     subject: str = "",
+#     max_retries: int = 3,
+# ) -> bool:
+#     """
+#     Mark an email as read (\\Seen). Retries a few times because IMAP
+#     connections do occasionally drop mid-loop. Logs a failure record if
+#     every attempt fails, so a stuck-in-unread-forever email shows up in
+#     the Admin > Sync Failures panel instead of silently looping.
 
-    Returns True on success, False if all attempts failed.
-    """
-    for attempt in range(max_retries):
-        try:
-            status, _ = imap.store(mid, "+FLAGS", "\\Seen")
-            if status == "OK":
-                return True
-            log.warning(
-                "[IMAP-MARK-SEEN] attempt %d/%d: unexpected status %r for %s",
-                attempt + 1, max_retries, status, mid.decode(errors="replace"),
-            )
-        except (imaplib.IMAP4.abort, OSError, EOFError, BrokenPipeError) as e:
-            log.warning(
-                "[IMAP-MARK-SEEN] attempt %d/%d socket error for %s: %s",
-                attempt + 1, max_retries, mid.decode(errors="replace"), type(e).__name__,
-            )
-            if attempt < max_retries - 1:
-                time.sleep(0.5)
-                try:
-                    imap.noop()
-                except Exception:
-                    # noop() itself failed — bail and let the caller retry next cycle
-                    pass
-        except Exception as e:
-            log.warning(
-                "[IMAP-MARK-SEEN] attempt %d/%d unexpected error for %s: %s",
-                attempt + 1, max_retries, mid.decode(errors="replace"), e,
-            )
+#     Returns True on success, False if all attempts failed.
+#     """
+#     for attempt in range(max_retries):
+#         try:
+#             status, _ = imap.store(mid, "+FLAGS", "\\Seen")
+#             if status == "OK":
+#                 return True
+#             log.warning(
+#                 "[IMAP-MARK-SEEN] attempt %d/%d: unexpected status %r for %s",
+#                 attempt + 1, max_retries, status, mid.decode(errors="replace"),
+#             )
+#         except (imaplib.IMAP4.abort, OSError, EOFError, BrokenPipeError) as e:
+#             log.warning(
+#                 "[IMAP-MARK-SEEN] attempt %d/%d socket error for %s: %s",
+#                 attempt + 1, max_retries, mid.decode(errors="replace"), type(e).__name__,
+#             )
+#             if attempt < max_retries - 1:
+#                 time.sleep(0.5)
+#                 try:
+#                     imap.noop()
+#                 except Exception:
+#                     # noop() itself failed — bail and let the caller retry next cycle
+#                     pass
+#         except Exception as e:
+#             log.warning(
+#                 "[IMAP-MARK-SEEN] attempt %d/%d unexpected error for %s: %s",
+#                 attempt + 1, max_retries, mid.decode(errors="replace"), e,
+#             )
 
-    # Every attempt failed — record it so it's visible in the Admin panel.
-    log.error(
-        "[IMAP-MARK-SEEN] Could not mark %s as read after %d attempts (subject: %r)",
-        mid.decode(errors="replace"), max_retries, subject[:100],
-    )
-    sflog.record_failure(
-        source="mailback", stage="mark_seen",
-        rta=rta, report=report,
-        msg=f"Failed to mark email as read after {max_retries} attempts: {subject[:200]}",
-        context={"msg_id": mid.decode(errors="replace")},
-    )
-    return False
+#     # Every attempt failed — record it so it's visible in the Admin panel.
+#     log.error(
+#         "[IMAP-MARK-SEEN] Could not mark %s as read after %d attempts (subject: %r)",
+#         mid.decode(errors="replace"), max_retries, subject[:100],
+#     )
+#     sflog.record_failure(
+#         source="mailback", stage="mark_seen",
+#         rta=rta, report=report,
+#         msg=f"Failed to mark email as read after {max_retries} attempts: {subject[:200]}",
+#         context={"msg_id": mid.decode(errors="replace")},
+#     )
+#     return False
 
 
 # ══════════════════════════════════════════════════════════════
