@@ -40,3 +40,15 @@ nohup streamlit srun app.py --server.port 8501 --server.address 0.0.0.0 > ~/stre
 - Use `/mnt/sdcard/...` path, not `/root/storage/...` — the bind-mount path throws PermissionError on file writes (FUSE/exFAT write restriction). `/mnt/sdcard` works fine.
 - If port 8501 busy: `pkill -f streamlit` or use a different port (`--server.port 8502`).
 - venv location: `~/venvs/mfd` (proot's own ext4, not the FUSE-mounted USB drive — avoids symlink/write issues).
+
+
+# find and kill the running instance
+pkill -f code-server
+# or, if that doesn't catch it:
+ps aux | grep code-server
+kill <pid>
+
+# then relaunch with TLS
+code-server --bind-addr 0.0.0.0:8080 \
+  --cert ~/.config/code-server/cert.pem \
+  --cert-key ~/.config/code-server/key.pempkill -f code-server
