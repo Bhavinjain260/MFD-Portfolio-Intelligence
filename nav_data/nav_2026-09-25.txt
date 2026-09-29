@@ -1485,12 +1485,6 @@ quant Mutual Fund
 154085;-;-;quant Overnight Fund;Direct Plan;Unclaimed Redemption Greater than 3 years;10;27-Sep-2026
 154084;-;-;quant Overnight Fund;Direct Plan;Unclaimed Redemption Less than 3 years;10.3853;27-Sep-2026
  
-Samco Mutual Fund
- 
-150631;INF0K1H01040;-;Samco Overnight Fund;Direct Plan;Growth;1259.5054;27-Sep-2026
-150632;INF0K1H01032;-;Samco Overnight Fund;Regular Plan;Growth;1248.9197;27-Sep-2026
-153021;-;-;Samco Overnight Fund;;;1101.8523;27-Sep-2026
- 
 SBI Mutual Fund
  
 119831;-;INF200K01TJ7;SBI OVERNIGHT FUND;Direct Plan;IDCW;1393.4879;27-Sep-2026
@@ -1965,11 +1959,6 @@ Quantum Mutual Fund
 141070;INF082J01366;-;Quantum ELSS Tax Saver Fund;Regular Plan;Growth Option;113.15;25-Sep-2026
 141071;INF082J01374;-;Quantum ELSS Tax Saver Fund;Regular Plan;IDCW;111.93;25-Sep-2026
  
-Samco Mutual Fund
- 
-150838;INF0K1H01065;-;Samco ELSS Tax Saver Fund;Direct Plan;Growth;13.96;25-Sep-2026
-150839;INF0K1H01057;-;Samco ELSS Tax Saver Fund;Regular Plan;Growth;13.23;25-Sep-2026
- 
 SBI Mutual Fund
  
 119722;INF200K01UK3;-;SBI ELSS Tax Saver Fund;Direct Plan;IDCW;112.0239;25-Sep-2026
@@ -2159,11 +2148,6 @@ quant Mutual Fund
 120843;INF966L01911;-;Quant Flexi Cap Fund;Direct Plan;Growth Option;120.4479;25-Sep-2026
 120842;INF966L01895;INF966L01903;Quant Flexi Cap Fund;Direct Plan;IDCW Option;81.8735;25-Sep-2026
 109831;INF966L01432;INF966L01440;Quant Flexi Cap Fund;Regular Plan;IDCW Option;76.4181;25-Sep-2026
- 
-Samco Mutual Fund
- 
-149450;INF0K1H01024;-;Samco Flexi Cap Fund;Direct Plan;Growth;10.14;25-Sep-2026
-149449;INF0K1H01016;-;Samco Flexi Cap Fund;Regular Plan;Growth;9.48;25-Sep-2026
  
 SBI Mutual Fund
  
@@ -2494,11 +2478,6 @@ quant Mutual Fund
 120825;INF966L01622;INF966L01630;Quant Large & Mid Cap Fund;Direct Plan;IDCW Option;63.4365;25-Sep-2026
 104514;INF966L01325;INF966L01333;Quant Large & Mid Cap Fund;Regular Plan;IDCW Option;74.8705;25-Sep-2026
  
-Samco Mutual Fund
- 
-153534;INF0K1H01271;-;Samco Large & Mid Cap Fund;Direct Plan;Growth;8.86;25-Sep-2026
-153533;INF0K1H01289;-;Samco Large & Mid Cap Fund;Regular Plan;Growth;8.69;25-Sep-2026
- 
 SBI Mutual Fund
  
 119720;INF200K01UH9;INF200K01UI7;SBI LARGE & MIDCAP FUND;Direct Plan;IDCW;358.7010;25-Sep-2026
@@ -2681,11 +2660,6 @@ quant Mutual Fund
 150439;INF966L01AU8;INF966L01AV6;quant Large Cap Fund;Direct Plan;IDCW Option;16.6381;25-Sep-2026
 150442;INF966L01AX2;INF966L01AY0;quant Large Cap Fund;Regular Plan;IDCW Option;15.4498;25-Sep-2026
  
-Samco Mutual Fund
- 
-153239;INF0K1H01255;-;Samco Large Cap Fund;Direct Plan;Growth;8.89;25-Sep-2026
-153238;INF0K1H01263;-;Samco Large Cap Fund;Regular Plan;Growth;8.67;25-Sep-2026
- 
 SBI Mutual Fund
  
 119585;INF200K01QV8;INF200K01QW6;SBI Large Cap Fund;Direct Plan;IDCW;65.7374;25-Sep-2026
@@ -2826,11 +2800,6 @@ quant Mutual Fund
 120840;INF966L01861;INF966L01879;Quant Mid Cap Fund;Direct Plan;IDCW Option;86.078;25-Sep-2026
 101066;INF966L01150;INF966L01168;Quant Mid Cap Fund;Regular Plan;IDCW Option;76.7097;25-Sep-2026
  
-Samco Mutual Fund
- 
-154114;INF0K1H01313;-;Samco Mid Cap Fund;Direct Plan;Growth;9.89;25-Sep-2026
-154115;INF0K1H01321;-;Samco Mid Cap Fund;Regular Plan;Growth;9.80;25-Sep-2026
- 
 SBI Mutual Fund
  
 119716;INF200K01TP4;-;SBI MIDCAP FUND;Direct Plan;Growth;267.8937;25-Sep-2026
@@ -2970,11 +2939,6 @@ quant Mutual Fund
 120823;INF966L01614;-;Quant Multi Cap Fund;Direct Plan;Growth Option;727.798;25-Sep-2026
 120822;INF966L01598;INF966L01606;Quant Multi Cap Fund;Direct Plan;IDCW Option;84.2853;25-Sep-2026
 100630;INF966L01218;INF966L01226;Quant Multi Cap Fund;Regular Plan;IDCW Option;75.3607;25-Sep-2026
- 
-Samco Mutual Fund
- 
-152847;INF0K1H01198;-;Samco Multi Cap Fund;Direct Plan;Growth;9.21;25-Sep-2026
-152848;INF0K1H01206;-;Samco Multi Cap Fund;Regular Plan;Growth;8.94;25-Sep-2026
  
 SBI Mutual Fund
  
@@ -3413,10 +3377,10 @@ Kotak Mahindra Mutual Fund
 152911;INF174KA1TH7;INF174KA1TI5;Kotak MNC Fund;Direct Plan;IDCW Option;12.754;25-Sep-2026
 152913;INF174KA1TJ3;-;Kotak MNC Fund;Regular Plan;Growth;12.409;25-Sep-2026
 152912;INF174KA1TK1;INF174KA1TL9;Kotak MNC Fund;Regular Plan;IDCW Option;12.409;25-Sep-2026
-147727;INF174KA1EZ1;-;Kotak Pioneer Fund;Direct Plan;Growth;39.64;24-Sep-2026
-147724;INF174KA1EW8;-;Kotak Pioneer Fund;Regular Plan;Growth;35.638;24-Sep-2026
-147728;INF174KA1EU2;INF174KA1EV0;Kotak Pioneer Fund;Regular Plan;Reinvestment of Income Distribution cum capital withdrawal option;35.653;24-Sep-2026
-147725;INF174KA1EX6;INF174KA1EY4;Kotak Pioneer Fund;Direct Plan;Reinvestment of Income Distribution cum capital withdrawal option;39.634;24-Sep-2026
+147727;INF174KA1EZ1;-;Kotak Pioneer Fund;Direct Plan;Growth;39.638;25-Sep-2026
+147724;INF174KA1EW8;-;Kotak Pioneer Fund;Regular Plan;Growth;35.634;25-Sep-2026
+147728;INF174KA1EU2;INF174KA1EV0;Kotak Pioneer Fund;Regular Plan;Reinvestment of Income Distribution cum capital withdrawal option;35.65;25-Sep-2026
+147725;INF174KA1EX6;INF174KA1EY4;Kotak Pioneer Fund;Direct Plan;Reinvestment of Income Distribution cum capital withdrawal option;39.632;25-Sep-2026
 151881;INF174KA1OL0;-;Kotak Quant Fund;Direct Plan;Growth;15.099;25-Sep-2026
 151880;INF174KA1OM8;INF174KA1ON6;Kotak Quant Fund;Direct Plan;IDCW;15.099;25-Sep-2026
 151878;INF174KA1OI6;-;Kotak Quant Fund;Regular Plan;Growth;14.906;25-Sep-2026
@@ -3586,11 +3550,6 @@ Quantum Mutual Fund
 147371;INF082J01390;-;QUANTUM ESG BEST IN CLASS STRATEGY FUND;Regular Plan;Growth Option;22.60;25-Sep-2026
 153094;INF082J01473;-;Quantum Ethical Fund;Direct Plan;Growth Option;9.99;25-Sep-2026
 153095;INF082J01481;-;Quantum Ethical Fund;Regular Plan;Growth Option;9.75;25-Sep-2026
- 
-Samco Mutual Fund
- 
-152586;INF0K1H01180;-;Samco Special Opportunities Fund;Direct Plan;Growth;9.49;25-Sep-2026
-152587;INF0K1H01172;-;Samco Special Opportunities Fund;Regular Plan;Growth;9.15;25-Sep-2026
  
 SBI Mutual Fund
  
@@ -3949,11 +3908,6 @@ Quantum Mutual Fund
 152107;INF082J01432;-;QUANTUM SMALL CAP FUND;Direct Plan;Growth Option;14.14;25-Sep-2026
 152108;INF082J01440;-;QUANTUM SMALL CAP FUND;Regular Plan;Growth Option;13.55;25-Sep-2026
  
-Samco Mutual Fund
- 
-153868;INF0K1H01297;-;Samco Small Cap Fund;Direct Plan;Growth;12.87;25-Sep-2026
-153869;INF0K1H01305;-;Samco Small Cap Fund;Regular Plan;Growth;12.71;25-Sep-2026
- 
 SBI Mutual Fund
  
 125497;INF200K01T51;-;SBI SMALL CAP FUND;Direct Plan;Growth;212.5290;25-Sep-2026
@@ -4278,6 +4232,11 @@ NJ Mutual Fund
 151609;INF0J8L01099;-;NJ ELSS Tax Saver Fund;Regular Plan;Growth Option;13.82;25-Sep-2026
 151610;INF0J8L01107;-;NJ ELSS Tax Saver Fund;Regular Plan;IDCW Payout Option;13.82;25-Sep-2026
  
+Samco Mutual Fund
+ 
+150838;INF0K1H01065;-;Samco ELSS Tax Saver Fund;Direct Plan;Growth;13.96;25-Sep-2026
+150839;INF0K1H01057;-;Samco ELSS Tax Saver Fund;Regular Plan;Growth;13.23;25-Sep-2026
+ 
 Tata Mutual Fund
  
 119281;INF277K01I94;-;Tata ELSS - Tax Saver Fund;Direct Plan;Payout of IDCW Option;230.3117;25-Sep-2026
@@ -4553,6 +4512,11 @@ Mirae Asset Mutual Fund
 112932;INF769K01101;-;Mirae Asset Large & Midcap Fund;Regular Plan;Growth;152.200;25-Sep-2026
 112931;INF769K01127;INF769K01119;Mirae Asset Large & Midcap Fund;Regular Plan;IDCW;46.813;25-Sep-2026
  
+Samco Mutual Fund
+ 
+153534;INF0K1H01271;-;Samco Large & Mid Cap Fund;Direct Plan;Growth;8.86;25-Sep-2026
+153533;INF0K1H01289;-;Samco Large & Mid Cap Fund;Regular Plan;Growth;8.69;25-Sep-2026
+ 
 Trust Mutual Fund
  
 154433;INF0GCD01891;-;TRUSTMF LARGE & MIDCAP FUND;Direct Plan;Growth;9.95;25-Sep-2026
@@ -4640,6 +4604,11 @@ Mirae Asset Mutual Fund
 107578;INF769K01010;-;Mirae Asset Large Cap Fund;Regular Plan;Growth;108.224;25-Sep-2026
 107579;INF769K01036;INF769K01028;Mirae Asset Large Cap Fund;Regular Plan;IDCW;27.720;25-Sep-2026
  
+Samco Mutual Fund
+ 
+153239;INF0K1H01255;-;Samco Large Cap Fund;Direct Plan;Growth;8.89;25-Sep-2026
+153238;INF0K1H01263;-;Samco Large Cap Fund;Regular Plan;Growth;8.67;25-Sep-2026
+ 
 WhiteOak Capital Mutual Fund
  
 150797;INF03VN01696;-;WhiteOak Capital Large Cap Fund;Direct Plan;Growth Option;15.391;25-Sep-2026
@@ -4725,6 +4694,11 @@ Mirae Asset Mutual Fund
 147478;INF769K01EZ9;INF769K01FC5;Mirae Asset Midcap Fund;Direct Plan;IDCW;28.166;25-Sep-2026
 147479;INF769K01EY2;-;Mirae Asset Midcap Fund;Regular Plan;Growth;39.120;25-Sep-2026
 147480;INF769K01EX4;INF769K01FB7;Mirae Asset Midcap Fund;Regular Plan;IDCW;25.547;25-Sep-2026
+ 
+Samco Mutual Fund
+ 
+154114;INF0K1H01313;-;Samco Mid Cap Fund;Direct Plan;Growth;9.89;25-Sep-2026
+154115;INF0K1H01321;-;Samco Mid Cap Fund;Regular Plan;Growth;9.80;25-Sep-2026
  
 The Wealth Company Mutual Fund
  
@@ -4822,6 +4796,11 @@ Nippon India Mutual Fund
 106253;INF204K01448;-;Nippon India Multi Cap Fund;Regular Plan;Institutional Plan Growth Plan;21.9544;25-Apr-2017
 101162;INF204K01471;-;Nippon India Multi Cap Fund;Regular Plan;Bonus Option;294.5591;25-Sep-2026
 101161;INF204K01489;-;Nippon India Multi Cap Fund;Regular Plan;Growth Option;294.5591;25-Sep-2026
+ 
+Samco Mutual Fund
+ 
+152847;INF0K1H01198;-;Samco Multi Cap Fund;Direct Plan;Growth;9.21;25-Sep-2026
+152848;INF0K1H01206;-;Samco Multi Cap Fund;Regular Plan;Growth;8.94;25-Sep-2026
  
 The Wealth Company Mutual Fund
  
@@ -5024,6 +5003,11 @@ Mirae Asset Mutual Fund
 153197;INF769K01NL0;INF769K01NK2;Mirae Asset Small Cap Fund;Direct Plan;IDCW;12.891;25-Sep-2026
 153198;INF769K01NG0;-;Mirae Asset Small Cap Fund;Regular Plan;Growth;12.561;25-Sep-2026
 153199;INF769K01NI6;INF769K01NH8;Mirae Asset Small Cap Fund;Regular Plan;IDCW;12.564;25-Sep-2026
+ 
+Samco Mutual Fund
+ 
+153868;INF0K1H01297;-;Samco Small Cap Fund;Direct Plan;Growth;12.87;25-Sep-2026
+153869;INF0K1H01305;-;Samco Small Cap Fund;Regular Plan;Growth;12.71;25-Sep-2026
  
 UTI Mutual Fund
  
@@ -5291,6 +5275,10 @@ Samco Mutual Fund
  
 151753;INF0K1H01081;-;Samco Active Momentum Fund;Direct Plan;Growth;16.14;25-Sep-2026
 151752;INF0K1H01073;-;Samco Active Momentum Fund;Regular Plan;Growth;15.43;25-Sep-2026
+149450;INF0K1H01024;-;Samco Flexi Cap Fund;Direct Plan;Growth;10.14;25-Sep-2026
+149449;INF0K1H01016;-;Samco Flexi Cap Fund;Regular Plan;Growth;9.48;25-Sep-2026
+152586;INF0K1H01180;-;Samco Special Opportunities Fund;Direct Plan;Growth;9.49;25-Sep-2026
+152587;INF0K1H01172;-;Samco Special Opportunities Fund;Regular Plan;Growth;9.15;25-Sep-2026
  
 UTI Mutual Fund
  
@@ -6234,11 +6222,6 @@ quant Mutual Fund
 153427;INF966L01DX6;INF966L01DY4;quant Arbitrage Fund;Direct Plan;IDCW Option;11.1022;25-Sep-2026
 153429;INF966L01EA2;INF966L01EB0;quant Arbitrage Fund;Regular Plan;IDCW Option;11.0163;25-Sep-2026
  
-Samco Mutual Fund
- 
-153090;INF0K1H01214;-;Samco Arbitrage Fund;Direct Plan;Growth;10.97;25-Sep-2026
-153091;INF0K1H01222;-;Samco Arbitrage Fund;Regular Plan;Growth;10.74;25-Sep-2026
- 
 Sundaram Mutual Fund
  
 149552;INF173K01NB6;-;Sundaram Arbitrage Fund(Formerly Known as Prinicpal Arbitrage Fund);Regular Plan;GROWTH;15.4894;25-Sep-2026
@@ -6502,13 +6485,6 @@ quant Mutual Fund
 151714;INF966L01BO9;-;quant Dynamic Asset Allocation Fund;Regular Plan;Growth Option;16.0953;25-Sep-2026
 151712;INF966L01BM3;INF966L01BN1;quant Dynamic Asset Allocation Fund;Direct Plan;IDCW Option;16.9477;25-Sep-2026
 151715;INF966L01BP6;INF966L01BQ4;quant Dynamic Asset Allocation Fund;Regular Plan;IDCW Option;16.0969;25-Sep-2026
- 
-Samco Mutual Fund
- 
-152188;INF0K1H01131;-;Samco Dynamic Asset Allocation Fund;Direct Plan;Growth;10.59;25-Sep-2026
-152186;INF0K1H01149;INF0K1H01156;Samco Dynamic Asset Allocation Fund;Direct Plan;IDCW Option;10.58;25-Sep-2026
-152187;INF0K1H01099;-;Samco Dynamic Asset Allocation Fund;Regular Plan;Growth;10.13;25-Sep-2026
-152185;INF0K1H01107;INF0K1H01115;Samco Dynamic Asset Allocation Fund;Regular Plan;IDCW Option;10.13;25-Sep-2026
  
 SBI Mutual Fund
  
@@ -6832,11 +6808,6 @@ Quantum Mutual Fund
 152474;INF082J01457;-;Quantum Multi Asset Allocation Fund;Direct Plan;Growth Option;12.07;25-Sep-2026
 152475;INF082J01465;-;Quantum Multi Asset Allocation Fund;Regular Plan;Growth Option;11.60;25-Sep-2026
  
-Samco Mutual Fund
- 
-153092;INF0K1H01230;-;Samco Multi Asset Allocation Fund;Direct Plan;Growth;12.46;25-Sep-2026
-153093;INF0K1H01248;-;Samco Multi Asset Allocation Fund;Regular Plan;Growth;12.11;25-Sep-2026
- 
 SBI Mutual Fund
  
 119840;INF200K01TX8;INF200K01TY6;SBI MULTI ASSET ALLOCATION FUND;Direct Plan;IDCW;42.3520;25-Sep-2026
@@ -7148,6 +7119,11 @@ NJ Mutual Fund
 150367;INF0J8L01065;-;NJ Arbitrage Fund;Direct Plan;Growth Option;13.1687;25-Sep-2026
 150366;INF0J8L01057;-;NJ Arbitrage Fund;Regular Plan;Growth Option;12.7925;25-Sep-2026
  
+Samco Mutual Fund
+ 
+153090;INF0K1H01214;-;Samco Arbitrage Fund;Direct Plan;Growth;10.97;25-Sep-2026
+153091;INF0K1H01222;-;Samco Arbitrage Fund;Regular Plan;Growth;10.74;25-Sep-2026
+ 
 SBI Mutual Fund
  
 119574;INF200K01QU0;-;SBI Arbitrage Fund;Direct Plan;Growth;38.8460;25-Sep-2026
@@ -7245,6 +7221,13 @@ NJ Mutual Fund
 149265;INF0J8L01032;-;NJ Balanced Advantage Fund;Direct Plan;IDCW Payout Option;14.39;25-Sep-2026
 149266;INF0J8L01024;-;NJ Balanced Advantage Fund;Regular Plan;Growth Option;13.50;25-Sep-2026
 149263;INF0J8L01016;-;NJ Balanced Advantage Fund;Regular Plan;IDCW Payout Option;13.50;25-Sep-2026
+ 
+Samco Mutual Fund
+ 
+152188;INF0K1H01131;-;Samco Dynamic Asset Allocation Fund;Direct Plan;Growth;10.59;25-Sep-2026
+152186;INF0K1H01149;INF0K1H01156;Samco Dynamic Asset Allocation Fund;Direct Plan;IDCW Option;10.58;25-Sep-2026
+152187;INF0K1H01099;-;Samco Dynamic Asset Allocation Fund;Regular Plan;Growth;10.13;25-Sep-2026
+152185;INF0K1H01107;INF0K1H01115;Samco Dynamic Asset Allocation Fund;Regular Plan;IDCW Option;10.13;25-Sep-2026
  
 Shriram Mutual Fund
  
@@ -7563,6 +7546,11 @@ Mirae Asset Mutual Fund
 152345;INF769K01LA7;INF769K01LB5;Mirae Asset Multi Asset Allocation Fund;Direct Plan;IDCW;14.005;25-Sep-2026
 152347;INF769K01KW3;-;Mirae Asset Multi Asset Allocation Fund;Regular Plan;Growth;13.434;25-Sep-2026
 152346;INF769K01KX1;INF769K01KY9;Mirae Asset Multi Asset Allocation Fund;Regular Plan;IDCW;13.427;25-Sep-2026
+ 
+Samco Mutual Fund
+ 
+153092;INF0K1H01230;-;Samco Multi Asset Allocation Fund;Direct Plan;Growth;12.46;25-Sep-2026
+153093;INF0K1H01248;-;Samco Multi Asset Allocation Fund;Regular Plan;Growth;12.11;25-Sep-2026
  
 Shriram Mutual Fund
  
@@ -9612,6 +9600,12 @@ NJ Mutual Fund
 150368;INF0J8L01073;-;NJ Overnight Fund;Regular Plan;Growth Option;1272.3965;27-Sep-2026
 152116;-;-;NJ Overnight Fund;;Unclaimed Redemption Plan - Upto 3 Years;1109.8574;27-Sep-2026
  
+Samco Mutual Fund
+ 
+150631;INF0K1H01040;-;Samco Overnight Fund;Direct Plan;Growth;1259.5054;27-Sep-2026
+150632;INF0K1H01032;-;Samco Overnight Fund;Regular Plan;Growth;1248.9197;27-Sep-2026
+153021;-;-;Samco Overnight Fund;;;1101.8523;27-Sep-2026
+ 
 Shriram Mutual Fund
  
 154395;-;INF680P01513;Shriram Overnight Fund;Direct Plan;Daily IDCW;1000.0186;27-Sep-2026
@@ -10621,6 +10615,15 @@ SBI Mutual Fund
 154468;INF200KB1BL4;-;SBI Crisil - IBX SDL Index - June 2034 Index Fund;Regular Plan;Growth;9.9335;25-Sep-2026
 154469;INF200KB1BM2;INF200KB1BN0;SBI Crisil - IBX SDL Index - June 2034 Index Fund;Regular Plan;IDCW;9.9335;25-Sep-2026
  
+Tata Mutual Fund
+ 
+154747;INF277KA1FB5;-;Tata CRISIL-IBX Financial Services 3-6 Months Debt Index Fund;Direct Plan;Growth Option;10.0034;25-Sep-2026
+154748;INF277KA1FC3;-;Tata CRISIL-IBX Financial Services 3-6 Months Debt Index Fund;Direct Plan;IDCW Payout;10.0034;25-Sep-2026
+154749;-;INF277KA1FD1;Tata CRISIL-IBX Financial Services 3-6 Months Debt Index Fund;Direct Plan;IDCW Reinvestment;10.0034;25-Sep-2026
+154744;INF277KA1EY0;-;Tata CRISIL-IBX Financial Services 3-6 Months Debt Index Fund;Regular Plan;Growth Option;10.0033;25-Sep-2026
+154745;INF277KA1EZ7;-;Tata CRISIL-IBX Financial Services 3-6 Months Debt Index Fund;Regular Plan;IDCW Payout;10.0033;25-Sep-2026
+154746;-;INF277KA1FA7;Tata CRISIL-IBX Financial Services 3-6 Months Debt Index Fund;Regular Plan;IDCW Reinvestment;10.0033;25-Sep-2026
+ 
 UTI Mutual Fund
  
 151185;INF789F1AWX3;-;UTI CRISIL SDL Maturity April 2033 Index Fund;Direct Plan;Growth;13.0158;25-Sep-2026
@@ -11417,8 +11420,8 @@ Franklin Templeton Mutual Fund
  
 HDFC Mutual Fund
  
-149180;INF179KC1BO4;-;HDFC Developed World Overseas Equity Passive FOF;;;21.954;24-Sep-2026
-149181;INF179KC1BP1;-;HDFC Developed World Overseas Equity Passive FOF;;;21.455;24-Sep-2026
+149180;INF179KC1BO4;-;HDFC Developed World Overseas Equity Passive FOF;;;22.124;25-Sep-2026
+149181;INF179KC1BP1;-;HDFC Developed World Overseas Equity Passive FOF;;;21.622;25-Sep-2026
  
 ICICI Prudential Mutual Fund
  
@@ -11488,10 +11491,10 @@ SBI Mutual Fund
  
 Sundaram Mutual Fund
  
-119602;INF903J01OB6;-;Sundaram Global Brand Theme-Equity Active FOF;Direct Plan;GROWTH;47.8233;24-Sep-2026
-119601;INF903J01NZ7;INF903J01OA8;Sundaram Global Brand Theme-Equity Active FOF;Direct Plan;IDCW (Income Distribution CUM Capital Withdrawal);40.1352;24-Sep-2026
-106370;INF903J01EX1;-;Sundaram Global Brand Theme-Equity Active FOF;Regular Plan;GROWTH;43.1940;24-Sep-2026
-106369;INF903J01EY9;INF903J01EZ6;Sundaram Global Brand Theme-Equity Active FOF;Regular Plan;IDCW (Income Distribution CUM Capital Withdrawal);34.9173;24-Sep-2026
+119602;INF903J01OB6;-;Sundaram Global Brand Theme-Equity Active FOF;Direct Plan;GROWTH;48.0849;25-Sep-2026
+119601;INF903J01NZ7;INF903J01OA8;Sundaram Global Brand Theme-Equity Active FOF;Direct Plan;IDCW (Income Distribution CUM Capital Withdrawal);40.3548;25-Sep-2026
+106370;INF903J01EX1;-;Sundaram Global Brand Theme-Equity Active FOF;Regular Plan;GROWTH;43.4293;25-Sep-2026
+106369;INF903J01EY9;INF903J01EZ6;Sundaram Global Brand Theme-Equity Active FOF;Regular Plan;IDCW (Income Distribution CUM Capital Withdrawal);35.1074;25-Sep-2026
  
 Open Ended Schemes(Other Scheme - Gold ETF)
  
@@ -13049,10 +13052,10 @@ Kotak Mahindra Mutual Fund
 106442;INF174K01DX9;INF174K01DW1;Kotak Global Emerging Market Overseas Equity Active FOF;Regular Plan;Payout of Income Distribution cum capital withdrawal option;40.655;25-Sep-2026
 119778;INF174K01LX2;INF174K01LY0;Kotak Global Emerging Market Overseas Equity Active FOF;Direct Plan;Payout of Income Distribution cum capital withdrawal option;44.572;25-Sep-2026
 106441;INF174K01DV3;-;Kotak Global Emerging Market Overseas Equity Active FOF;Regular Plan;Growth;40.652;25-Sep-2026
-149058;INF174KA1HE9;INF174KA1HF6;Kotak Global Innovation Overseas Equity Active FOF;Regular Plan;IDCW Option;15.2357;24-Sep-2026
-149056;INF174KA1HD1;-;Kotak Global Innovation Overseas Equity Active FOF;Regular Plan;Growth;15.2352;24-Sep-2026
-149060;INF174KA1HH2;INF174KA1HI0;Kotak Global Innovation Overseas Equity Active FOF;Direct Plan;IDCW Option;16.1872;24-Sep-2026
-149059;INF174KA1HG4;-;Kotak Global Innovation Overseas Equity Active FOF;Direct Plan;Growth;16.1897;24-Sep-2026
+149058;INF174KA1HE9;INF174KA1HF6;Kotak Global Innovation Overseas Equity Active FOF;Regular Plan;IDCW Option;15.3126;25-Sep-2026
+149056;INF174KA1HD1;-;Kotak Global Innovation Overseas Equity Active FOF;Regular Plan;Growth;15.3121;25-Sep-2026
+149060;INF174KA1HH2;INF174KA1HI0;Kotak Global Innovation Overseas Equity Active FOF;Direct Plan;IDCW Option;16.2694;25-Sep-2026
+149059;INF174KA1HG4;-;Kotak Global Innovation Overseas Equity Active FOF;Direct Plan;Growth;16.2719;25-Sep-2026
 148646;INF174KA1FO2;-;Kotak International REIT Overseas Equity Active FOF;Direct Plan;Growth;11.6583;24-Sep-2026
 148649;INF174KA1FN4;INF174KA1FP9;Kotak International REIT Overseas Equity Active FOF;Direct Plan;Payout of Income Distribution cum capital withdrawal option;11.6581;24-Sep-2026
 148645;INF174KA1FL8;-;Kotak International REIT Overseas Equity Active FOF;Regular Plan;Growth;11.0823;24-Sep-2026
