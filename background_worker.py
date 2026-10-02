@@ -140,6 +140,8 @@ _install_trigger_filter()
 def _ensure_db():
     from init_db import init_db, get_conn
     init_db()
+    import aum_recon
+    aum_recon.ensure_schema()
     with get_conn() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS admin_settings (

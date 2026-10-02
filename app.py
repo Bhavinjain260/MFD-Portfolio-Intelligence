@@ -127,6 +127,8 @@ log = logging.getLogger(__name__)
 warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
+import aum_recon
+
 # ==================== CONSTANTS ====================
 PAGE_SIZE = 20
 
@@ -222,7 +224,7 @@ def get_client_cams_schemes(folio_ids: list[str], _v: int) -> pd.DataFrame:
     with get_conn() as conn:
         txns = pd.read_sql(f"""
             SELECT DISTINCT folio_no, UPPER(TRIM(prodcode)) AS prodcode
-            FROM cams_wbr2_transaction
+            FROM v_cams_txn_active
             WHERE folio_no IN ({placeholders})
         """, conn, params=folio_ids)
 
@@ -250,7 +252,7 @@ def get_cams_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
         df = pd.read_sql("""
             SELECT COALESCE(txn_date_iso, traddate) AS traddate,
                    trxntype, trxn_nature, units, purprice, amount
-            FROM cams_wbr2_transaction
+            FROM v_cams_txn_active
             WHERE folio_no = ? AND UPPER(TRIM(prodcode)) = ?
         """, conn, params=(folio_no, product_code.strip().upper()))
 
@@ -279,7 +281,7 @@ def get_client_kfin_schemes(folio_ids: list[str], _v: int) -> pd.DataFrame:
     with get_conn() as conn:
         txns = pd.read_sql(f"""
             SELECT DISTINCT td_acno AS folio_no, UPPER(TRIM(fmcode)) AS prodcode
-            FROM kfin_mfsd201_transaction
+            FROM v_kfin_txn_active
             WHERE td_acno IN ({placeholders})
         """, conn, params=folio_ids)
 
@@ -700,7 +702,7 @@ def get_kfin_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
                    td_units    AS units,
                    td_pop      AS purprice,
                    td_amt      AS amount
-            FROM kfin_mfsd201_transaction
+            FROM v_kfin_txn_active
             WHERE td_acno = ? AND UPPER(TRIM(fmcode)) = ?
         """, conn, params=(folio_no, product_code.strip().upper()))
 
@@ -729,7 +731,7 @@ def fetch_all_folio_transactions(folio_no: str, rta: str) -> pd.DataFrame:
         with get_conn() as conn:
             codes = pd.read_sql(
                 "SELECT DISTINCT TRIM(UPPER(prodcode)) AS pc "
-                "FROM cams_wbr2_transaction WHERE folio_no = ?",
+                "FROM v_cams_txn_active WHERE folio_no = ?",
                 conn, params=(folio_no,)
             )['pc'].tolist()
         frames = []
@@ -743,7 +745,7 @@ def fetch_all_folio_transactions(folio_no: str, rta: str) -> pd.DataFrame:
         with get_conn() as conn:
             codes = pd.read_sql(
                 "SELECT DISTINCT TRIM(UPPER(fmcode)) AS pc "
-                "FROM kfin_mfsd201_transaction WHERE td_acno = ?",
+                "FROM v_kfin_txn_active WHERE td_acno = ?",
                 conn, params=(folio_no,)
             )['pc'].tolist()
         frames = []
@@ -2256,7 +2258,7 @@ def get_all_folios_with_isin_and_nav(_get_conn, _v: int, force_reload: bool = Fa
             td_acno AS folio_id,
             fmcode  AS product_code,
             SUM(td_units) AS total_units
-        FROM kfin_mfsd201_transaction
+        FROM v_kfin_txn_active
         WHERE td_units IS NOT NULL
         GROUP BY td_acno, fmcode
         HAVING total_units != 0
@@ -2577,7 +2579,7 @@ def get_kfin_invested_amount(folio_list, _v: int):
         placeholders = ','.join(['?'] * len(folio_list))
         query = f"""
             SELECT COALESCE(SUM(td_amt), 0) as total_invested
-            FROM kfin_mfsd201_transaction 
+            FROM v_kfin_txn_active 
             WHERE td_acno IN ({placeholders})
         """
         result = conn.execute(query, folio_list).fetchone()[0]
@@ -2600,7 +2602,7 @@ def get_kfin_invested_per_scheme(folio_list: list, _v: int) -> pd.DataFrame:
                 td_acno   AS folio_id,
                 UPPER(TRIM(fmcode)) AS product_code,
                 COALESCE(SUM(td_amt), 0) AS invested_amount
-            FROM kfin_mfsd201_transaction
+            FROM v_kfin_txn_active
             WHERE td_acno IN ({placeholders})
             GROUP BY td_acno, UPPER(TRIM(fmcode))
         """
@@ -2646,7 +2648,7 @@ def get_cams_invested_per_scheme(folio_list: list, _v: int) -> pd.DataFrame:
                     units,
                     purprice,
                     amount
-                FROM cams_wbr2_transaction
+                FROM v_cams_txn_active
                 WHERE folio_no IN ({placeholders})
             """
         else:
@@ -2660,7 +2662,7 @@ def get_cams_invested_per_scheme(folio_list: list, _v: int) -> pd.DataFrame:
                     units,
                     purprice,
                     amount
-                FROM cams_wbr2_transaction
+                FROM v_cams_txn_active
                 WHERE folio_no IN ({placeholders})
             """
         df = pd.read_sql(query, conn, params=folio_list)
@@ -2801,11 +2803,11 @@ def load_dashboard_summary(_v: int) -> dict:
         summary["cams_folios"] = conn.execute(
             "SELECT COUNT(DISTINCT foliochk) FROM cams_wbr9_folio"
         ).fetchone()[0]
-        summary["cams_txns"] = conn.execute("SELECT COUNT(*) FROM cams_wbr2_transaction").fetchone()[0]
+        summary["cams_txns"] = conn.execute("SELECT COUNT(*) FROM v_cams_txn_active").fetchone()[0]
         summary["cams_sips"] = conn.execute("SELECT COUNT(*) FROM cams_wbr49_sip").fetchone()[0]
         # Invested amount = sum of transaction amounts (same logic as KFin)
         summary["cams_aum"] = conn.execute(
-            "SELECT COALESCE(SUM(CASE WHEN trxntype = 'R1' THEN -amount ELSE amount END), 0) FROM cams_wbr2_transaction"
+            "SELECT COALESCE(SUM(CASE WHEN trxntype = 'R1' THEN -amount ELSE amount END), 0) FROM v_cams_txn_active"
         ).fetchone()[0]
         summary["cams_brokerage"] = conn.execute(
             "SELECT COALESCE(SUM(brkage_amt), 0) FROM cams_wbr77_brokerage"
@@ -2818,7 +2820,7 @@ def load_dashboard_summary(_v: int) -> dict:
         summary["kfin_folios"] = conn.execute(
             "SELECT COUNT(DISTINCT Folio) FROM kfin_mfsd211_folio"
         ).fetchone()[0]
-        summary["kfin_txns"] = conn.execute("SELECT COUNT(*) FROM kfin_mfsd201_transaction").fetchone()[0]
+        summary["kfin_txns"] = conn.execute("SELECT COUNT(*) FROM v_kfin_txn_active").fetchone()[0]
         summary["kfin_sips"] = conn.execute("SELECT COUNT(*) FROM kfin_mfsd243_sip").fetchone()[0]
         summary["kfin_brokerage"] = conn.execute(
             "SELECT COALESCE(SUM(brokerage), 0) FROM kfin_mfsd205_brokerage"
@@ -2832,7 +2834,7 @@ def load_dashboard_summary(_v: int) -> dict:
             kfin_aum_result = conn.execute("""
                                            SELECT COALESCE(SUM(inner_sum), 0)
                                            FROM (SELECT td_acno, SUM(td_amt) as inner_sum
-                                                 FROM kfin_mfsd201_transaction
+                                                 FROM v_kfin_txn_active
                                                  GROUP BY td_acno)
                                            """).fetchone()[0]
             summary["kfin_aum"] = float(kfin_aum_result) if kfin_aum_result else 0.0
@@ -2868,7 +2870,7 @@ def load_amc_breakdown(_v: int) -> pd.DataFrame:
                                       SELECT amc_code                                                                 as amc,
                                              COALESCE(SUM(CASE WHEN trxntype = 'R1' THEN -amount ELSE amount END),
                                                       0)                                                              as aum
-                                      FROM cams_wbr2_transaction
+                                      FROM v_cams_txn_active
                                       WHERE COALESCE(amc_code, '') != ''
                                       GROUP BY amc_code
                                       """, conn)
@@ -2894,7 +2896,7 @@ def load_amc_breakdown(_v: int) -> pd.DataFrame:
             kfin_mfsd203_aum_df = pd.read_sql("""
                                               SELECT kf.Fund                     as amc,
                                                      COALESCE(SUM(kt.td_amt), 0) as aum
-                                              FROM kfin_mfsd201_transaction kt
+                                              FROM v_kfin_txn_active kt
                                                        JOIN kfin_mfsd211_folio kf ON kt.td_acno = kf.Folio
                                               WHERE COALESCE(kf.Fund, '') != ''
                                               GROUP BY kf.Fund
@@ -2991,6 +2993,7 @@ def load_recent_uploads(_v: int, limit: int = 10) -> pd.DataFrame:
 st.set_page_config(page_title="MFD Portfolio Intelligence", layout="wide", page_icon="📊")
 
 ensure_db()
+aum_recon.ensure_schema()   # txn_overrides table + active-only txn views (needs base tables)
 ensure_family_tables()
 
 
@@ -3201,7 +3204,7 @@ with st.sidebar:
     st.markdown("## 📊 MFD Portfolio")
     st.divider()
 
-    nav_options = ["📊 Dashboard", "👥 Clients", "📋 Transactions", "💰 Brokerages & Sub Brokers Report", "📊 Reports", "🧮 Capital Gains", "⚙️ Admin Panel"]
+    nav_options = ["📊 Dashboard", "👥 Clients", "📋 Transactions", "💰 Brokerages & Sub Brokers Report", "📊 Reports", "🧮 Capital Gains", "🔍 AUM Reconciliation", "⚙️ Admin Panel"]
 
     if "nav_mode" not in st.session_state or st.session_state["nav_mode"] not in nav_options:
         st.session_state["nav_mode"] = "📊 Dashboard"
@@ -6198,7 +6201,7 @@ elif mode == "👥 Clients":
                                         COALESCE(txn_date_iso, traddate) AS txn_display_date,
                                         trxntype, trxnmode, trxnstat,
                                         purprice, units, amount, brokcode, subbrok, remarks
-                                    FROM cams_wbr2_transaction
+                                    FROM v_cams_txn_active
                                     WHERE folio_no = ?
                                     ORDER BY COALESCE(txn_date_iso, traddate) DESC
                                 """, conn, params=(fid,))
@@ -6215,7 +6218,7 @@ elif mode == "👥 Clients":
                                         td_broker AS brokcode,
                                         ''        AS subbrok,
                                         trdesc    AS remarks
-                                    FROM kfin_mfsd201_transaction
+                                    FROM v_kfin_txn_active
                                     WHERE td_acno = ?
                                     ORDER BY COALESCE(txn_date_iso, td_trdt) DESC
                                 """, conn, params=(fid,))
@@ -6509,7 +6512,7 @@ elif mode == "👥 Clients":
                                subbrok,
                                remarks,
                                prodcode    AS product_code
-                        FROM cams_wbr2_transaction
+                        FROM v_cams_txn_active
                         WHERE folio_no IN ({ph})
                     """, conn, params=tuple(cams_folios_list))
                     if not cams_txn.empty:
@@ -6534,7 +6537,7 @@ elif mode == "👥 Clients":
                                ''         AS subbrok,
                                trdesc     AS remarks,
                                UPPER(TRIM(fmcode)) AS product_code
-                        FROM kfin_mfsd201_transaction
+                        FROM v_kfin_txn_active
                         WHERE td_acno IN ({ph})
                     """, conn, params=tuple(kfin_folios_list))
                     if not kfin_txn.empty:
@@ -6872,7 +6875,7 @@ elif mode == "📋 Transactions":
                     subbrok AS sub_broker,
                     remarks,
                     trxnno AS txn_no
-                FROM cams_wbr2_transaction
+                FROM v_cams_txn_active
             """, conn)
 
             # ── KFinTech: same — both date columns separately ──
@@ -6894,7 +6897,7 @@ elif mode == "📋 Transactions":
                     '' AS sub_broker,
                     kt.trdesc AS remarks,
                     kt.td_trno AS txn_no
-                FROM kfin_mfsd201_transaction kt
+                FROM v_kfin_txn_active kt
                 LEFT JOIN kfin_mfsd211_folio kf ON kt.td_acno = kf.Folio
             """, conn)
 
@@ -8939,6 +8942,9 @@ elif mode == "🧮 Capital Gains":
 
 
 # ==================== ⚙️ ADMIN PANEL ====================
+elif mode == "🔍 AUM Reconciliation":
+    aum_recon.render_aum_recon_tab()
+
 elif mode == "⚙️ Admin Panel":
     st.header("⚙️ Admin Panel")
 
