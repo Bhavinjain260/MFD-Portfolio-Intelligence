@@ -207,10 +207,32 @@ def _decode_subject(raw_subject) -> str:
     out = ""
     for text, enc in parts:
         if isinstance(text, bytes):
-            out += text.decode(enc or "utf-8", errors="replace")
+            try:
+                out += text.decode(enc or "utf-8", errors="replace")
+            except (LookupError, UnicodeDecodeError):
+                # decode_header() can emit bogus charset names like
+                # 'unknown-8bit' or 'x-unknown', which raise LookupError
+                # (not UnicodeDecodeError) and are NOT silenced by
+                # errors="replace". Fall back to UTF-8.
+                out += text.decode("utf-8", errors="replace")
         else:
             out += text
     return out
+
+
+def _safe_decode(payload: bytes, charset: str | None) -> str:
+    """Decode bytes, falling back through UTF-8 then latin-1 when the
+    declared charset is missing or unknown (e.g. 'unknown-8bit')."""
+    if not payload:
+        return ""
+    for enc in (charset, "utf-8", "latin-1"):
+        if not enc:
+            continue
+        try:
+            return payload.decode(enc, errors="replace")
+        except (LookupError, UnicodeDecodeError):
+            continue
+    return payload.decode("utf-8", errors="replace")
 
 
 def _get_body_text(msg) -> str:
@@ -226,13 +248,13 @@ def _get_body_text(msg) -> str:
         chosen = html_part or text_part
         if chosen:
             payload = chosen.get_payload(decode=True)
-            charset = chosen.get_content_charset() or "utf-8"
-            return payload.decode(charset, errors="replace")
+            charset = chosen.get_content_charset()
+            return _safe_decode(payload, charset)
         return ""
     else:
         payload = msg.get_payload(decode=True)
-        charset = msg.get_content_charset() or "utf-8"
-        return payload.decode(charset, errors="replace") if payload else ""
+        charset = msg.get_content_charset()
+        return _safe_decode(payload, charset)
 
 
 def _detect_rta(sender: str) -> str | None:

@@ -9001,3 +9001,263 @@ sqlite3.OperationalError: ON CONFLICT clause does not match any PRIMARY KEY or U
 2026-09-29 15:00:10,899 [INFO] [cron] background_worker | ======================================================================
 2026-09-29 15:00:10,902 [INFO] [cron] background_worker | [WORKER] data_version bumped
 ──── worker end   2026-09-29 15:00:11 IST (exit=0) ────
+──── worker start 2026-09-30 11:00:01 IST ────
+2026-09-30 11:00:03,946 [INFO] [cron] background_worker | ======================================================================
+2026-09-30 11:00:03,946 [INFO] [cron] background_worker | BACKGROUND WORKER RUN  @ 2026-09-30T11:00:03  (trigger=cron, pid=9909)
+2026-09-30 11:00:03,946 [INFO] [cron] background_worker | ======================================================================
+2026-09-30 11:00:03,989 [INFO] [cron] background_worker | [MAILBACK] Starting
+2026-09-30 11:00:08,268 [INFO] [cron] mailback_sync | [IMAP] Connected
+2026-09-30 11:00:08,662 [INFO] [cron] mailback_sync | [CAMS] Found 5 unread mailback emails
+2026-09-30 11:00:09,062 [INFO] [cron] mailback_sync | [CAMS] Processing email: Updation of Social Media Details 
+2026-09-30 11:00:09,110 [INFO] [cron] mailback_sync | [CAMS] Skipping non-report email (marking read): Updation of Social Media Details 
+2026-09-30 11:00:09,957 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR49. SIP/STP procured for the period, Request Id:220638803R49
+2026-09-30 11:00:09,961 [INFO] [cron] mailback_sync | [CAMS-WBR49] Report code resolved
+2026-09-30 11:00:09,963 [INFO] [cron] mailback_sync | [CAMS-WBR49] No data — marking read, skipping
+2026-09-30 11:00:10,836 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR2. Investor Transactions for a Period, Request Id:221369186R2
+2026-09-30 11:00:10,847 [INFO] [cron] mailback_sync | [CAMS-WBR2] Report code resolved
+2026-09-30 11:00:10,854 [INFO] [cron] mailback_sync | [CAMS-WBR2] Download URL found
+2026-09-30 11:00:10,854 [INFO] [cron] mailback_sync | [CAMS-WBR2] Downloading https://mailback14.camsonline.com/mailback_result/5HUZFCHBCNPH4V3CAEOG6H1Y0HGCDD0U0IKI5I1N3C2X681361142407BMB221369186R2.zip
+2026-09-30 11:00:11,298 [INFO] [cron] mailback_sync | [CAMS-WBR2] Extracted 30092026041621_221369186R2.csv (11247 bytes)
+2026-09-30 11:00:12,016 [INFO] [cron] mailback_sync | [CAMS-WBR2] Parsed and moved to mailback_sync/cams/wbr2/done/30092026041621_221369186R2.csv
+2026-09-30 11:00:12,364 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR9. Investor Static details feed - CRMS Format, Request
+ Id:220638757R9
+2026-09-30 11:00:12,365 [INFO] [cron] mailback_sync | [CAMS-WBR9] Report code resolved
+2026-09-30 11:00:12,365 [INFO] [cron] mailback_sync | [CAMS-WBR9] No data — marking read, skipping
+2026-09-30 11:00:13,196 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR2. Investor Transactions for a Period, Request Id:220638668R2
+2026-09-30 11:00:13,201 [INFO] [cron] mailback_sync | [CAMS-WBR2] Report code resolved
+2026-09-30 11:00:13,203 [INFO] [cron] mailback_sync | [CAMS-WBR2] No data — marking read, skipping
+2026-09-30 11:00:14,005 [INFO] [cron] mailback_sync | [KFinTech] Found 3 unread mailback emails
+2026-09-30 11:00:14,331 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-30 11:00:14,344 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Investor Master Information Report for Ref.No:WBMST9447075
+2026-09-30 11:00:15,232 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-30 11:00:15,252 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-09-30 11:00:16,175 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Subscribed SIP Registrations Report for Ref. No. : WSREG8279819
+2026-09-30 11:00:16,211 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] Report code resolved
+2026-09-30 11:00:16,218 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] Download URL found
+2026-09-30 11:00:16,222 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] Downloading https://scdelivery.kfintech.com/c/?u=iuuqt%3B00ngt%2Flgjoufdi%2Fdpn0ngt0Ejtusjcvups0Sfrvftut0Sfr%60bmmsqutmjol%2Fbtqy%40rszuzqf%3EV%7BO9W2OTSVd5Nkd6PEF6O%7BV3OUZ2gEJxNkZxPUNx&p=qqttqbdb.bqeesknn--339152216-6A8E30E3-02C4-4505-A1A4-833FA30E2AD4.131.1&e=s1
+2026-09-30 11:00:17,377 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] Extracted MFSD313_WSREG8279819_1027246.csv (390 bytes)
+2026-09-30 11:00:17,966 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] MFSD313_WSREG8279819_1027246.csv contains 0 data rows — moving to done (no-op)
+2026-09-30 11:00:18,725 [INFO] [cron] background_worker | [MAILBACK] checked=8 downloaded=2 parsed=2 failed=0 no_data=3 errors=0
+2026-09-30 11:00:18,725 [INFO] [cron] background_worker | [mailback] -> OK
+2026-09-30 11:00:18,725 [INFO] [cron] background_worker | [NAV-LIVE] Starting
+2026-09-30 11:00:18,728 [INFO] [cron] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-09-30 11:00:19,445 [INFO] [cron] nav_service | [NAV-PARSE] Parsed 14028 records | column counts seen: {8: 14165}
+2026-09-30 11:00:19,453 [INFO] [cron] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-09-29.txt: 1524064 bytes, 17892 rows (source=live)
+2026-09-30 11:00:19,463 [INFO] [cron] nav_service | [AMFI] NAV file created: nav_data/nav_2026-09-29.txt (1524064 bytes, 18142 lines) | NAV Date: 2026-09-29
+2026-09-30 11:00:19,466 [INFO] [cron] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-09-29.txt...
+2026-09-30 11:00:20,010 [INFO] [cron] nav_db | [NAV-DB] Ingested 4278 records (skipped 0) for date 2026-09-29
+2026-09-30 11:00:20,012 [INFO] [cron] nav_service | [NAV-DB] Success: Inserted 4278 NAV records
+2026-09-30 11:00:20,012 [INFO] [cron] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-09-30 11:00:20,012 [INFO] [cron] background_worker | [nav_live] -> OK
+2026-09-30 11:00:20,012 [INFO] [cron] background_worker | [NAV-PREV] Starting
+2026-09-30 11:00:20,054 [INFO] [cron] nav_service | [AMFI-HIST] Already have 2026-09-28 — skipping fetch
+2026-09-30 11:00:20,055 [INFO] [cron] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-09-28
+2026-09-30 11:00:20,055 [INFO] [cron] background_worker | [nav_previous] -> OK
+2026-09-30 11:00:20,055 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-09-30T11:00:20  (trigger=cron)
+2026-09-30 11:00:20,055 [INFO] [cron] background_worker | ======================================================================
+2026-09-30 11:00:20,056 [INFO] [cron] background_worker | [WORKER] data_version bumped
+──── worker end   2026-09-30 11:00:20 IST (exit=0) ────
+──── worker start 2026-09-30 15:00:02 IST ────
+2026-09-30 15:00:04,337 [INFO] [cron] background_worker | ======================================================================
+2026-09-30 15:00:04,337 [INFO] [cron] background_worker | BACKGROUND WORKER RUN  @ 2026-09-30T15:00:04  (trigger=cron, pid=887)
+2026-09-30 15:00:04,337 [INFO] [cron] background_worker | ======================================================================
+2026-09-30 15:00:04,377 [INFO] [cron] background_worker | [MAILBACK] Starting
+2026-09-30 15:00:08,293 [INFO] [cron] mailback_sync | [IMAP] Connected
+2026-09-30 15:00:08,704 [INFO] [cron] mailback_sync | [CAMS] Found 0 unread mailback emails
+2026-09-30 15:00:09,114 [INFO] [cron] mailback_sync | [KFinTech] Found 0 unread mailback emails
+2026-09-30 15:00:09,910 [INFO] [cron] background_worker | [MAILBACK] checked=0 downloaded=0 parsed=0 failed=0 no_data=0 errors=0
+2026-09-30 15:00:09,912 [INFO] [cron] background_worker | [mailback] -> OK
+2026-09-30 15:00:09,912 [INFO] [cron] background_worker | [NAV-LIVE] Starting
+2026-09-30 15:00:09,925 [INFO] [cron] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-09-30 15:00:10,698 [INFO] [cron] nav_service | [NAV-PARSE] Parsed 14028 records | column counts seen: {8: 14165}
+2026-09-30 15:00:10,715 [INFO] [cron] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-09-29.txt: 1524064 bytes, 17892 rows (source=live)
+2026-09-30 15:00:10,724 [INFO] [cron] nav_service | [AMFI] NAV file overwritten: nav_data/nav_2026-09-29.txt (1524064 bytes, 18142 lines) | NAV Date: 2026-09-29
+2026-09-30 15:00:10,726 [INFO] [cron] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-09-29.txt...
+2026-09-30 15:00:11,252 [INFO] [cron] nav_db | [NAV-DB] Ingested 4278 records (skipped 0) for date 2026-09-29
+2026-09-30 15:00:11,255 [INFO] [cron] nav_service | [NAV-DB] Success: Inserted 4278 NAV records
+2026-09-30 15:00:11,255 [INFO] [cron] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-09-30 15:00:11,255 [INFO] [cron] background_worker | [nav_live] -> OK
+2026-09-30 15:00:11,255 [INFO] [cron] background_worker | [NAV-PREV] Starting
+2026-09-30 15:00:11,279 [INFO] [cron] nav_service | [AMFI-HIST] Already have 2026-09-28 — skipping fetch
+2026-09-30 15:00:11,279 [INFO] [cron] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-09-28
+2026-09-30 15:00:11,279 [INFO] [cron] background_worker | [nav_previous] -> OK
+2026-09-30 15:00:11,279 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-09-30T15:00:11  (trigger=cron)
+2026-09-30 15:00:11,279 [INFO] [cron] background_worker | ======================================================================
+2026-09-30 15:00:11,281 [INFO] [cron] background_worker | [WORKER] data_version bumped
+──── worker end   2026-09-30 15:00:11 IST (exit=0) ────
+──── worker start 2026-10-01 11:00:02 IST ────
+2026-10-01 11:00:04,664 [INFO] [cron] background_worker | ======================================================================
+2026-10-01 11:00:04,664 [INFO] [cron] background_worker | BACKGROUND WORKER RUN  @ 2026-10-01T11:00:04  (trigger=cron, pid=30771)
+2026-10-01 11:00:04,664 [INFO] [cron] background_worker | ======================================================================
+2026-10-01 11:00:04,706 [INFO] [cron] background_worker | [MAILBACK] Starting
+2026-10-01 11:00:08,485 [INFO] [cron] mailback_sync | [IMAP] Connected
+2026-10-01 11:00:08,888 [INFO] [cron] mailback_sync | [CAMS] Found 5 unread mailback emails
+2026-10-01 11:00:09,258 [INFO] [cron] mailback_sync | [CAMS] Processing email: Updation of Social Media Details 
+2026-10-01 11:00:09,280 [INFO] [cron] mailback_sync | [CAMS] Skipping non-report email (marking read): Updation of Social Media Details 
+2026-10-01 11:00:10,007 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR49. SIP/STP procured for the period, Request Id:220638803R49
+2026-10-01 11:00:10,008 [INFO] [cron] mailback_sync | [CAMS-WBR49] Report code resolved
+2026-10-01 11:00:10,009 [INFO] [cron] mailback_sync | [CAMS-WBR49] No data — marking read, skipping
+2026-10-01 11:00:10,742 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR9. Investor Static details feed - CRMS Format, Request
+ Id:220638757R9
+2026-10-01 11:00:10,766 [INFO] [cron] mailback_sync | [CAMS-WBR9] Report code resolved
+2026-10-01 11:00:10,770 [INFO] [cron] mailback_sync | [CAMS-WBR9] No data — marking read, skipping
+2026-10-01 11:00:11,464 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR9. Investor Static details feed - CRMS Format, Request
+ Id:220638757R9
+2026-10-01 11:00:11,470 [INFO] [cron] mailback_sync | [CAMS-WBR9] Report code resolved
+2026-10-01 11:00:11,472 [INFO] [cron] mailback_sync | [CAMS-WBR9] No data — marking read, skipping
+2026-10-01 11:00:12,177 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR2. Investor Transactions for a Period, Request Id:220638668R2
+2026-10-01 11:00:12,191 [INFO] [cron] mailback_sync | [CAMS-WBR2] Report code resolved
+2026-10-01 11:00:12,193 [INFO] [cron] mailback_sync | [CAMS-WBR2] No data — marking read, skipping
+2026-10-01 11:00:12,878 [INFO] [cron] mailback_sync | [KFinTech] Found 4 unread mailback emails
+2026-10-01 11:00:13,183 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-10-01 11:00:13,190 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Investor Master Information Report for Ref.No:WBMST9447075
+2026-10-01 11:00:13,885 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-10-01 11:00:13,890 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-10-01 11:00:14,559 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Subscribed SIP Registration Report for Ref.No : WSREG8279819
+2026-10-01 11:00:14,561 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Subscribed SIP Registration Report for Ref.No : WSREG8279819
+2026-10-01 11:00:15,262 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Subscribed SIP Registrations Report for Ref. No. : WSREG8279819
+2026-10-01 11:00:15,279 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] Report code resolved
+2026-10-01 11:00:15,283 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] Download URL found
+2026-10-01 11:00:15,283 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] Downloading https://scdelivery.kfintech.com/c/?u=iuuqt%3B00ngt%2Flgjoufdi%2Fdpn0ngt0Ejtusjcvups0Sfrvftut0Sfr%60bmmsqutmjol%2Fbtqy%40rszuzqf%3EV%7BO9W2OTSVd5Nkd6PEF6PUd5O%7BZ6gEJxNkZyNEBy&p=qqttqbdb.bqeesknn--339235194-98EF0822-6A4C-47E7-AAFB-A461A111C887.50.1&e=s1
+2026-10-01 11:00:16,293 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] Extracted MFSD313_WSREG8279819_1249450.csv (390 bytes)
+2026-10-01 11:00:16,871 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] MFSD313_WSREG8279819_1249450.csv contains 0 data rows — moving to done (no-op)
+2026-10-01 11:00:17,541 [INFO] [cron] background_worker | [MAILBACK] checked=9 downloaded=1 parsed=1 failed=0 no_data=4 errors=0
+2026-10-01 11:00:17,542 [INFO] [cron] background_worker | [mailback] -> OK
+2026-10-01 11:00:17,542 [INFO] [cron] background_worker | [NAV-LIVE] Starting
+2026-10-01 11:00:17,551 [INFO] [cron] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-10-01 11:00:18,224 [INFO] [cron] nav_service | [NAV-PARSE] Parsed 14032 records | column counts seen: {8: 14169}
+2026-10-01 11:00:18,230 [INFO] [cron] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-09-30.txt: 1524491 bytes, 17896 rows (source=live)
+2026-10-01 11:00:18,241 [INFO] [cron] nav_service | [AMFI] NAV file created: nav_data/nav_2026-09-30.txt (1524491 bytes, 18149 lines) | NAV Date: 2026-09-30
+2026-10-01 11:00:18,244 [INFO] [cron] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-09-30.txt...
+2026-10-01 11:00:18,748 [INFO] [cron] nav_db | [NAV-DB] Ingested 4280 records (skipped 0) for date 2026-09-30
+2026-10-01 11:00:18,750 [INFO] [cron] nav_service | [NAV-DB] Success: Inserted 4280 NAV records
+2026-10-01 11:00:18,750 [INFO] [cron] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-10-01 11:00:18,750 [INFO] [cron] background_worker | [nav_live] -> OK
+2026-10-01 11:00:18,750 [INFO] [cron] background_worker | [NAV-PREV] Starting
+2026-10-01 11:00:18,776 [INFO] [cron] nav_service | [AMFI-HIST] Already have 2026-09-29 — skipping fetch
+2026-10-01 11:00:18,777 [INFO] [cron] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-09-29
+2026-10-01 11:00:18,777 [INFO] [cron] background_worker | [nav_previous] -> OK
+2026-10-01 11:00:18,777 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-10-01T11:00:18  (trigger=cron)
+2026-10-01 11:00:18,777 [INFO] [cron] background_worker | ======================================================================
+2026-10-01 11:00:18,785 [INFO] [cron] background_worker | [WORKER] data_version bumped
+──── worker end   2026-10-01 11:00:19 IST (exit=0) ────
+──── worker start 2026-10-01 15:00:01 IST ────
+2026-10-01 15:00:03,736 [INFO] [cron] background_worker | ======================================================================
+2026-10-01 15:00:03,736 [INFO] [cron] background_worker | BACKGROUND WORKER RUN  @ 2026-10-01T15:00:03  (trigger=cron, pid=24771)
+2026-10-01 15:00:03,736 [INFO] [cron] background_worker | ======================================================================
+2026-10-01 15:00:03,775 [INFO] [cron] background_worker | [MAILBACK] Starting
+2026-10-01 15:00:07,804 [INFO] [cron] mailback_sync | [IMAP] Connected
+2026-10-01 15:00:08,518 [INFO] [cron] mailback_sync | [CAMS] Found 0 unread mailback emails
+2026-10-01 15:00:08,925 [INFO] [cron] mailback_sync | [KFinTech] Found 0 unread mailback emails
+2026-10-01 15:00:09,738 [INFO] [cron] background_worker | [MAILBACK] checked=0 downloaded=0 parsed=0 failed=0 no_data=0 errors=0
+2026-10-01 15:00:09,741 [INFO] [cron] background_worker | [mailback] -> OK
+2026-10-01 15:00:09,743 [INFO] [cron] background_worker | [NAV-LIVE] Starting
+2026-10-01 15:00:09,768 [INFO] [cron] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-10-01 15:00:10,498 [INFO] [cron] nav_service | [NAV-PARSE] Parsed 13983 records | column counts seen: {8: 14120}
+2026-10-01 15:00:10,517 [INFO] [cron] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-09-30.txt: 1519385 bytes, 17842 rows (source=live)
+2026-10-01 15:00:10,527 [INFO] [cron] nav_service | [AMFI] NAV file overwritten: nav_data/nav_2026-09-30.txt (1519385 bytes, 18100 lines) | NAV Date: 2026-09-30
+2026-10-01 15:00:10,530 [INFO] [cron] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-09-30.txt...
+2026-10-01 15:00:11,126 [INFO] [cron] nav_db | [NAV-DB] Ingested 4280 records (skipped 0) for date 2026-09-30
+2026-10-01 15:00:11,128 [INFO] [cron] nav_service | [NAV-DB] Success: Inserted 4280 NAV records
+2026-10-01 15:00:11,128 [INFO] [cron] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-10-01 15:00:11,128 [INFO] [cron] background_worker | [nav_live] -> OK
+2026-10-01 15:00:11,128 [INFO] [cron] background_worker | [NAV-PREV] Starting
+2026-10-01 15:00:11,180 [INFO] [cron] nav_service | [AMFI-HIST] Already have 2026-09-29 — skipping fetch
+2026-10-01 15:00:11,180 [INFO] [cron] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-09-29
+2026-10-01 15:00:11,180 [INFO] [cron] background_worker | [nav_previous] -> OK
+2026-10-01 15:00:11,181 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-10-01T15:00:11  (trigger=cron)
+2026-10-01 15:00:11,181 [INFO] [cron] background_worker | ======================================================================
+2026-10-01 15:00:11,182 [INFO] [cron] background_worker | [WORKER] data_version bumped
+──── worker end   2026-10-01 15:00:11 IST (exit=0) ────
+──── worker start 2026-10-02 11:00:01 IST ────
+2026-10-02 11:00:03,492 [INFO] [cron] background_worker | ======================================================================
+2026-10-02 11:00:03,493 [INFO] [cron] background_worker | BACKGROUND WORKER RUN  @ 2026-10-02T11:00:03  (trigger=cron, pid=24630)
+2026-10-02 11:00:03,493 [INFO] [cron] background_worker | ======================================================================
+2026-10-02 11:00:03,535 [INFO] [cron] background_worker | [MAILBACK] Starting
+2026-10-02 11:00:07,327 [INFO] [cron] mailback_sync | [IMAP] Connected
+2026-10-02 11:00:07,766 [INFO] [cron] mailback_sync | [CAMS] Found 5 unread mailback emails
+2026-10-02 11:00:08,258 [INFO] [cron] mailback_sync | [CAMS] Processing email: Updation of Social Media Details 
+2026-10-02 11:00:08,289 [INFO] [cron] mailback_sync | [CAMS] Skipping non-report email (marking read): Updation of Social Media Details 
+2026-10-02 11:00:09,270 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR49. SIP/STP procured for the period, Request Id:220638803R49
+2026-10-02 11:00:09,272 [INFO] [cron] mailback_sync | [CAMS-WBR49] Report code resolved
+2026-10-02 11:00:09,273 [INFO] [cron] mailback_sync | [CAMS-WBR49] No data — marking read, skipping
+2026-10-02 11:00:10,194 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR2. Investor Transactions for a Period, Request Id:221369186R2
+2026-10-02 11:00:10,200 [INFO] [cron] mailback_sync | [CAMS-WBR2] Report code resolved
+2026-10-02 11:00:10,206 [INFO] [cron] mailback_sync | [CAMS-WBR2] Download URL found
+2026-10-02 11:00:10,206 [INFO] [cron] mailback_sync | [CAMS-WBR2] Downloading https://mailback14.camsonline.com/mailback_result/5HUZFCHBCNPH4V3CAEOG6H1Y0HGCDD0U0IKI5I1N3C2X681361142378BMB221369186R2.zip
+2026-10-02 11:00:10,668 [INFO] [cron] mailback_sync | [CAMS-WBR2] Extracted 02102026044313_221369186R2.csv (11247 bytes)
+2026-10-02 11:00:11,310 [INFO] [cron] mailback_sync | [CAMS-WBR2] Parsed and moved to mailback_sync/cams/wbr2/done/02102026044313_221369186R2.csv
+2026-10-02 11:00:11,728 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR2. Investor Transactions for a Period, Request Id:220638668R2
+2026-10-02 11:00:11,729 [INFO] [cron] mailback_sync | [CAMS-WBR2] Report code resolved
+2026-10-02 11:00:11,729 [INFO] [cron] mailback_sync | [CAMS-WBR2] No data — marking read, skipping
+2026-10-02 11:00:12,758 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR9. Investor Static details feed - CRMS Format, Request
+ Id:220638757R9
+2026-10-02 11:00:12,759 [INFO] [cron] mailback_sync | [CAMS-WBR9] Report code resolved
+2026-10-02 11:00:12,760 [INFO] [cron] mailback_sync | [CAMS-WBR9] No data — marking read, skipping
+2026-10-02 11:00:13,568 [INFO] [cron] mailback_sync | [KFinTech] Found 4 unread mailback emails
+2026-10-02 11:00:13,984 [ERROR] [cron] mailback_sync | [MAILBACK-SYNC] Fatal error
+Traceback (most recent call last):
+  File "/root/projects/MFD-Portfolio-Intelligence/cams_mailback_sync.py", line 799, in sync_once
+    subject = _decode_subject(msg.get("Subject"))
+  File "/root/projects/MFD-Portfolio-Intelligence/cams_mailback_sync.py", line 210, in _decode_subject
+    out += text.decode(enc or "utf-8", errors="replace")
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+LookupError: unknown encoding: unknown-8bit
+2026-10-02 11:00:14,859 [INFO] [cron] background_worker | [MAILBACK] checked=6 downloaded=1 parsed=1 failed=0 no_data=3 errors=1
+2026-10-02 11:00:14,861 [INFO] [cron] background_worker | [mailback] -> FAIL
+2026-10-02 11:00:14,861 [INFO] [cron] background_worker | [NAV-LIVE] Starting
+2026-10-02 11:00:14,881 [INFO] [cron] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-10-02 11:00:15,666 [INFO] [cron] nav_service | [NAV-PARSE] Parsed 13988 records | column counts seen: {8: 14125}
+2026-10-02 11:00:15,672 [INFO] [cron] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-10-01.txt: 1519875 bytes, 17849 rows (source=live)
+2026-10-02 11:00:15,681 [INFO] [cron] nav_service | [AMFI] NAV file created: nav_data/nav_2026-10-01.txt (1519875 bytes, 18105 lines) | NAV Date: 2026-10-01
+2026-10-02 11:00:15,685 [INFO] [cron] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-10-01.txt...
+2026-10-02 11:00:16,177 [INFO] [cron] nav_db | [NAV-DB] Ingested 4282 records (skipped 0) for date 2026-10-01
+2026-10-02 11:00:16,179 [INFO] [cron] nav_service | [NAV-DB] Success: Inserted 4282 NAV records
+2026-10-02 11:00:16,179 [INFO] [cron] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-10-02 11:00:16,179 [INFO] [cron] background_worker | [nav_live] -> OK
+2026-10-02 11:00:16,179 [INFO] [cron] background_worker | [NAV-PREV] Starting
+2026-10-02 11:00:16,201 [INFO] [cron] nav_service | [AMFI-HIST] Already have 2026-09-30 — skipping fetch
+2026-10-02 11:00:16,201 [INFO] [cron] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-09-30
+2026-10-02 11:00:16,201 [INFO] [cron] background_worker | [nav_previous] -> OK
+2026-10-02 11:00:16,201 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-10-02T11:00:16  (trigger=cron)
+2026-10-02 11:00:16,201 [INFO] [cron] background_worker | ======================================================================
+2026-10-02 11:00:16,203 [INFO] [cron] background_worker | [WORKER] data_version bumped
+──── worker end   2026-10-02 11:00:16 IST (exit=0) ────
+2026-10-02 11:08:26,795 [INFO] [manual] background_worker | ======================================================================
+2026-10-02 11:08:26,796 [INFO] [manual] background_worker | BACKGROUND WORKER RUN  @ 2026-10-02T11:08:26  (trigger=manual, pid=28277)
+2026-10-02 11:08:26,796 [INFO] [manual] background_worker | ======================================================================
+2026-10-02 11:08:26,839 [INFO] [manual] background_worker | [MAILBACK] Starting
+2026-10-02 11:08:30,940 [INFO] [manual] mailback_sync | [IMAP] Connected
+2026-10-02 11:08:31,243 [INFO] [manual] mailback_sync | [CAMS] Found 0 unread mailback emails
+2026-10-02 11:08:31,654 [INFO] [manual] mailback_sync | [KFinTech] Found 4 unread mailback emails
+2026-10-02 11:08:32,013 [INFO] [manual] mailback_sync | [KFinTech] Processing email: Empanelment Confirmation - Invesco Mutual Fund – ARN-335644
+2026-10-02 11:08:32,034 [INFO] [manual] mailback_sync | [KFinTech] Skipping non-report email (marking read): Empanelment Confirmation - Invesco Mutual Fund – ARN-335644
+2026-10-02 11:08:32,743 [INFO] [manual] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-10-02 11:08:32,744 [INFO] [manual] mailback_sync | [KFinTech] Skipping non-report email (marking read): Investor Master Information Report for Ref.No:WBMST9447075
+2026-10-02 11:08:33,428 [INFO] [manual] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-10-02 11:08:33,435 [INFO] [manual] mailback_sync | [KFinTech] Skipping non-report email (marking read): Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-10-02 11:08:34,226 [INFO] [manual] mailback_sync | [KFinTech] Processing email: Subscribed SIP Registrations Report for Ref. No. : WSREG8279819
+2026-10-02 11:08:34,228 [INFO] [manual] mailback_sync | [KFinTech-MFSD243] Report code resolved
+2026-10-02 11:08:34,230 [INFO] [manual] mailback_sync | [KFinTech-MFSD243] Download URL found
+2026-10-02 11:08:34,230 [INFO] [manual] mailback_sync | [KFinTech-MFSD243] Downloading https://scdelivery.kfintech.com/c/?u=iuuqt%3B00ngt%2Flgjoufdi%2Fdpn0ngt0Ejtusjcvups0Sfrvftut0Sfr%60bmmsqutmjol%2Fbtqy%40rszuzqf%3EV%7BO9W2OTSVd5Nkd6PEF6OUN3N%7BJxgEJxNkZyNEBz&p=qqttqbdb.bqeesknn--339324904-11095459-F244-42A5-A59C-BB0D14C684E3.99.1&e=s1
+2026-10-02 11:08:35,178 [INFO] [manual] mailback_sync | [KFinTech-MFSD243] Extracted MFSD313_WSREG8279819_807001_0.csv (390 bytes)
+2026-10-02 11:08:35,687 [INFO] [manual] mailback_sync | [KFinTech-MFSD243] MFSD313_WSREG8279819_807001_0.csv contains 0 data rows — moving to done (no-op)
+2026-10-02 11:08:36,353 [INFO] [manual] background_worker | [MAILBACK] checked=4 downloaded=1 parsed=1 failed=0 no_data=0 errors=0
+2026-10-02 11:08:36,354 [INFO] [manual] background_worker | [mailback] -> OK
+2026-10-02 11:08:36,355 [INFO] [manual] background_worker | [NAV-LIVE] Starting
+2026-10-02 11:08:36,365 [INFO] [manual] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-10-02 11:08:37,102 [INFO] [manual] nav_service | [NAV-PARSE] Parsed 13988 records | column counts seen: {8: 14125}
+2026-10-02 11:08:37,117 [INFO] [manual] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-10-01.txt: 1519875 bytes, 17849 rows (source=live)
+2026-10-02 11:08:37,129 [INFO] [manual] nav_service | [AMFI] NAV file overwritten: nav_data/nav_2026-10-01.txt (1519875 bytes, 18105 lines) | NAV Date: 2026-10-01
+2026-10-02 11:08:37,138 [INFO] [manual] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-10-01.txt...
+2026-10-02 11:08:37,586 [INFO] [manual] nav_db | [NAV-DB] Ingested 4282 records (skipped 0) for date 2026-10-01
+2026-10-02 11:08:37,588 [INFO] [manual] nav_service | [NAV-DB] Success: Inserted 4282 NAV records
+2026-10-02 11:08:37,589 [INFO] [manual] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-10-02 11:08:37,589 [INFO] [manual] background_worker | [nav_live] -> OK
+2026-10-02 11:08:37,589 [INFO] [manual] background_worker | [NAV-PREV] Starting
+2026-10-02 11:08:37,644 [INFO] [manual] nav_service | [AMFI-HIST] Already have 2026-09-30 — skipping fetch
+2026-10-02 11:08:37,644 [INFO] [manual] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-09-30
+2026-10-02 11:08:37,644 [INFO] [manual] background_worker | [nav_previous] -> OK
+2026-10-02 11:08:37,644 [INFO] [manual] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-10-02T11:08:37  (trigger=manual)
+2026-10-02 11:08:37,644 [INFO] [manual] background_worker | ======================================================================
+2026-10-02 11:08:37,646 [INFO] [manual] background_worker | [WORKER] data_version bumped
