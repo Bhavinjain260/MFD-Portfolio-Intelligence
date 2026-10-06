@@ -116,12 +116,13 @@ def _bump() -> None:
 # HELPERS
 # ══════════════════════════════════════════════════════════════
 def _num(s: pd.Series) -> pd.Series:
-    return pd.to_numeric(s.astype(str).str.replace(",", "", regex=False).str.strip(),
+    return pd.to_numeric(s.astype(str).str.replace(r"[,'\"]", "", regex=True).str.strip(),
                          errors="coerce")
 
 
 def _norm(s: pd.Series) -> pd.Series:
-    return s.astype(str).str.strip().str.upper().replace({"NAN": "", "NONE": ""})
+    return (s.astype(str).str.replace(r"['\"]", "", regex=True).str.strip().str.upper()
+            .replace({"NAN": "", "NONE": ""}))
 
 
 def _to_iso(raw, dayfirst_default: bool) -> str | None:
@@ -312,7 +313,7 @@ def compute_recon(_v: int, ignore_dates: bool = False) -> pd.DataFrame:
         return pd.DataFrame(columns=RECON_COLS)
     out = pd.concat(frames, ignore_index=True)
     for c in ("scheme", "investor", "amc"):
-        out[c] = out[c].fillna("")
+        out[c] = out[c].fillna("").astype(str).str.replace(r"['\"]", "", regex=True).str.strip()
     return out[RECON_COLS]
 
 

@@ -249,6 +249,32 @@ def _clean_cols(df: pd.DataFrame) -> pd.DataFrame:
     ]
     return df
 
+def _read_quoted_tsv(file) -> pd.DataFrame | None:
+    """Single-quoted CSV/TSV (every text field wrapped in '...', commas/tabs may sit
+    inside fields). Uses quotechar="'" so columns never shift."""
+    import csv, io
+    for enc in ("utf-8-sig", "utf-16", "latin-1"):
+        try:
+            file.seek(0)
+            raw = file.read()
+            text = raw.decode(enc) if isinstance(raw, bytes) else raw
+        except Exception:
+            continue
+        first = text.lstrip().split("\n", 1)[0]
+        if not first.startswith("'"):
+            return None
+        sep = "\t" if first.count("\t") > first.count(",") else ","
+        rows = [r for r in csv.reader(io.StringIO(text, newline=""), delimiter=sep, quotechar="'")
+                if any(c.strip() for c in r)]
+        if not rows:
+            return None
+        hdr, n = [c.strip() for c in rows[0]], len(rows[0])
+        data = [(r + [""] * n)[:n] for r in rows[1:]]
+        if n > 5:
+            return pd.DataFrame(data, columns=hdr, dtype=str)
+    return None
+
+
 def _read_csv_auto(file) -> pd.DataFrame | None:
     """
     Tolerant CSV/TSV reader for RTA mailback files.
@@ -257,6 +283,14 @@ def _read_csv_auto(file) -> pd.DataFrame | None:
     pandas' Python-engine separator sniffing.
     """
     ENCODINGS = ("utf-8-sig", "utf-16", "latin-1", "utf-8")
+
+    # Pass 0: single-quoted TSV (tabs inside fields)
+    try:
+        df = _read_quoted_tsv(file)
+        if df is not None:
+            return df
+    except Exception:
+        pass
 
     # Pass 1: explicit separators
     for encoding in ENCODINGS:
