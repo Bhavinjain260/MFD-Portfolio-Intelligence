@@ -11426,8 +11426,8 @@ Franklin Templeton Mutual Fund
  
 HDFC Mutual Fund
  
-149180;INF179KC1BO4;-;HDFC Developed World Overseas Equity Passive FOF;;;22.074;30-Sep-2026
-149181;INF179KC1BP1;-;HDFC Developed World Overseas Equity Passive FOF;;;21.572;30-Sep-2026
+149180;INF179KC1BO4;-;HDFC Developed World Overseas Equity Passive FOF;;;21.844;01-Oct-2026
+149181;INF179KC1BP1;-;HDFC Developed World Overseas Equity Passive FOF;;;21.347;01-Oct-2026
  
 ICICI Prudential Mutual Fund
  
@@ -18076,20 +18076,6 @@ UTI Mutual Fund
 110021;INF789F01HA3;INF789F01HB1;UTI Quarterly Interval Fund - III;;;11.0613;25-Mar-2025
  
 Close Ended Schemes(Income/Debt Oriented Schemes - Fixed Term Plan)
- 
-Axis Mutual Fund
- 
-154240;INF846KA1440;-;Axis Fixed Maturity Plan - Series 129 (108 Days);Direct Plan;Growth Option;10.2078;11-Jun-2026
-154243;INF846KA1465;-;Axis Fixed Maturity Plan - Series 129 (108 Days);Direct Plan;IDCW Option;10.2078;11-Jun-2026
-154241;INF846KA1432;-;Axis Fixed Maturity Plan - Series 129 (108 Days);Regular Plan;Growth Option;10.2032;11-Jun-2026
-154242;INF846KA1457;-;Axis Fixed Maturity Plan - Series 129 (108 Days);Regular Plan;IDCW Option;10.2032;11-Jun-2026
-154292;INF846KA1481;-;Axis Fixed Maturity Plan - Series 130 (92 Days);Direct Plan;Growth Option;10.1820;11-Jun-2026
-154293;INF846KA1507;-;Axis Fixed Maturity Plan - Series 130 (92 Days);Direct Plan;IDCW Option;10.1820;11-Jun-2026
-154290;INF846KA1473;-;Axis Fixed Maturity Plan - Series 130 (92 Days);Regular Plan;Growth Option;10.1781;11-Jun-2026
-154291;INF846KA1499;-;Axis Fixed Maturity Plan - Series 130 (92 Days);Regular Plan;IDCW Option;10.1781;11-Jun-2026
- 
-UTI Mutual Fund
- 
 151485;INF789F1AXP7;-;UTI Fixed Term Income Fund Series XXXVI - I (1574 Days);Direct Plan;Growth;13.0737;01-Oct-2026
 151484;INF789F1AXO0;-;UTI Fixed Term Income Fund Series XXXVI - I (1574 Days);Direct Plan;IDCW;12.5032;01-Oct-2026
 151483;INF789F1AXN2;-;UTI Fixed Term Income Fund Series XXXVI - I (1574 Days);Regular Plan;Growth;12.8894;01-Oct-2026
