@@ -381,6 +381,28 @@ def ensure_family_tables() -> None:
         """)
 
 
+def ensure_monthly_brokerage_schema() -> None:
+    """Guarantee monthly_brokerage has the UNIQUE(amc, month, year) index
+    that the ON CONFLICT upsert in the Brokerage Report form depends on.
+    Without it, SQLite raises 'ON CONFLICT clause does not match any PRIMARY
+    KEY or UNIQUE constraint' and every manual insert silently fails."""
+    with get_conn() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS monthly_brokerage (
+                amc        TEXT NOT NULL,
+                month      TEXT NOT NULL,
+                year       INTEGER NOT NULL,
+                amount     REAL NOT NULL DEFAULT 0,
+                notes      TEXT,
+                timestamp  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS ux_monthly_brokerage_amy
+            ON monthly_brokerage(amc, month, year)
+        """)
+
+
 def get_family_for_client(client_code: str) -> Optional[dict]:
     with get_conn() as conn:
         row = conn.execute("""
@@ -2995,6 +3017,7 @@ st.set_page_config(page_title="MFD Portfolio Intelligence", layout="wide", page_
 ensure_db()
 aum_recon.ensure_schema()   # txn_overrides table + active-only txn views (needs base tables)
 ensure_family_tables()
+ensure_monthly_brokerage_schema()   # UNIQUE(amc,month,year) for the upsert
 
 
 # ==================== BSE SCHEME MASTER AUTO-DOWNLOAD ====================
@@ -7579,12 +7602,25 @@ elif mode == "💰 Brokerages & Sub Brokers Report":
     known_amcs = [a for a in load_active_amcs(data_version()) if a and not a.startswith("⚠️")]
     amc_dropdown_options = known_amcs + ["➕ Add new AMC..."]
 
+    # Flash persists across the rerun that follows a successful insert.
+    if _flash := st.session_state.pop("brok_flash", None):
+        st.success(_flash)
+
+    _current_month_idx = date_cls.today().month - 1  # 0-based for Streamlit
+
     with st.form("manual_brokerage_form", clear_on_submit=True):
         mc1, mc2, mc3, mc4 = st.columns(4)
         with mc1:
             m_amc_choice = st.selectbox("AMC Name", amc_dropdown_options)
         with mc2:
-            m_month = st.selectbox("Month", [f"{i:02d}" for i in range(1, 13)])
+            # index= forces the CURRENT month to be pre-selected every time
+            # the form clears — previously it snapped back to "01", so every
+            # successive entry landed in January instead of October.
+            m_month = st.selectbox(
+                "Month",
+                [f"{i:02d}" for i in range(1, 13)],
+                index=_current_month_idx,
+            )
         with mc3:
             m_year = st.number_input("Year", min_value=2015, max_value=2100, value=pd.Timestamp.now().year)
         with mc4:
@@ -7602,18 +7638,27 @@ elif mode == "💰 Brokerages & Sub Brokers Report":
             if not m_amc_final:
                 st.error("AMC name is required.")
             else:
-                with get_conn() as conn:
-                    conn.execute('''
-                                 INSERT INTO monthly_brokerage (amc, month, year, amount, notes)
-                                 VALUES (?, ?, ?, ?, ?) ON CONFLICT(amc, month, year) DO
-                                 UPDATE SET
-                                     amount = excluded.amount,
-                                     notes = excluded.notes,
-                                     timestamp = CURRENT_TIMESTAMP
-                                 ''', (m_amc_final, m_month, int(m_year), float(m_amount), m_notes.strip() or None))
-                st.cache_data.clear()
-                st.success(f"Logged {format_brokerage_inr(m_amount)} for {m_amc_final} ({m_month}-{m_year}).")
-                st.rerun()
+                try:
+                    with get_conn() as conn:
+                        conn.execute('''
+                                     INSERT INTO monthly_brokerage (amc, month, year, amount, notes)
+                                     VALUES (?, ?, ?, ?, ?) ON CONFLICT(amc, month, year) DO
+                                     UPDATE SET
+                                         amount = excluded.amount,
+                                         notes = excluded.notes,
+                                         timestamp = CURRENT_TIMESTAMP
+                                     ''', (m_amc_final, m_month, int(m_year), float(m_amount), m_notes.strip() or None))
+                    st.cache_data.clear()
+                    st.session_state["brok_flash"] = (
+                        f"✅ Logged {format_brokerage_inr(m_amount)} for "
+                        f"{m_amc_final} ({m_month}-{m_year})."
+                    )
+                    st.rerun()
+                except Exception as e:
+                    # Renders the actual DB error in-page instead of silently
+                    # bubbling up and getting killed by the rerun.
+                    st.error(f"❌ Insert failed for {m_amc_final} ({m_month}-{m_year}): {e}")
+                    log.exception("monthly_brokerage insert failed")
 
     # ── Existing manual log ──
     with st.expander("📜 View / Delete Manual Entry Log", expanded=False):
@@ -7694,6 +7739,25 @@ elif mode == "💰 Brokerages & Sub Brokers Report":
             "amc": "AMC", "file_amount": "File Brokerage",
             "manual_amount": "Received (Manual)", "variance": "Variance", "status": "Status"
         })
+
+        # ── Append a TOTAL row so the selected month(s) can be read at a glance ──
+        _tot_file = float(amc_summary["file_amount"].sum()) if not amc_summary.empty else 0.0
+        _tot_manual = float(amc_summary["manual_amount"].sum()) if not amc_summary.empty else 0.0
+        _tot_variance = _tot_file - _tot_manual
+        _tot_status = (
+            "⚠️ Pending"  if _tot_manual == 0 and _tot_file > 0
+            else ("✅ Matched" if abs(_tot_variance) < 1 else "🔶 Mismatch")
+        )
+        _n_amcs = len(amc_summary)
+        total_row = pd.DataFrame([{
+            "AMC": f"TOTAL ({_n_amcs} AMC{'s' if _n_amcs != 1 else ''})",
+            "File Brokerage": _tot_file,
+            "Received (Manual)": _tot_manual,
+            "Variance": _tot_variance,
+            "Status": _tot_status,
+        }])
+        display_amc = pd.concat([display_amc, total_row], ignore_index=True)
+
         st.dataframe(
             display_amc, width="stretch", hide_index=True,
             column_config={
