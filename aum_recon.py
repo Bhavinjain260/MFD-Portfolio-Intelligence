@@ -15,11 +15,18 @@ Point every calculation query at those views, never at the base tables.
 
 CAMS aggregation
 ----------------
-`our_units` for CAMS uses the SAME FIFO replay the Clients tab uses
-(`cg.replay_folio_scheme`, via `get_cams_invested_per_scheme`) — the raw
-`groupby.sum("signed")` path was double-counting duplicate rows that the
-FIFO replay silently collapses. KFin units are signed at source and don't
-need replay.
+`our_units` for CAMS is computed the SAME way the Clients tab does it
+(`app.get_cams_invested_per_scheme`):
+
+  * SELECT folio_no AS-is and UPPER(TRIM(prodcode)) — no further normalisation
+    of the values that get passed to `replay_folio_scheme()`.
+  * Stable sort by parsed traddate (COALESCE(txn_date_iso, traddate)).
+  * Pass raw `units`, `purprice`, `amount` to `replay_folio_scheme()` —
+    no pd.to_numeric() coercion, no NaN fill.
+  * Group by RAW folio/product for the replay, then normalise the resulting
+    keys to match the AUM side.
+
+KFin units are signed at source and don't need replay.
 """
 from __future__ import annotations
 
@@ -211,8 +218,14 @@ def _signed_cams(df: pd.DataFrame) -> pd.Series:
 
 
 def _load_cams_txns(conn, view: str = CAMS_VIEW) -> pd.DataFrame:
+    """SELECT columns exactly like app.get_cams_invested_per_scheme does.
+    Both a normalised (folio, product) and a raw (folio_raw, product_raw)
+    view of the key are carried through — the FIFO replay uses the raw
+    values so its output matches the Clients tab byte for byte."""
     df = pd.read_sql(
         f"SELECT folio_no AS folio, UPPER(TRIM(prodcode)) AS product, "
+        f"folio_no AS folio_raw, UPPER(TRIM(prodcode)) AS product_raw, "
+        f"COALESCE(txn_date_iso, traddate) AS raw_date, "
         f"COALESCE(txn_date_iso, traddate) AS d, trxntype, trxn_nature, units, purprice, amount, "
         f"trxnno AS txn_no, inv_name AS investor, amc_code AS amc, scheme AS scheme "
         f"FROM {view}", conn)
@@ -258,63 +271,47 @@ def _load_cams_folio_master(conn) -> pd.DataFrame:
 
 
 # ══════════════════════════════════════════════════════════════
-# FIFO AGGREGATION — same math as the Clients tab
+# FIFO AGGREGATION — mirrors app.get_cams_invested_per_scheme
 # ══════════════════════════════════════════════════════════════
 def _fifo_units_cams(t: pd.DataFrame, keys: list) -> pd.DataFrame:
-    """Same FIFO replay the Clients tab uses via get_cams_invested_per_scheme().
-    Returns one row per folio+product with our_units = sum of remaining lots.
+    """FIFO replay that produces the SAME result the Clients tab shows.
 
-    Defensive about input columns: replay_folio_scheme() needs
-    traddate, trxntype, trxn_nature, units, purprice, amount. If the upstream
-    SELECT didn't include purprice, we derive it from amount/units."""
+    Grouping is done on the NORMALISED keys (`folio`, `product`) so invisible
+    variation in the raw folio_no / prodcode columns (trailing \\r, tabs,
+    non-breaking spaces, embedded quotes) cannot split one folio's history
+    into multiple FIFO replays. The replay itself still consumes the raw
+    column values (raw_date, units, purprice, amount) exactly as
+    app.get_cams_invested_per_scheme does.
+    """
     import capital_gain as cg_row
 
     if t.empty:
         return pd.DataFrame(columns=keys + ["our_units"])
 
-    t = t.sort_values(keys + ["d"], kind="stable").copy()
-    t = t.rename(columns={"d": "traddate"})
+    t = t.copy()
+    t["_sort_date"] = pd.to_datetime(t["raw_date"], errors="coerce", format="mixed")
+    t = t.sort_values(keys + ["_sort_date"], kind="stable").reset_index(drop=True)
 
-    # ── Ensure every column replay_folio_scheme() expects is present ──
-    if "trxntype" not in t.columns:
-        t["trxntype"] = ""
-    if "trxn_nature" not in t.columns:
-        t["trxn_nature"] = ""
-    if "units" not in t.columns:
-        t["units"] = 0.0
-    else:
-        t["units"] = pd.to_numeric(t["units"], errors="coerce").fillna(0.0)
-    if "amount" not in t.columns:
-        t["amount"] = 0.0
-    else:
-        t["amount"] = pd.to_numeric(t["amount"], errors="coerce").fillna(0.0)
-    if "purprice" not in t.columns or t["purprice"].isna().all():
-        # derive NAV per unit from amount / units; guard divide-by-zero
-        t["purprice"] = (
-            t["amount"]
-            .div(t["units"].where(t["units"].abs() > 0))
-            .fillna(0.0)
-        )
-    else:
-        t["purprice"] = pd.to_numeric(t["purprice"], errors="coerce").fillna(0.0)
-
-    replay_cols = ["traddate", "trxntype", "trxn_nature", "units", "purprice", "amount"]
-
+    replay_cols = ["raw_date", "trxntype", "trxn_nature", "units", "purprice", "amount"]
     rows = []
-    for (folio, product), grp in t.groupby(keys):
-        replay = grp[replay_cols].copy()
+    for key_vals, grp in t.groupby(keys):
+        replay = grp[replay_cols].rename(columns={"raw_date": "traddate"})
         try:
             lots, _ = cg_row.replay_folio_scheme(replay)
             units = float(sum(l.remaining_units for l in lots))
         except Exception:
-            log.exception(
-                "[AUM-RECON] FIFO replay failed for %s/%s — falling back to signed sum",
-                folio, product,
-            )
-            units = float(grp["signed"].sum()) if "signed" in grp.columns else 0.0
-        rows.append({"folio": folio, "product": product, "our_units": units})
-    return pd.DataFrame(rows)
+            log.exception("[AUM-RECON] FIFO replay failed for %s — net fallback", key_vals)
+            units = 0.0
+            for _, r in grp.iterrows():
+                is_red = str(r.get("trxntype", "")).strip().upper() == "R1"
+                u = float(r["units"]) if pd.notna(r["units"]) else 0.0
+                units += -u if is_red else u
 
+        key_dict = dict(zip(keys, key_vals if isinstance(key_vals, tuple) else (key_vals,)))
+        key_dict["our_units"] = units
+        rows.append(key_dict)
+
+    return pd.DataFrame(rows)
 
 # ══════════════════════════════════════════════════════════════
 # ENGINE
@@ -337,7 +334,6 @@ def _reconcile(aum: pd.DataFrame, txns: pd.DataFrame, ignore_dates: bool,
         last_txn = t.groupby(keys, as_index=False)["d"].max().rename(columns={"d": "last_txn_date"})
 
     out = aum.merge(ours, on=keys, how="outer").merge(last_txn, on=keys, how="left")
-    # label txn-only folios (not present in the AUM file) from the transactions
     if not txns.empty:
         info = (txns.dropna(subset=["folio"]).drop_duplicates(keys)
                 [keys + ["investor", "amc", "scheme"]]
@@ -346,21 +342,31 @@ def _reconcile(aum: pd.DataFrame, txns: pd.DataFrame, ignore_dates: bool,
         for c, c2 in (("investor", "i2"), ("amc", "a2"), ("scheme", "s2")):
             out[c] = out[c].where(out[c].notna() & (out[c].astype(str).str.strip() != ""), out[c2])
         out = out.drop(columns=["i2", "a2", "s2"])
+
     out["aum_units"] = out["aum_units"].fillna(0.0)
     out["our_units"] = out["our_units"].fillna(0.0)
     out["diff"] = (out["our_units"] - out["aum_units"]).round(4)
+
+    # ── Status assignment ──
     out["status"] = "matched"
     out.loc[out["diff"] > TOL, "status"] = "excess"
     out.loc[out["diff"] < -TOL, "status"] = "short"
-    return out
 
+    # NEW: AUM file has no units for this folio+scheme — either no row at all,
+    # or a row whose CLOS_BAL is 0 (typically an AUM statement dated before
+    # the first SIP). This is a data-completeness issue on the AUM side, not
+    # a duplicate-transaction signal. Downgrade from "excess" so the user
+    # isn't nudged to deactivate valid transactions.
+    no_aum_units = (out["aum_units"] <= TOL) & (out["our_units"] > TOL)
+    out.loc[no_aum_units, "status"] = "txn_only"
+    return out
 
 RECON_COLS = ["rta", "folio", "product", "scheme", "investor", "amc", "aum_date",
               "aum_units", "our_units", "diff", "folio_master_units", "last_txn_date", "status"]
 
 
 @st.cache_data(show_spinner="Reconciling units…")
-def compute_recon(_v: int, ignore_dates: bool = False) -> pd.DataFrame:
+def compute_recon(_v: int, ignore_dates: bool = True) -> pd.DataFrame:
     frames = []
     with _conn() as conn:
         for rta, aum_fn, txn_fn in (("CAMS", _load_cams_aum, _load_cams_txns),
@@ -448,7 +454,7 @@ def _debug_fifo_detail(rta: str, folio: str, product: str, as_of: str | None) ->
         st.caption("(no active rows)")
         return
     st.dataframe(
-        t[["txn_no", "d", "trxntype", "trxn_nature", "units", "amount"]],
+        t[["txn_no", "raw_date", "trxntype", "trxn_nature", "units", "purprice", "amount"]],
         use_container_width=True, hide_index=True,
     )
 
@@ -463,20 +469,8 @@ def _debug_fifo_detail(rta: str, folio: str, product: str, as_of: str | None) ->
         )
 
     # ── Build the replay frame the same way _fifo_units_cams does ──
-    replay = t.rename(columns={"d": "traddate"}).copy()
-    if "trxntype" not in replay.columns:      replay["trxntype"]    = ""
-    if "trxn_nature" not in replay.columns:   replay["trxn_nature"] = ""
-    if "units" not in replay.columns:         replay["units"]       = 0.0
-    if "amount" not in replay.columns:        replay["amount"]      = 0.0
-    replay["units"]  = pd.to_numeric(replay["units"],  errors="coerce").fillna(0.0)
-    replay["amount"] = pd.to_numeric(replay["amount"], errors="coerce").fillna(0.0)
-    if "purprice" not in replay.columns or replay["purprice"].isna().all():
-        replay["purprice"] = replay["amount"].div(
-            replay["units"].where(replay["units"].abs() > 0)
-        ).fillna(0.0)
-    else:
-        replay["purprice"] = pd.to_numeric(replay["purprice"], errors="coerce").fillna(0.0)
-
+    replay = t[["raw_date", "trxntype", "trxn_nature", "units", "purprice", "amount"]] \
+        .rename(columns={"raw_date": "traddate"})
     replay_cols = ["traddate", "trxntype", "trxn_nature", "units", "purprice", "amount"]
 
     st.markdown("#### Step 2 — input frame passed to `replay_folio_scheme()`")
@@ -515,8 +509,8 @@ def _debug_fifo_detail(rta: str, folio: str, product: str, as_of: str | None) ->
         t["trxntype"].astype(str).str.strip().str.upper().eq("R1")
         | t["trxn_nature"].astype(str).str.lower().str.contains("redemption", na=False)
     )
-    signed_sum      = float(units_num.where(~is_red, -units_num).sum())
-    raw_positive    = float(units_num.sum())
+    signed_sum   = float(units_num.where(~is_red, -units_num).sum())
+    raw_positive = float(units_num.sum())
 
     st.dataframe(pd.DataFrame([
         {"method": "FIFO replay  ← what Clients tab & recon now use",
@@ -599,8 +593,11 @@ def render_aum_recon_tab() -> None:
         with st.spinner("Downloading from Gmail, parsing into DB, reconciling…"):
             st.session_state["recon_fetch_result"] = fetch_from_gmail()
         st.rerun()
-    ignore_dates = b2.checkbox("Ignore AUM date", value=False, key="recon_ignore",
-                               help="Compare against ALL transactions instead of only up to each AUM report date.")
+    ignore_dates = b2.checkbox(
+        "Ignore AUM date", value=True, key="recon_ignore",
+        help="ON (default): compare against ALL active transactions — same as the "
+             "Clients tab does. OFF: only transactions dated up to each AUM report date.",
+    )
     try:
         last = dm.get_credential("mailback_last_sync_at") if dm else None
     except Exception:
