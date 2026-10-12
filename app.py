@@ -3096,6 +3096,35 @@ def _warm_caches_once() -> bool:
 
 _warm_caches_once()
 
+# ══════════════════════════════════════════════════════════════
+# WORKER WATCHDOG — catch missed cron runs on startup
+# ══════════════════════════════════════════════════════════════
+# Cron fires at 11:00 and 15:00 IST. If the app process was down
+# (or crashed and restarted) across one of those slots, .worker_run_stamp
+# goes stale. This launches a catch-up worker once per app process.
+#
+# @st.cache_resource ensures the check runs ONCE per Streamlit process,
+# not on every rerun (which would happen many times per minute).
+@st.cache_resource(show_spinner=False)
+def _worker_watchdog_startup_check() -> dict:
+    try:
+        from worker_watchdog import check_and_launch_if_stale
+        result = check_and_launch_if_stale()
+        log.info("[WATCHDOG] Startup check: %s", result)
+        return result
+    except Exception as e:
+        log.exception("[WATCHDOG] Startup check failed")
+        return {"triggered": False, "reason": str(e)}
+
+
+_watchdog_startup = _worker_watchdog_startup_check()
+
+if _watchdog_startup.get("triggered"):
+    st.toast(
+        f"⏰ Missed cron detected — catch-up worker launched "
+        f"({_watchdog_startup['reason']})",
+        icon="⏰",
+    )
 
 # ══════════════════════════════════════════════════════════════
 # CROSS-PROCESS REFRESH WATCHERS
@@ -3187,8 +3216,22 @@ def _check_for_data_changes_on_rerun() -> None:
 @st.fragment(run_every="60s")
 def _refresh_watcher_poller() -> None:
     """Re-runs every 60s even without user interaction. Essential for a
-    24/7 wall-mounted dashboard that nobody touches between cron runs."""
+    24/7 wall-mounted dashboard that nobody touches between cron runs.
+
+    Also runs the watchdog — its internal 15-min debounce ensures the
+    check_and_launch_if_stale() call is cheap (just a file stat) on most
+    ticks."""
     _check_for_data_changes()
+
+    # Watchdog tick — debounced internally, safe to call every 60s.
+    try:
+        from worker_watchdog import check_and_launch_if_stale
+        _wd = check_and_launch_if_stale()
+        if _wd.get("triggered"):
+            log.warning("[WATCHDOG] Poller fired catch-up worker: %s", _wd)
+            st.toast("⏰ Cron was missed — catch-up worker launched.", icon="⏰")
+    except Exception:
+        log.exception("[WATCHDOG] Poller tick failed")
 
 
 # Check once immediately (fast — just file reads), then start the poller.
@@ -9060,11 +9103,85 @@ elif mode == "⚙️ Admin Panel":
                   st.error(f"❌ {result['reason']}")
 
     # ══════════════════════════════════════════════════════════════
-    # ▶️ RUN BACKGROUND WORKER NOW
+    # ▶️ RUN BACKGROUND WORKER NOW  +  WATCHDOG STATUS
     # ══════════════════════════════════════════════════════════════
     st.divider()
     st.subheader("▶️ Background Worker")
 
+    # ── Watchdog status panel ────────────────────────────────────
+    # Shows when the worker last succeeded, whether that's within the
+    # freshness threshold, and lets you force a catch-up run that
+    # bypasses the 15-min debounce.
+    try:
+        from worker_watchdog import get_staleness, CRON_HOURS, GRACE_MINUTES, DEBOUNCE_MINUTES
+        _st = get_staleness()
+
+        _cols = st.columns([3, 1, 1, 1])
+
+        with _cols[0]:
+            if _st.get("last_run"):
+                st.markdown(
+                    f"🕒 **Last successful run:** `{_st['last_run']}`  "
+                    f"({_st['age_hours']:.1f}h ago, "
+                    f"trigger=`{_st.get('last_trigger') or '?'}`, "
+                    f"pid=`{_st.get('last_pid') or '?'}`)"
+                )
+            else:
+                st.markdown("🕒 **Last successful run:** _never — worker has not "
+                            "produced a stamp yet_")
+
+        with _cols[1]:
+            if _st.get("stale"):
+                st.error("⚠️ STALE")
+            else:
+                st.success("✅ Fresh")
+
+        with _cols[2]:
+            _sched = ", ".join(f"{h:02d}:00" for h in CRON_HOURS)
+            st.caption(f"Schedule: **{_sched}**")
+            st.caption(f"Grace: **{GRACE_MINUTES}m**  ·  Debounce: **{DEBOUNCE_MINUTES:.0f}m**")
+
+        with _cols[3]:
+            if st.button(
+                "🔄 Force catch-up",
+                key="wd_force_catchup",
+                width="stretch",
+                help=(
+                    "Launches the worker now, ignoring the staleness check "
+                    "and the debounce window. Useful for testing or after "
+                    "you know a cron slot was missed."
+                ),
+            ):
+                from worker_launcher import launch_worker
+                with st.spinner("Launching worker..."):
+                    _r = launch_worker(timeout_seconds=300)
+                if _r["ok"]:
+                    st.success(_r["msg"])
+                else:
+                    st.error(_r["msg"])
+                # Same cache invalidation as the normal button
+                get_enriched_folio_nav_df.clear()
+                get_folio_nav_summary_cached.clear()
+                load_previous_nav_map_cached.clear()
+                get_or_fetch_nav_for_date_cached.clear()
+                get_all_folios_with_isin_and_nav.clear()
+                _amfi.load(force=True)
+                st.rerun()
+
+        # Surface the reason string always — green tick for fresh,
+        # warning colour for stale. Mirrors the badge above.
+        if _st.get("reason"):
+            if _st.get("stale"):
+                st.caption(f"⚠️ {_st['reason']}")
+            else:
+                st.caption(f"✅ {_st['reason']}")
+
+    except Exception as _wd_err:
+        st.caption(f"⚠️ Watchdog status unavailable: {_wd_err}")
+
+    st.divider()
+
+    # ── Manual run button (unchanged behaviour) ─────────────────
     wc1, wc2 = st.columns([1, 4])
 
     with wc1:

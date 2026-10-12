@@ -10119,3 +10119,31 @@ LookupError: unknown encoding: unknown-8bit
 2026-10-12 11:00:22,351 [INFO] [cron] background_worker | ======================================================================
 2026-10-12 11:00:22,352 [INFO] [cron] background_worker | [WORKER] data_version bumped
 ──── worker end   2026-10-12 11:00:22 IST (exit=0) ────
+──── worker start 2026-10-12 15:00:01 IST ────
+2026-10-12 15:00:03,394 [INFO] [cron] background_worker | ======================================================================
+2026-10-12 15:00:03,394 [INFO] [cron] background_worker | BACKGROUND WORKER RUN  @ 2026-10-12T15:00:03  (trigger=cron, pid=1673)
+2026-10-12 15:00:03,394 [INFO] [cron] background_worker | ======================================================================
+2026-10-12 15:00:04,958 [INFO] [cron] background_worker | [MAILBACK] Starting
+2026-10-12 15:00:07,291 [INFO] [cron] mailback_sync | [IMAP] Connected
+2026-10-12 15:00:07,700 [INFO] [cron] mailback_sync | [CAMS] Found 0 unread mailback emails
+2026-10-12 15:00:08,109 [INFO] [cron] mailback_sync | [KFinTech] Found 0 unread mailback emails
+2026-10-12 15:00:09,014 [INFO] [cron] background_worker | [MAILBACK] checked=0 downloaded=0 parsed=0 failed=0 no_data=0 errors=0
+2026-10-12 15:00:09,019 [INFO] [cron] background_worker | [mailback] -> OK
+2026-10-12 15:00:09,021 [INFO] [cron] background_worker | [NAV-LIVE] Starting
+2026-10-12 15:00:09,049 [INFO] [cron] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-10-12 15:00:09,772 [INFO] [cron] nav_service | [NAV-PARSE] Parsed 13994 records | column counts seen: {8: 14131}
+2026-10-12 15:00:09,787 [INFO] [cron] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-10-09.txt: 1520632 bytes, 17861 rows (source=live)
+2026-10-12 15:00:09,796 [INFO] [cron] nav_service | [AMFI] NAV file overwritten: nav_data/nav_2026-10-09.txt (1520632 bytes, 18108 lines) | NAV Date: 2026-10-09
+2026-10-12 15:00:09,799 [INFO] [cron] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-10-09.txt...
+2026-10-12 15:00:10,313 [INFO] [cron] nav_db | [NAV-DB] Ingested 4287 records (skipped 0) for date 2026-10-09
+2026-10-12 15:00:10,316 [INFO] [cron] nav_service | [NAV-DB] Success: Inserted 4287 NAV records
+2026-10-12 15:00:10,316 [INFO] [cron] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-10-12 15:00:10,316 [INFO] [cron] background_worker | [nav_live] -> OK
+2026-10-12 15:00:10,316 [INFO] [cron] background_worker | [NAV-PREV] Starting
+2026-10-12 15:00:10,365 [INFO] [cron] nav_service | [AMFI-HIST] Already have 2026-10-08 — skipping fetch
+2026-10-12 15:00:10,365 [INFO] [cron] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-10-08
+2026-10-12 15:00:10,365 [INFO] [cron] background_worker | [nav_previous] -> OK
+2026-10-12 15:00:10,365 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-10-12T15:00:10  (trigger=cron)
+2026-10-12 15:00:10,365 [INFO] [cron] background_worker | ======================================================================
+2026-10-12 15:00:10,368 [INFO] [cron] background_worker | [WORKER] data_version bumped
+──── worker end   2026-10-12 15:00:10 IST (exit=0) ────
