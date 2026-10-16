@@ -1,0 +1,1 @@
+"""Service layer — all business logic, no Streamlit."""

@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark theme (default) — moved from theme_patch.py THEME_CSS dark palette */
+:root, .dark {
+  --bg:     14 17 23;      /* #0e1117 */
+  --card:   22 27 34;      /* #161b22 */
+  --accent: 88 166 255;    /* #58a6ff */
+  --text:   230 237 243;   /* #e6edf3 */
+  --muted:  139 148 158;   /* #8b949e */
+  --border: 48 54 61;      /* #30363d */
+}
+
+/* Light theme — moved from theme_patch.py THEME_CSS light palette */
+.light {
+  --bg:     255 255 255;
+  --card:   246 248 250;   /* #f6f8fa */
+  --accent: 37 99 235;     /* #2563eb */
+  --text:   26 26 46;      /* #1a1a2e */
+  --muted:  107 114 128;   /* #6b7280 */
+  --border: 208 215 222;   /* #d0d7de */
+}
+
+html, body, #root { height: 100%; }
+body { @apply bg-bg text-text; }
