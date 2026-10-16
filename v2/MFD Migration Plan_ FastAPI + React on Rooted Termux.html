@@ -1,0 +1,363 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=claude:viewport-fit-sides content=cover><style>:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-right:env(safe-area-inset-right,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}</style><style>.md-table{overflow-x:auto}@media print{.md-table{overflow-x:visible}}</style><style>:root{color-scheme:light dark;--md-bg:#fff;--md-text:rgba(0,0,0,.8);--md-muted:rgba(0,0,0,.6);--md-fill:rgba(0,0,0,.04);--md-fill-strong:rgba(0,0,0,.06);--md-rule:rgba(0,0,0,.1);--md-rule-strong:rgba(0,0,0,.16);--md-link:hsl(210 100% 45%)}@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){--md-bg:#0d0d0d;--md-text:rgba(255,255,255,.85);--md-muted:rgba(255,255,255,.6);--md-fill:rgba(255,255,255,.06);--md-fill-strong:rgba(255,255,255,.09);--md-rule:rgba(255,255,255,.14);--md-rule-strong:rgba(255,255,255,.22);--md-link:hsl(210 100% 72%)}}:root[data-theme="dark"]{color-scheme:dark;--md-bg:#0d0d0d;--md-text:rgba(255,255,255,.85);--md-muted:rgba(255,255,255,.6);--md-fill:rgba(255,255,255,.06);--md-fill-strong:rgba(255,255,255,.09);--md-rule:rgba(255,255,255,.14);--md-rule-strong:rgba(255,255,255,.22);--md-link:hsl(210 100% 72%)}:root[data-theme="light"]{color-scheme:light}@media print{:root,:root[data-theme="dark"]{color-scheme:light;--md-bg:#fff;--md-text:rgba(0,0,0,.8);--md-muted:rgba(0,0,0,.6);--md-fill:rgba(0,0,0,.04);--md-fill-strong:rgba(0,0,0,.06);--md-rule:rgba(0,0,0,.1);--md-rule-strong:rgba(0,0,0,.16);--md-link:hsl(210 100% 45%)}}body{background:var(--md-bg);color:var(--md-text);max-width:720px;margin:0 auto;padding:32px;display:flex;flex-direction:column;gap:10px;font:14px/1.55 -apple-system,BlinkMacSystemFont,'SF Pro','Segoe UI',sans-serif;overflow-wrap:break-word}body>:first-child{margin-top:0}h1,h2,h3,h4,h5,h6{margin:6px 0 0;line-height:1.25;font-weight:600;text-wrap:balance}h1{font-size:1.35em}h2{font-size:1.15em;color:var(--md-muted)}h3,h4,h5,h6{font-size:1em}p,ul,ol,blockquote,table,pre,hr{margin:0}strong{font-weight:600}a{color:var(--md-link);text-decoration:none}a:hover{text-decoration:underline}ul,ol{display:flex;flex-direction:column;gap:6px;padding-left:22px}ul{list-style:disc}ol{list-style:decimal}:is(li,td,th)>*+:is(p,ul,ol,blockquote){margin-top:6px}blockquote{display:flex;flex-direction:column;gap:10px;border-left:2px solid var(--md-rule);padding-left:10px;color:var(--md-muted)}:not(pre)>code{background:var(--md-fill);padding:1px 3px;border-radius:4px;font:.92em 'SF Mono',ui-monospace,Menlo,Consolas,monospace}a>code{background:none;color:inherit}pre{background:var(--md-fill);padding:10px 12px;border-radius:6px;overflow-x:auto;font:12px/1.5 'SF Mono',ui-monospace,Menlo,Consolas,monospace;margin-block:4px}pre code{background:none;padding:0;font:inherit}table{width:100%;border-collapse:separate;border-spacing:2px;font:inherit}th,td{padding:6px 8px;border-radius:3px;text-align:left;vertical-align:top}th{background:var(--md-fill-strong);font-weight:600}td{background:var(--md-fill)}:is(th,td) :not(pre)>code{background:transparent}hr{border:0;border-top:1px solid var(--md-rule-strong);margin-block:10px}img{max-width:100%;height:auto;border-radius:4px}</style>
+</head><body>
+<h1>MFD Portfolio Intelligence: Streamlit → FastAPI + React on Rooted Termux (proot)</h1>
+<h2>1. Target Architecture</h2>
+<pre><code>Phone (rooted, Termux)
+├─ Termux native
+│   ├─ tsu / su            (root helpers)
+│   ├─ termux-services     (runit: keeps processes alive)
+│   ├─ Termux:Boot         (autostart on reboot)
+│   ├─ cloudflared         (remote access, no port-forward)
+│   └─ redis-server        (optional cache)
+└─ proot-distro Debian (arm64)
+    ├─ FastAPI + Uvicorn   (API, port 8000)
+    ├─ APScheduler worker  (separate process: mailback, NAV, BSE)
+    ├─ Chromium + chromedriver (BSE Selenium)
+    ├─ SQLite (WAL mode)
+    └─ frontend/dist       (static React build, served by FastAPI)
+</code></pre>
+<p><strong>Decisions</strong></p>
+<div class="md-table" role="region" aria-label="Table" tabindex="0"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Choice</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td>FastAPI + SQLAlchemy 2 + Alembic</td>
+<td>Async, auto OpenAPI docs, light on RAM</td>
+</tr>
+<tr>
+<td>DB</td>
+<td>SQLite (WAL)</td>
+<td>Already used; no server to run on phone</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td>Vite + React + TypeScript + TanStack Query + Tailwind/shadcn</td>
+<td>Builds to static files. No Node needed on phone. (Replaces the earlier Next.js suggestion.)</td>
+</tr>
+<tr>
+<td>Scheduler</td>
+<td>APScheduler in a separate process</td>
+<td>No cron/systemd needed in proot</td>
+</tr>
+<tr>
+<td>Cache</td>
+<td><code>cachetools</code> first, Redis later</td>
+<td>Fewer moving parts</td>
+</tr>
+<tr>
+<td>Process manager</td>
+<td>runit via <code>termux-services</code></td>
+<td>Works without systemd</td>
+</tr>
+<tr>
+<td>Remote access</td>
+<td>Cloudflare Tunnel</td>
+<td>Works behind mobile CGNAT</td>
+</tr>
+<tr>
+<td>Selenium</td>
+<td>Debian <code>chromium</code> + <code>chromium-driver</code></td>
+<td>Ubuntu's Chromium is a snap and fails in proot</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>Root advantages</strong></p>
+<ul>
+<li>Use <code>chroot</code> instead of proot for ~2x speed (real mounts, no ptrace overhead). Keep the same Debian rootfs. Proot works as the fallback.</li>
+<li><code>su -c</code> to whitelist Termux from battery optimization and Doze.</li>
+<li><code>termux-wake-lock</code> keeps CPU awake.</li>
+<li>Bind port 80/443 directly if wanted.</li>
+<li>Pin the process priority: <code>su -c &quot;renice -n -5 -p &lt;pid&gt;&quot;</code>.</li>
+</ul>
+<hr>
+<h2>2. Five Steps</h2>
+<h3>STEP 1: Environment + project skeleton + database models</h3>
+<p><strong>Files used:</strong> <code>init_db.py</code></p>
+<p><strong>Do</strong></p>
+<ol>
+<li>Termux:
+<pre><code>pkg install proot-distro tsu termux-services termux-api cloudflared git
+proot-distro install debian
+proot-distro login debian
+</code></pre>
+</li>
+<li>Inside Debian:
+<pre><code>apt update &amp;&amp; apt install -y python3 python3-venv python3-pip chromium chromium-driver sqlite3 build-essential
+python3 -m venv ~/venv &amp;&amp; . ~/venv/bin/activate
+pip install fastapi uvicorn[standard] sqlalchemy alembic pydantic-settings apscheduler python-jose passlib[bcrypt] pandas selenium python-multipart cachetools
+</code></pre>
+</li>
+<li>Create layout:
+<pre><code>mfd/
+  backend/app/{main.py, api/v1/, core/, models/, schemas/, services/, workers/}
+  backend/alembic/
+  frontend/
+</code></pre>
+</li>
+<li><code>core/config.py</code> (env vars: <code>DB_PATH</code>, <code>JWT_SECRET</code>, <code>BSE_SCHEME_DIR</code>), <code>core/db.py</code> (engine, <code>PRAGMA journal_mode=WAL</code>, <code>busy_timeout=5000</code>).</li>
+<li>Convert every <code>CREATE TABLE</code> in <code>init_db.py</code> into SQLAlchemy models in <code>models/</code>. Include <code>nav_schemes</code>, <code>nav_options</code>, <code>nav_history</code>, <code>admin_settings</code>, and the AUM recon tables. Add a new <code>job_runs</code> table: <code>id, task, trigger, started_at, finished_at, ok, msg</code>.</li>
+<li><code>alembic revision --autogenerate</code>, then <code>alembic stamp head</code> against your existing DB, so no data is lost.</li>
+</ol>
+<p><strong>Done when:</strong> <code>alembic upgrade head</code> runs clean on a copy of the production DB.</p>
+<hr>
+<h3>STEP 2: Extract business logic into <code>services/</code> (remove all Streamlit)</h3>
+<p><strong>Files used:</strong> <code>capital_gain.py</code>, <code>trading_day_calender.py</code>, <code>nav_queries.py</code>, <code>nav_data_ingestion.py</code>, <code>nav_service.py</code>, <code>data_manager.py</code>, <code>aum_recon.py</code>, <code>cams_mailback_sync.py</code>, <code>bse_auto.py</code>, <code>email_tempate.py</code>, <code>sync_failure_log.py</code></p>
+<p><strong>Do</strong></p>
+<div class="md-table" role="region" aria-label="Table" tabindex="0"><table>
+<thead>
+<tr>
+<th>File</th>
+<th>Destination</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>capital_gain.py</code></td>
+<td><code>services/capital_gain.py</code></td>
+<td>Copy as is (already pure).</td>
+</tr>
+<tr>
+<td><code>trading_day_calender.py</code></td>
+<td><code>services/trading_calendar.py</code></td>
+<td>Copy; move holiday dict to a JSON file.</td>
+</tr>
+<tr>
+<td><code>nav_queries.py</code></td>
+<td><code>services/nav_queries.py</code></td>
+<td>Replace <code>init_db.get_conn</code> with the SQLAlchemy session; rename the <code>no</code> alias (it is a SQL keyword risk).</td>
+</tr>
+<tr>
+<td><code>nav_data_ingestion.py</code></td>
+<td><code>services/nav_ingest.py</code></td>
+<td>Same session swap; batch inserts with <code>executemany</code>.</td>
+</tr>
+<tr>
+<td><code>nav_service.py</code></td>
+<td><code>services/nav_service.py</code></td>
+<td>Remove <code>@st.cache_data</code>, <code>st.session_state</code>.</td>
+</tr>
+<tr>
+<td><code>data_manager.py</code></td>
+<td><code>services/data_manager.py</code></td>
+<td>Remove <code>st.*</code>. Parsers take a file object and return plain dicts.</td>
+</tr>
+<tr>
+<td><code>aum_recon.py</code></td>
+<td><code>services/aum_recon.py</code></td>
+<td>Same.</td>
+</tr>
+<tr>
+<td><code>cams_mailback_sync.py</code></td>
+<td><code>services/mailback.py</code></td>
+<td>Credentials from env/DB, not <code>st.secrets</code>.</td>
+</tr>
+<tr>
+<td><code>bse_auto.py</code></td>
+<td><code>services/bse.py</code></td>
+<td>Keep <code>_do_download</code>, <code>sync_now</code>. Delete the unused thread helpers. Remove <code>webdriver_manager</code>; use system chromedriver only.</td>
+</tr>
+<tr>
+<td><code>email_tempate.py</code></td>
+<td><code>services/email_templates.py</code></td>
+<td>Copy; fix filename typo.</td>
+</tr>
+<tr>
+<td><code>sync_failure_log.py</code></td>
+<td><code>services/sync_log.py</code></td>
+<td>Copy; optionally write to a DB table too.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>Cache replacement:</strong></p>
+<pre><code class="language-python">from cachetools import TTLCache
+_cache = TTLCache(maxsize=512, ttl=300)
+def data_version() -&gt; int: ...   # reads admin_settings &#39;data_version&#39;
+</code></pre>
+<p>Key every cached call with <code>data_version()</code>. The worker bumps it after each run (replaces <code>bump()</code> / <code>.worker_run_stamp</code>).</p>
+<p><strong>Done when:</strong> <code>pytest</code> passes for <code>capital_gain</code> (FIFO, LTCG date boundaries), <code>trading_calendar</code>, and NAV parse of a sample <code>NAVAll.txt</code>. <code>grep -r &quot;import streamlit&quot; backend/</code> returns nothing.</p>
+<hr>
+<h3>STEP 3: Build the REST API</h3>
+<p><strong>Files used:</strong> <code>app.py</code> (as the feature list/reference), <code>data_manager.py</code>, <code>nav_queries.py</code>, <code>capital_gain.py</code>, <code>aum_recon.py</code>, <code>email_tempate.py</code>, <code>runtime_status.py</code>, <code>sync_failure_log.py</code></p>
+<p><strong>Do</strong></p>
+<ol>
+<li>Read <code>app.py</code> page by page and list every feature. Each becomes an endpoint.</li>
+<li>Routers in <code>api/v1/</code>:</li>
+</ol>
+<div class="md-table" role="region" aria-label="Table" tabindex="0"><table>
+<thead>
+<tr>
+<th>Router</th>
+<th>Endpoints</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>auth</code></td>
+<td><code>POST /auth/login</code>, <code>GET /auth/me</code></td>
+</tr>
+<tr>
+<td><code>nav</code></td>
+<td><code>GET /nav/latest</code>, <code>/nav/{isin}/history</code>, <code>/nav/previous</code></td>
+</tr>
+<tr>
+<td><code>clients</code></td>
+<td>CRUD, <code>GET /clients/{id}/portfolio</code>, <code>/transactions</code></td>
+</tr>
+<tr>
+<td><code>capital_gains</code></td>
+<td><code>GET /clients/{id}/capital-gains</code>, <code>POST /capital-gains/hypothetical</code></td>
+</tr>
+<tr>
+<td><code>aum</code></td>
+<td><code>GET /aum</code>, <code>/aum/reconciliation</code></td>
+</tr>
+<tr>
+<td><code>uploads</code></td>
+<td><code>POST /uploads/cams</code>, <code>/uploads/kfin</code>, <code>/uploads/bse</code> (save file, enqueue job, return <code>job_id</code>)</td>
+</tr>
+<tr>
+<td><code>reports</code></td>
+<td><code>POST /reports/valuation</code>, <code>/reports/capital-gain</code> (PDF), <code>POST /reports/{id}/email</code></td>
+</tr>
+<tr>
+<td><code>admin</code></td>
+<td><code>GET /admin/sync-status</code>, <code>/admin/failures</code>, <code>/admin/settings</code>, <code>POST /admin/jobs/{name}/run</code>, <code>GET /admin/data-version</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+<ol start="3">
+<li>Pydantic response models for every endpoint. Numbers as numbers; no formatted strings.</li>
+<li><code>runtime_status.py</code> is replaced by the <code>job_runs</code> table. <code>sync_failure_log.py</code> serves <code>/admin/failures</code>.</li>
+<li>Auth: JWT, bcrypt password, one admin user seeded by CLI.</li>
+<li>Mount static frontend last: <code>app.mount(&quot;/&quot;, StaticFiles(directory=&quot;frontend/dist&quot;, html=True))</code>.</li>
+</ol>
+<p><strong>Done when:</strong> <code>uvicorn app.main:app --host 0.0.0.0 --port 8000</code> runs and <code>/docs</code> shows all endpoints. Compare 5 portfolio outputs against Streamlit values.</p>
+<hr>
+<h3>STEP 4: Worker + scheduler (replaces cron, watchdog, launcher)</h3>
+<p><strong>Files used:</strong> <code>background_worker.py</code>, <code>worker_launcher.py</code>, <code>worker_watchdog.py</code>, <code>bse_auto.py</code>, <code>runtime_status.py</code>, <code>sync_failure_log.py</code></p>
+<p><strong>Do</strong></p>
+<ol>
+<li><code>workers/main.py</code> (own process) with APScheduler:
+<pre><code class="language-python">sched.add_job(run_all, &#34;cron&#34;, hour=&#34;11,15&#34;, id=&#34;main&#34;, max_instances=1, coalesce=True, misfire_grace_time=3600)
+</code></pre>
+<ul>
+<li><code>max_instances=1</code> replaces the <code>fcntl</code> lock.</li>
+<li><code>coalesce</code> + <code>misfire_grace_time</code> replace <code>worker_watchdog.py</code> (missed runs catch up automatically on restart).</li>
+</ul>
+</li>
+<li>Move <code>task_mailback</code>, <code>task_nav_live</code>, <code>task_nav_previous</code>, <code>task_bse</code> from <code>background_worker.py</code> into <code>workers/tasks.py</code>. Keep the <code>admin_settings</code> enable flags. Note: <code>task_bse</code> is defined but <strong>not</strong> in the <code>run_all</code> task list; add it if BSE should run on schedule.</li>
+<li>Each task writes a <code>job_runs</code> row (replaces <code>runtime_status.py</code> and the stamp file). After <code>run_all</code>, bump <code>data_version</code>.</li>
+<li>&quot;Run now&quot; button: <code>POST /admin/jobs/{name}/run</code> inserts a <code>pending</code> row in <code>job_runs</code>; the worker polls it every 10s. This replaces <code>worker_launcher.py</code> (no subprocess spawn from the API).</li>
+<li>Keep the Streamlit shim only if some module still imports <code>st</code>. After Step 2 it should be deleted.</li>
+<li>Keep <code>TZ=Asia/Kolkata</code> in the service env.</li>
+</ol>
+<p><strong>Done when:</strong> killing the worker and restarting it after a 11:00 slot triggers a catch-up run; the manual endpoint runs a task and shows it in <code>job_runs</code>.</p>
+<hr>
+<h3>STEP 5: Frontend + hosting on the phone</h3>
+<p><strong>Files used:</strong> <code>app.py</code> (UI layout reference), <code>theme_patch.py</code> (colors), <code>email_tempate.py</code> (preview), plus the OpenAPI schema from Step 3</p>
+<p><strong>Frontend (build on a laptop, not the phone)</strong></p>
+<pre><code>npm create vite@latest frontend -- --template react-ts
+npm i @tanstack/react-query react-router-dom recharts axios
+npx shadcn@latest init
+</code></pre>
+<ul>
+<li>Generate typed client: <code>npx openapi-typescript http://phone:8000/openapi.json -o src/api/schema.ts</code></li>
+<li>Theme: move the <code>THEME_CSS</code> palettes from <code>theme_patch.py</code> into Tailwind CSS variables (<code>--bg #0e1117</code>, <code>--card #161b22</code>, <code>--accent #58a6ff</code> for dark; <code>#fff / #f6f8fa / #2563eb</code> for light). Toggle with a <code>dark</code> class; delete <code>THEME_WATCHER_JS</code>.</li>
+<li><code>.metric-card</code> and <code>.aum-card*</code> become <code>&lt;KpiCard variant=&quot;primary|success|info|warning&quot;&gt;</code>.</li>
+<li>Pages: Login, Dashboard (AUM + KPIs), Clients, Portfolio, Capital Gains (with hypothetical redemption form), Reports, Uploads, Admin (sync status, failures, settings, run-now).</li>
+<li>TanStack Query: <code>staleTime</code> NAV 5 min; poll <code>/admin/data-version</code> every 60s and invalidate all queries on change.</li>
+<li><code>npm run build</code>, then copy <code>dist/</code> to <code>mfd/frontend/dist</code> on the phone (<code>scp</code> or <code>termux-setup-storage</code>).</li>
+</ul>
+<p><strong>Hosting (Termux)</strong></p>
+<ol>
+<li>Run API and worker as runit services. In Termux:
+<pre><code>mkdir -p $PREFIX/var/service/mfd-api $PREFIX/var/service/mfd-worker
+</code></pre>
+<code>mfd-api/run</code>:
+<pre><code>#!/data/data/com.termux/files/usr/bin/sh
+exec proot-distro login debian --shared-tmp -- bash -lc &#39;cd ~/mfd/backend &amp;&amp; . ~/venv/bin/activate &amp;&amp; TZ=Asia/Kolkata exec uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1&#39;
+</code></pre>
+<code>mfd-worker/run</code>: same, with <code>python -m app.workers.main</code>.
+<code>chmod +x</code> both, then <code>sv-enable mfd-api mfd-worker</code>.</li>
+<li>Autostart on reboot: install the Termux:Boot app, then <code>~/.termux/boot/start.sh</code>:
+<pre><code>#!/data/data/com.termux/files/usr/bin/sh
+termux-wake-lock
+sv-enable mfd-api mfd-worker
+</code></pre>
+</li>
+<li>Root tweaks (run once as root):
+<pre><code>su -c &#34;dumpsys deviceidle whitelist +com.termux&#34;
+su -c &#34;settings put global app_standby_enabled 0&#34;
+</code></pre>
+Optional speedup: switch the <code>proot-distro login</code> line to a <code>chroot</code> of the same rootfs via <code>su -c</code>.</li>
+<li>Remote access: <code>cloudflared tunnel login</code>, create a tunnel pointing to <code>http://localhost:8000</code>, run it as a third runit service. Put Cloudflare Access (email OTP) in front on top of JWT.</li>
+<li>Backups: nightly <code>sqlite3 mfd.db &quot;.backup /sdcard/backup/mfd_$(date +%F).db&quot;</code> via APScheduler or <code>crond</code>. Sync the folder off-device.</li>
+</ol>
+<p><strong>Done when:</strong> after a phone reboot, the dashboard loads from your public tunnel URL with no manual action, and the 15:00 worker run appears in <code>job_runs</code>.</p>
+<hr>
+<h2>3. Phone-Specific Gotchas</h2>
+<ul>
+<li><strong>RAM:</strong> run <code>--workers 1</code>. Chromium is the heaviest piece; it runs only during the BSE task. Keep <code>--headless=new --no-sandbox --disable-dev-shm-usage</code> (already in <code>bse_auto.py</code>).</li>
+<li><strong>SQLite:</strong> WAL mode plus one writer. Keep the worker's long ingests in batched transactions to avoid blocking API writes.</li>
+<li><strong>Storage:</strong> keep the DB and <code>Reports/</code> on internal storage (ext4), not <code>/sdcard</code> (FUSE, slow, no file locking).</li>
+<li><strong>Proot:</strong> <code>fcntl</code> works, but avoid heavy native builds. Prefer wheels (<code>pandas</code>, <code>bcrypt</code> have arm64 wheels).</li>
+<li><strong>Security:</strong> bind the API to <code>127.0.0.1</code>; only the tunnel exposes it. Store Gmail credentials in env vars or an encrypted table, never in the repo.</li>
+<li><strong>Thermals:</strong> a phone running 24/7 on charge degrades the battery. Use a charge limiter (root: <code>su -c &quot;echo 80 &gt; /sys/class/power_supply/battery/charge_control_limit&quot;</code>, path varies by device) or remove the battery.</li>
+</ul>
+<h2>4. File Disposition Summary</h2>
+<div class="md-table" role="region" aria-label="Table" tabindex="0"><table>
+<thead>
+<tr>
+<th>File</th>
+<th>Fate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>init_db.py</code></td>
+<td>→ models + Alembic (Step 1)</td>
+</tr>
+<tr>
+<td><code>capital_gain.py</code>, <code>trading_day_calender.py</code>, <code>email_tempate.py</code></td>
+<td>Copy to services (Step 2)</td>
+</tr>
+<tr>
+<td><code>nav_queries.py</code>, <code>nav_data_ingestion.py</code>, <code>nav_service.py</code>, <code>data_manager.py</code>, <code>aum_recon.py</code>, <code>cams_mailback_sync.py</code>, <code>bse_auto.py</code>, <code>sync_failure_log.py</code></td>
+<td>Refactor to services (Step 2)</td>
+</tr>
+<tr>
+<td><code>app.py</code></td>
+<td>Feature reference → API + React pages (Steps 3, 5)</td>
+</tr>
+<tr>
+<td><code>runtime_status.py</code></td>
+<td>Replaced by <code>job_runs</code> table (Steps 3, 4)</td>
+</tr>
+<tr>
+<td><code>background_worker.py</code></td>
+<td>Tasks → <code>workers/tasks.py</code> (Step 4)</td>
+</tr>
+<tr>
+<td><code>worker_launcher.py</code>, <code>worker_watchdog.py</code></td>
+<td>Deleted; replaced by APScheduler + job queue (Step 4)</td>
+</tr>
+<tr>
+<td><code>theme_patch.py</code></td>
+<td>Colors → Tailwind tokens, then deleted (Step 5)</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+</body></html>
