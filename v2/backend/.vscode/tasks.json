@@ -1,0 +1,27 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "api",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/uvicorn app.main:app --reload --port 8000",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "worker",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/python -m app.workers.main",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "dev",
+      "dependsOn": ["api", "worker"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}

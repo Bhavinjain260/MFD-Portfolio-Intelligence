@@ -258,13 +258,6 @@ def download_and_save_nav_if_needed(force: bool = False) -> dict:
 
 
 def get_last_business_day(from_date: date_cls | None = None) -> date_cls:
-    """
-    Most recent business day strictly before `from_date`.
-
-    Uses trading_calendar.is_trading_day() when available (honours
-    holidays.json), and falls back to weekend-only rollback if the
-    calendar module or its data file is missing.
-    """
     from_date = from_date or datetime.now().date()
     c = from_date - timedelta(days=1)
 
@@ -274,13 +267,10 @@ def get_last_business_day(from_date: date_cls | None = None) -> date_cls:
         is_trading_day = None
 
     if is_trading_day is not None:
-        # Safety valve: if the calendar is misconfigured (returns False
-        # for every day in a long span), don't spin forever.
         for _ in range(60):
             if is_trading_day(c):
                 return c
             c -= timedelta(days=1)
-        # Fell through — bail to weekend-only rollback on the original date.
         c = from_date - timedelta(days=1)
 
     while c.weekday() >= 5:

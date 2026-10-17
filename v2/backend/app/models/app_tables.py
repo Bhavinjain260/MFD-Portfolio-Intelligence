@@ -1,7 +1,11 @@
 from sqlalchemy import (
-    Column, DateTime, Float, Index, Integer, Text, UniqueConstraint, func,
+    Column, DateTime, Float, Index, Integer, Text, UniqueConstraint, String, Boolean, Date
 )
 from .base import Base
+from sqlalchemy.sql import func
+
+
+
 
 
 class AdminSetting(Base):
@@ -79,6 +83,20 @@ class SubBrokerClient(Base):
         Index("idx_sbc_client", "client_code"),
     )
 
+
+
+class UploadHistory(Base):
+    __tablename__ = "upload_history"
+    
+    id = Column(Integer, primary_key=True)
+    kind = Column(String, nullable=False)
+    filename = Column(String, nullable=False)
+    size_bytes = Column(Integer, nullable=False)
+    rows = Column(Integer, nullable=False, default=0)
+    success = Column(Boolean, nullable=False)
+    message = Column(Text)
+    duration_ms = Column(Integer, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
 
 class SubBrokerPayout(Base):
     __tablename__ = "sub_broker_payouts"

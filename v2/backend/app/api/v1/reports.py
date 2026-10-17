@@ -1,63 +1,49 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
-
+from pydantic import BaseModel
 from app.api.deps import current_user
+from app.core.compat import get_conn
 from app.schemas.reports import EmailReportRequest, EmailReportResponse
 from app.services import mailback as mb
+from app.services import report_generator as rg
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
+class PDFRequest(BaseModel):
+    client_code: str
+    fy: str | None = None
+    valuation_date: str | None = None
 
-# Valuation / capital-gain PDF generation lives in the app-level module.
-# Wire those generators in once Step 3.9's glue module is created.
-# For now, expose a stub endpoint that returns 501 so the frontend can
-# be built against the correct shape.
 @router.post("/valuation")
-def valuation_pdf(client_code: str, fy: str | None = None,
-                  valuation_date: str | None = None,
-                  _=Depends(current_user)):
-    from app.services import report_generator as rg
+def valuation_pdf(req: PDFRequest, _=Depends(current_user)):
     try:
-        pdf = rg.generate_valuation_pdf(
-            client_code=client_code, fy=fy, valuation_date=valuation_date,
-        )
-    except NotImplementedError:
-        raise HTTPException(501, "Valuation PDF generation pending (Step 3.9)")
-    if not pdf:
-        raise HTTPException(500, "PDF generation failed")
-    return Response(
-        content=pdf, media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="Valuation_{client_code}.pdf"'},
-    )
-
+        pdf = rg.generate_valuation_pdf(client_code=req.client_code, fy=req.fy, valuation_date=req.valuation_date)
+    except Exception as e: raise HTTPException(400, str(e))
+    return Response(content=pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="Valuation_{req.client_code}.pdf"'})
 
 @router.post("/capital-gain")
-def cg_pdf(client_code: str, fy: str | None = None,
-           _=Depends(current_user)):
-    from app.services import report_generator as rg
+def cg_pdf(req: PDFRequest, _=Depends(current_user)):
     try:
-        pdf = rg.generate_capital_gain_pdf(client_code=client_code, fy=fy)
-    except NotImplementedError:
-        raise HTTPException(501, "Capital-gain PDF generation pending (Step 3.9)")
-    if not pdf:
-        raise HTTPException(500, "PDF generation failed")
-    return Response(
-        content=pdf, media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="CapitalGain_{client_code}.pdf"'},
-    )
-
+        pdf = rg.generate_capital_gain_pdf(client_code=req.client_code, fy=req.fy)
+    except Exception as e: raise HTTPException(400, str(e))
+    return Response(content=pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="CapitalGain_{req.client_code}.pdf"'})
 
 @router.post("/email", response_model=EmailReportResponse)
 def email_report(req: EmailReportRequest, _=Depends(current_user)):
-    # Placeholder: real implementation generates a PDF and calls
-    # mb.send_report_email(). Kept minimal for now so the endpoint exists.
-    html = f"<p>{req.report_type} report for {req.client_code}</p>"
-    ok, msg = mb.send_report_email(
-        to_email=req.to_email,
-        subject=f"{req.report_type} — {req.client_code}",
-        html_body=html,
-        pdf_bytes=None,
-        pdf_filename="report.pdf",
-        cc_emails=req.cc_emails or None,
-    )
+    with get_conn() as conn:
+        row = conn.execute("SELECT email, primary_holder_first_name || ' ' || primary_holder_last_name FROM bse_client_master WHERE client_code = ?", (req.client_code,)).fetchone()
+    if not row or not row[0]: raise HTTPException(400, "Client email not found in master.")
+    
+    to_email, name = row[0], row[1]
+    
+    safe_cc = []
+    if req.cc_emails:
+        for e in req.cc_emails:
+            if e.endswith("@gmail.com") or e.endswith("@yourdomain.com"):
+                safe_cc.append(e)
+
+    pdf = rg.generate_valuation_pdf(client_code=req.client_code, fy=req.fy_str) if req.report_type == "Valuation" else rg.generate_capital_gain_pdf(client_code=req.client_code, fy=req.fy_str)
+    html = rg.generate_email_body(name, req.report_type, req.period_str)
+    
+    ok, msg = mb.send_report_email(to_email=to_email, subject=f"{req.report_type} - {name}", html_body=html, pdf_bytes=pdf, cc_emails=safe_cc)
     return EmailReportResponse(ok=ok, message=msg)
