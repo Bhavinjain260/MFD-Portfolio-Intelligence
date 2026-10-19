@@ -2651,7 +2651,8 @@ def get_cams_invested_per_scheme(folio_list: list, _v: int) -> pd.DataFrame:
     ]
     scheme_col = None
     with get_conn() as conn:
-        cols = [row[1] for row in conn.execute("PRAGMA table_info(cams_wbr2_transaction)").fetchall()]
+        # Check the view instead of the raw table
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(v_cams_txn_active)").fetchall()]
     for c in scheme_col_candidates:
         if c in cols:
             scheme_col = c
