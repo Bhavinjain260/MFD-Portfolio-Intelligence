@@ -1,0 +1,12 @@
+selenium
+pyzipper
+scipy
+pandas
+plotly
+streamlit
+requests
+openpyxl
+shutil
+imaplib
+sqlite3
+fpdf2

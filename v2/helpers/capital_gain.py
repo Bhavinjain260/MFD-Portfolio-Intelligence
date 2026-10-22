@@ -1,0 +1,209 @@
+"""
+Capital Gains Engine — FIFO cost-basis matching for CAMS transactions.
+Two modes: realized (already-redeemed) and hypothetical (what-if redemption).
+"""
+from __future__ import annotations
+from copy import deepcopy
+from dataclasses import dataclass
+from datetime import date, datetime
+
+import pandas as pd
+
+REDEMPTION_TRXNTYPE = "R1"  # extend if more redemption codes show up
+STCG_EQUITY_RATE = 0.20
+LTCG_EQUITY_RATE = 0.125
+LTCG_EQUITY_EXEMPTION = 125000  # per FY, aggregate across ALL equity LTCG — applied here as if this is the only one
+EQUITY_HOLDING_DAYS = 365  # approx for "12 months"; real rule is calendar month-based
+
+
+def classify_tax_category(category: str = "", scheme_name: str = "") -> str:
+    text = f"{category or ''} {scheme_name or ''}".lower()
+    if "hybrid" in text and "aggressive" not in text and "equity oriented" not in text:
+        return "debt"
+    equity_keywords = [
+        "equity", "large cap", "large & mid", "mid cap", "midcap", "small cap", "smallcap",
+        "flexi cap", "flexicap", "multi cap", "multicap", "focused", "elss", "value fund",
+        "contra fund", "dividend yield", "sectoral", "thematic",
+    ]
+    if any(k in text for k in equity_keywords):
+        return "equity"
+    return "debt"
+
+
+def _parse_date(val) -> date:
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, date):
+        return val
+    # Fast path for ISO "YYYY-MM-DD" — unambiguous, avoids pandas inference
+    # swaps on values like "17/08/2026" (which pandas reads as Aug 17).
+    if isinstance(val, str):
+        s = val.strip()
+        if len(s) >= 10 and s[4] == '-' and s[7] == '-':
+            try:
+                return datetime.strptime(s[:10], "%Y-%m-%d").date()
+            except ValueError:
+                pass
+    return pd.to_datetime(val, dayfirst=True, errors='coerce').date() if pd.notna(
+        pd.to_datetime(val, dayfirst=True, errors='coerce')
+    ) else None
+
+
+@dataclass
+class Lot:
+    buy_date: date
+    rate: float
+    remaining_units: float
+
+
+@dataclass
+class Match:
+    buy_date: date
+    buy_rate: float
+    sell_date: date
+    sell_rate: float
+    units: float
+    holding_days: int
+
+    @property
+    def cost(self) -> float:
+        return self.units * self.buy_rate
+
+    @property
+    def proceeds(self) -> float:
+        return self.units * self.sell_rate
+
+    @property
+    def gain(self) -> float:
+        return self.proceeds - self.cost
+
+    @property
+    def is_ltcg(self) -> bool:
+        """
+        Equity LTCG: holding period must exceed 12 calendar months.
+        e.g. bought 16-Jan-2026 -> LTCG from 17-Jan-2027 onwards.
+        Naive >=365-day check is off by one on leap-year boundaries.
+        """
+        buy = self.buy_date
+        sell = self.sell_date
+        try:
+            anniversary = buy.replace(year=buy.year + 1)
+            # If Feb 29 -> Feb 29 next year doesn't exist, shift to Mar 1
+            # (Python's date.replace handles this by raising ValueError)
+        except ValueError:
+            anniversary = buy.replace(year=buy.year + 1, month=3, day=1)
+        return sell > anniversary
+
+
+def _consume_fifo(lots: list[Lot], sell_units: float, sell_date: date, sell_rate: float) -> list[Match]:
+    """Consumes sell_units from lots (mutated, oldest first). Returns matches."""
+    matches: list[Match] = []
+    remaining = sell_units
+    for lot in lots:
+        if remaining <= 1e-9:
+            break
+        if lot.remaining_units <= 1e-9:
+            continue
+        take = min(lot.remaining_units, remaining)
+        matches.append(Match(
+            buy_date=lot.buy_date, buy_rate=lot.rate,
+            sell_date=sell_date, sell_rate=sell_rate,
+            units=take, holding_days=(sell_date - lot.buy_date).days,
+        ))
+        lot.remaining_units -= take
+        remaining -= take
+    if remaining > 1e-6:
+        # Sold more than known purchases cover — missing history / data gap. Flagged with 0-day holding.
+        matches.append(Match(
+            buy_date=sell_date, buy_rate=0.0,
+            sell_date=sell_date, sell_rate=sell_rate,
+            units=remaining, holding_days=0,
+        ))
+    return matches
+
+
+def replay_folio_scheme(txns: pd.DataFrame) -> tuple[list[Lot], list[Match]]:
+    """
+    txns columns required: traddate, trxntype, trxn_nature, units, purprice, amount.
+    Purchases build lots; anything flagged as redemption consumes lots FIFO.
+    Returns (remaining_lots, realized_matches).
+    """
+    t = txns.copy()
+    t["traddate"] = t["traddate"].apply(_parse_date)
+    t = t.sort_values("traddate")
+
+    lots: list[Lot] = []
+    matches: list[Match] = []
+
+    for _, row in t.iterrows():
+        units = float(row.get("units") or 0)
+        if units <= 0:
+            continue
+        is_redemption = (
+            str(row.get("trxntype", "")).strip().upper() == REDEMPTION_TRXNTYPE
+            or "redemption" in str(row.get("trxn_nature", "")).lower()
+        )
+        if is_redemption:
+            rate = float(row.get("purprice") or (row.get("amount", 0) / units if units else 0))
+            matches.extend(_consume_fifo(lots, units, row["traddate"], rate))
+        else:
+            rate = float(row.get("purprice") or 0)
+            lots.append(Lot(buy_date=row["traddate"], rate=rate, remaining_units=units))
+
+    return lots, matches
+
+
+def hypothetical_redemption(txns: pd.DataFrame, redeem_units: float, current_nav: float,
+                             as_of: date | None = None) -> list[Match]:
+    """FIFO-consumes redeem_units from units currently outstanding, at current_nav, dated as_of (default today)."""
+    lots, _ = replay_folio_scheme(txns)
+    lots = deepcopy(lots)
+    as_of = as_of or date.today()
+    return _consume_fifo(lots, redeem_units, as_of, current_nav)
+
+
+def tax_for_matches(matches: list[Match], tax_category: str, slab_rate: float = 0.30) -> dict:
+    """
+    tax_category: 'equity' or 'debt'. slab_rate used only for 'debt'.
+    LTCG_EQUITY_EXEMPTION applied as if this is your only equity LTCG for the FY —
+    subtract other equity LTCG first if you have any, before trusting this number.
+    """
+    stcg_gain = sum(m.gain for m in matches if not m.is_ltcg)
+    ltcg_gain = sum(m.gain for m in matches if m.is_ltcg)
+    total_gain = stcg_gain + ltcg_gain
+
+    if tax_category == "equity":
+        exemption_used = min(max(ltcg_gain, 0), LTCG_EQUITY_EXEMPTION)
+        ltcg_taxable = max(ltcg_gain - LTCG_EQUITY_EXEMPTION, 0)
+        stcg_tax = max(stcg_gain, 0) * STCG_EQUITY_RATE
+        ltcg_tax = ltcg_taxable * LTCG_EQUITY_RATE
+        total_tax = stcg_tax + ltcg_tax
+    else:  # debt / specified mutual fund — slab rate, no LTCG benefit, no holding-period distinction
+        exemption_used = 0.0
+        ltcg_taxable = max(ltcg_gain, 0)
+        total_tax = max(total_gain, 0) * slab_rate
+        stcg_tax = max(stcg_gain, 0) * slab_rate
+        ltcg_tax = ltcg_taxable * slab_rate
+
+    return {
+        "stcg_gain": stcg_gain, "ltcg_gain": ltcg_gain, "total_gain": total_gain,
+        "stcg_tax": stcg_tax, "ltcg_tax": ltcg_tax, "total_tax": total_tax,
+        "exemption_used": exemption_used, "ltcg_taxable": ltcg_taxable,
+        "exemption_limit": LTCG_EQUITY_EXEMPTION,
+        "tax_category": tax_category,
+    }
+
+
+def matches_to_df(matches: list[Match]) -> pd.DataFrame:
+    if not matches:
+        return pd.DataFrame(columns=[
+            "Buy Date", "Buy Rate", "Sell Date", "Sell Rate", "Units",
+            "Holding Days", "Cost", "Proceeds", "Gain", "STCG/LTCG"
+        ])
+    return pd.DataFrame([{
+        "Buy Date": m.buy_date, "Buy Rate": round(m.buy_rate, 4),
+        "Sell Date": m.sell_date, "Sell Rate": round(m.sell_rate, 4),
+        "Units": round(m.units, 4), "Holding Days": m.holding_days,
+        "Cost": round(m.cost, 2), "Proceeds": round(m.proceeds, 2), "Gain": round(m.gain, 2),
+        "STCG/LTCG": "LTCG" if m.is_ltcg else "STCG",
+    } for m in matches])
