@@ -5666,10 +5666,10 @@ Axis Mutual Fund
 149846;INF846K012G7;INF846K013G5;Axis Multi Factor Passive FoF;Direct Plan;IDCW Option;14.7750;19-Oct-2026
 149844;INF846K014G3;-;Axis Multi Factor Passive FoF;Regular Plan;Growth Option;14.5528;19-Oct-2026
 149845;INF846K015G0;INF846K016G8;Axis Multi Factor Passive FoF;Regular Plan;IDCW Option;14.5536;19-Oct-2026
-153960;INF846KA1366;-;Axis Multi-Asset Omni FoF;Direct Plan;Growth Option;10.6086;16-Oct-2026
-153961;INF846KA1374;INF846KA1382;Axis Multi-Asset Omni FoF;Direct Plan;IDCW Option;10.6086;16-Oct-2026
-153963;INF846KA1333;-;Axis Multi-Asset Omni FoF;Regular Plan;Growth Option;10.5045;16-Oct-2026
-153962;INF846KA1341;INF846KA1358;Axis Multi-Asset Omni FoF;Regular Plan;IDCW Option;10.5045;16-Oct-2026
+153960;INF846KA1366;-;Axis Multi-Asset Omni FoF;Direct Plan;Growth Option;10.5335;19-Oct-2026
+153961;INF846KA1374;INF846KA1382;Axis Multi-Asset Omni FoF;Direct Plan;IDCW Option;10.5335;19-Oct-2026
+153963;INF846KA1333;-;Axis Multi-Asset Omni FoF;Regular Plan;Growth Option;10.4291;19-Oct-2026
+153962;INF846KA1341;INF846KA1358;Axis Multi-Asset Omni FoF;Regular Plan;IDCW Option;10.4290;19-Oct-2026
 150618;INF846K019J6;INF846K010K3;Axis Silver Fund of Fund;Regular Plan;IDCW Option;34.7486;19-Oct-2026
 150617;INF846K018J8;-;Axis Silver Fund of Fund;Regular Plan;Growth Option;34.7499;19-Oct-2026
 150616;INF846K016J2;INF846K017J0;Axis Silver Fund of Fund;Direct Plan;IDCW Option;35.4881;19-Oct-2026
@@ -9917,7 +9917,6 @@ SBI Mutual Fund
 Sundaram Mutual Fund
  
 149728;INF903JA1KM7;-;Sundaram Short Term Fund (Formerly Known as Sundaram Short Duration Fund);Direct Plan;IDCW (Income Distribution CUM Capital Withdrawal);15.1085;27-Jun-2025
-149588;INF173K01GQ8;INF173K01GR6;Sundaram Short Term Fund (Formerly Known as Sundaram Short Duration Fund);Direct Plan;IDCW (Income Distribution CUM Capital Withdrawal);13.1997;19-Oct-2026
 149731;INF903JA1KE4;-;Sundaram Short Term Fund (Formerly Known as Sundaram Short Duration Fund);Regular Plan;IDCW (Income Distribution CUM Capital Withdrawal);14.7535;27-Jun-2025
 149733;INF903JA1KN5;-;Sundaram Short Term Fund (Formerly Known as Sundaram Short Duration Fund);Direct Plan;IDCW (Income Distribution CUM Capital Withdrawal);14.8129;27-Jun-2025
 149727;INF903JA1KP0;INF903JA1KL9;Sundaram Short Term Fund (Formerly Known as Sundaram Short Duration Fund);Direct Plan;IDCW (Income Distribution CUM Capital Withdrawal);12.9214;28-Jun-2024
@@ -9929,6 +9928,7 @@ Sundaram Mutual Fund
 149736;-;INF903JA1KI5;Sundaram Short Term Fund (Formerly Known as Sundaram Short Duration Fund);Regular Plan;Bonus;16.0336;27-Jun-2025
 149732;INF903JA1KG9;INF903JA1KK1;Sundaram Short Term Fund (Formerly Known as Sundaram Short Duration Fund);Regular Plan;IDCW (Income Distribution CUM Capital Withdrawal);12.8624;28-Jun-2024
 149587;INF173K01GP0;-;Sundaram Short Term Fund (Formerly Known as Sundaram Short Duration Fund);Direct Plan;GROWTH;51.3170;19-Oct-2026
+149588;INF173K01GQ8;INF173K01GR6;Sundaram Short Term Fund (Formerly Known as Sundaram Short Duration Fund);Direct Plan;IDCW (Income Distribution CUM Capital Withdrawal);13.1997;19-Oct-2026
 149585;INF173K01BA3;-;Sundaram Short Term Fund (Formerly Known as Sundaram Short Duration Fund);Regular Plan;GROWTH;47.1007;19-Oct-2026
 149586;INF173K01BB1;INF173K01BC9;Sundaram Short Term Fund (Formerly Known as Sundaram Short Duration Fund);Regular Plan;IDCW (Income Distribution CUM Capital Withdrawal);13.0418;19-Oct-2026
  
@@ -11526,8 +11526,8 @@ Franklin Templeton Mutual Fund
  
 HDFC Mutual Fund
  
-149180;INF179KC1BO4;-;HDFC Developed World Overseas Equity Passive FOF;;;21.901;16-Oct-2026
-149181;INF179KC1BP1;-;HDFC Developed World Overseas Equity Passive FOF;;;21.399;16-Oct-2026
+149180;INF179KC1BO4;-;HDFC Developed World Overseas Equity Passive FOF;;;21.802;19-Oct-2026
+149181;INF179KC1BP1;-;HDFC Developed World Overseas Equity Passive FOF;;;21.301;19-Oct-2026
  
 ICICI Prudential Mutual Fund
  
