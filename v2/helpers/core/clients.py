@@ -266,3 +266,15 @@ def folio_to_client_map() -> dict[str, str]:
                     mapping.setdefault(row[0], code)
 
     return mapping
+
+def normalize_folio(folio: str) -> str:
+    if not folio:
+        return ""
+    try:
+        if pd.isna(folio):
+            return ""
+    except Exception:
+        pass
+    return str(folio).strip().split("/")[0].strip().lower()
+
+

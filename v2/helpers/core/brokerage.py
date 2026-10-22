@@ -368,43 +368,53 @@ def get_client_to_sub_broker_map() -> dict:
 
 
 def get_folio_to_client_code_map() -> dict:
-    """Map folio_id → client_code via PAN matching (adults + minor/guardian)."""
+    """Map folio_id → client_code via PAN + name fallback (minors / KFin)."""
+    mapping: dict = {}
     with get_conn() as conn:
-        cams = pd.read_sql("""
-            SELECT foliochk AS folio, UPPER(TRIM(pan_no)) AS pan
-            FROM cams_wbr9_folio
-            WHERE pan_no IS NOT NULL AND TRIM(pan_no) != ''
-            UNION ALL
-            SELECT foliochk AS folio, UPPER(TRIM(guard_pan)) AS pan
-            FROM cams_wbr9_folio
-            WHERE guard_pan IS NOT NULL AND TRIM(guard_pan) != ''
-        """, conn)
-        kfin = pd.read_sql("""
-            SELECT folio AS folio, UPPER(TRIM(pan_number)) AS pan
-            FROM kfin_mfsd211_folio
-            WHERE pan_number IS NOT NULL AND TRIM(pan_number) != ''
-        """, conn)
-        clients = pd.read_sql("""
+        clients = conn.execute("""
             SELECT client_code,
-                   UPPER(TRIM(primary_holder_pan)) AS pan
+                   TRIM(COALESCE(primary_holder_first_name,'') || ' ' ||
+                        COALESCE(primary_holder_last_name,'')) AS name,
+                   primary_holder_pan, guardian_pan
             FROM bse_client_master
-            WHERE primary_holder_pan IS NOT NULL AND TRIM(primary_holder_pan) != ''
-            UNION ALL
-            SELECT client_code,
-                   UPPER(TRIM(guardian_pan)) AS pan
-            FROM bse_client_master
-            WHERE guardian_pan IS NOT NULL AND TRIM(guardian_pan) != ''
-        """, conn)
+        """).fetchall()
+        for c in clients:
+            code = c["client_code"] if isinstance(c, dict) or hasattr(c, "keys") else c[0]
+            # Row may be sqlite3.Row
+            try:
+                code = c["client_code"]
+                name = (c["name"] or "").strip().upper()
+                pan = (c["primary_holder_pan"] or "").strip().upper()
+                gpan = (c["guardian_pan"] or "").strip().upper()
+            except Exception:
+                code, name, pan, gpan = c[0], (c[1] or "").strip().upper(), (c[2] or "").strip().upper(), (c[3] or "").strip().upper()
+            is_minor = pan == ""
+            match_pan = gpan if is_minor else pan
+            if match_pan:
+                for row in conn.execute(
+                    "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no)) = ?",
+                    (match_pan,),
+                ).fetchall():
+                    mapping.setdefault(row[0], code)
+                for row in conn.execute(
+                    "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number)) = ?",
+                    (match_pan,),
+                ).fetchall():
+                    mapping.setdefault(row[0], code)
+            if name:
+                for row in conn.execute(
+                    "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                    (name,),
+                ).fetchall():
+                    mapping.setdefault(row[0], code)
+                for row in conn.execute(
+                    "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                    (name,),
+                ).fetchall():
+                    mapping.setdefault(row[0], code)
+    return mapping
 
-    folios  = pd.concat([cams, kfin], ignore_index=True).drop_duplicates("folio")
-    clients = clients.drop_duplicates("pan", keep="first")
-    merged  = folios.merge(clients, on="pan", how="left")
-    return dict(zip(merged["folio"].astype(str), merged["client_code"]))
 
-
-# ══════════════════════════════════════════════════════════════
-# SUB-BROKER PAYOUT RECORDS
-# ══════════════════════════════════════════════════════════════
 def list_payouts(sub_broker_id: int | None = None) -> pd.DataFrame:
     q = """
         SELECT p.id, p.sub_broker_id, sb.name AS sub_broker_name,

@@ -1,0 +1,9501 @@
+import logging
+import os
+import re
+import time
+import requests
+import threading
+import warnings
+from pathlib import Path          # ← add this
+from datetime import datetime, timedelta, date as date_cls
+from datetime import timedelta, datetime as dt
+from datetime import time as time_cls
+from datetime import timedelta
+from typing import Optional
+from datetime import datetime
+from bse_auto import should_auto_download, start_background_download
+
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+import capital_gain as cg
+
+import capital_gain as cg_row
+import data_manager
+import nav_data_ingestion
+# import nav_scheduler
+import data_manager as dm
+from data_manager import current as data_version
+import xirr
+from init_db import init_db, get_conn
+from theme_patch import THEME_WATCHER_JS, render_theme
+import cams_mailback_sync
+import cams_mailback_sync as mail_sync
+import email_tempate
+import sync_failure_log as sflog
+import worker_launcher
+
+from xirr import compute_xirr_debug
+
+# ══════════════════════════════════════════════════════════════
+# NAV SERVICE — single source of truth for all NAV logic.
+# Parsing, snapshot management, AMFI fetches, and the in-memory
+# index all live there now. app.py only consumes them.
+# ══════════════════════════════════════════════════════════════
+import nav_service
+from nav_service import (
+    # Constants
+    AMFI_TEXT_URL,
+    NAV_HISTORY_URL,
+    NAV_TEXT_DIR,
+    # Snapshot file management
+    _ensure_text_dir,
+    _snapshot_path,
+    _latest_snapshot_path,
+    get_snapshot_status,
+    # Parsing
+    _extract_nav_date_from_text,
+    _parse_nav_text,
+    _get_file_nav_date,
+    _have_snapshot_for_date,
+    _looks_like_amfi_format,
+    _normalize_history_text_to_live_format,
+    _fmt_amfi_date,
+    # Downloads
+    download_and_save_nav,
+    download_and_save_nav_if_needed,
+    download_business_day_nav,
+    _save_nav_snapshot,
+    # Previous-day sync
+    get_last_business_day,
+    sync_previous_business_day_nav,
+    sync_previous_business_day_nav_if_needed,
+    _previous_snapshot_path,
+    load_previous_nav_map,
+    get_previous_nav_date,
+    # Historical lookup
+    get_or_fetch_nav_for_date,   # ← moved into nav_service; see Step 4
+    # DB fallback + diagnostics
+    get_nav_for_date_from_db,
+    diagnose_previous_day_coverage,
+    resolve_prev_nav_for_folios,
+    # In-memory index
+    AMFINavIndex,
+    _amfi,
+    fetch_nav_by_isin,
+    fetch_amc_by_isin,
+    load_nav_dataframe,
+)
+
+
+# ══════════════════════════════════════════════════════════════
+# Streamlit-cached wrappers around nav_service's pure functions.
+# The @st.cache_data decorator lives here; the real logic lives in
+# nav_service. This keeps nav_service importable from plain-Python
+# contexts (background_worker.py) without requiring Streamlit.
+# ══════════════════════════════════════════════════════════════
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def load_previous_nav_map_cached() -> dict:
+    return nav_service.load_previous_nav_map()
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def resolve_prev_nav_for_folios_cached(
+    current_date_iso: str,
+    isins_tuple: tuple,
+    max_lookback: int = 10,
+    min_overlap_pct: float = 0.5,
+):
+    """Cache wrapper — args must be hashable, so isins come in as a tuple."""
+    return nav_service.resolve_prev_nav_for_folios(
+        current_date_iso,          # ← pass the STRING through, don't convert
+        set(isins_tuple),
+        max_lookback=max_lookback,
+        min_overlap_pct=min_overlap_pct,
+    )
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_or_fetch_nav_for_date_cached(target_iso: str) -> dict:
+    """Cache wrapper around nav_service.get_or_fetch_nav_for_date.
+    Cached 24h — a given historical date's NAV never changes once settled."""
+    return nav_service.get_or_fetch_nav_for_date(target_iso)
+
+
+log = logging.getLogger(__name__)
+
+warnings.filterwarnings("ignore")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+
+import aum_recon
+
+# ==================== CONSTANTS ====================
+PAGE_SIZE = 20
+
+_WHITESPACE_RE = re.compile(r"\s+")
+
+with get_conn() as conn:
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS admin_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+
+
+# Delay between successive lookback requests so we don't hammer AMFI.
+LOOKBACK_DELAY_SECONDS = 1.5
+
+
+
+# ==================== DB INIT (cached per session) ====================
+def ensure_db() -> None:
+    """Run init_db() once per session. Schema lives in init.py — single source of truth."""
+    if not st.session_state.get("db_initialized"):
+        init_db()
+        st.session_state["db_initialized"] = True
+
+
+# ==================== PURE HELPERS ====================
+def clean_str(val) -> str:
+    if val is None:
+        return ""
+    try:
+        if pd.isna(val):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    s = str(val).strip()
+    return "" if s.lower() in {"nan", "none", "null", "na", ""} else s
+
+
+def format_currency(val, decimals: int = 2) -> str:
+    try:
+        return f"Rs {float(val):,.{decimals}f}"
+    except (TypeError, ValueError):
+        return "Rs -"
+
+
+def format_aum(val) -> str:
+    try:
+        amount = float(val)
+        if amount >= 1_00_00_000:
+            return f"Rs {amount / 1_00_00_000:.2f} Cr"
+        elif amount >= 1_00_000:
+            return f"Rs {amount / 1_00_000:.2f} L"
+        else:
+            return f"Rs {amount:,.0f}"
+    except (TypeError, ValueError):
+        return "Rs -"
+
+
+def format_brokerage(val) -> str:
+    try:
+        amount = float(val)
+        formatted = f"{amount:.8f}".rstrip('0').rstrip('.')
+        return f"Rs {formatted}"
+    except (TypeError, ValueError):
+        return "Rs -"
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _bse_scheme_lookup(_v: int) -> pd.DataFrame:
+    """Shared cached dedup of bse_scheme_master. product_code → scheme_name, isin.
+    Consumed by any function that maps a broker/AMC product code to a
+    scheme name or ISIN. One query, one cache entry, reused everywhere."""
+    with get_conn() as conn:
+        return pd.read_sql("""
+            SELECT UPPER(TRIM(Channel_Partner_Code)) AS product_code,
+                   MAX(Scheme_Name) AS scheme_name,
+                   MAX(ISIN)        AS isin
+            FROM bse_scheme_master
+            WHERE Channel_Partner_Code IS NOT NULL
+              AND TRIM(Channel_Partner_Code) != ''
+            GROUP BY UPPER(TRIM(Channel_Partner_Code))
+        """, conn)
+
+
+@st.cache_data(show_spinner=False)
+def get_client_cams_schemes(folio_ids: list[str], _v: int) -> pd.DataFrame:
+    if not folio_ids:
+        return pd.DataFrame(columns=["folio_no", "prodcode", "scheme"])
+    placeholders = ",".join(["?"] * len(folio_ids))
+    with get_conn() as conn:
+        txns = pd.read_sql(f"""
+            SELECT DISTINCT folio_no, UPPER(TRIM(prodcode)) AS prodcode
+            FROM v_cams_txn_active
+            WHERE folio_no IN ({placeholders})
+        """, conn, params=folio_ids)
+
+    bse = _bse_scheme_lookup(_v)
+    if bse.empty:
+        txns["scheme"] = txns["prodcode"]
+        return txns[["folio_no", "prodcode", "scheme"]]
+
+    merged = txns.merge(
+        bse.rename(columns={"product_code": "prodcode"}),
+        on="prodcode",
+        how="left",
+    )
+    merged["scheme"] = merged["scheme_name"].fillna(merged["prodcode"])
+    return merged[["folio_no", "prodcode", "scheme"]]
+
+
+def get_cams_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
+    """
+    Returns traddate in ISO YYYY-MM-DD format (from txn_date_iso when available,
+    falling back to raw traddate). Output columns unchanged: traddate, trxntype,
+    trxn_nature, units, purprice, amount — chronologically ordered.
+    """
+    with get_conn() as conn:
+        df = pd.read_sql("""
+            SELECT COALESCE(txn_date_iso, traddate) AS traddate,
+                   trxntype, trxn_nature, units, purprice, amount
+            FROM v_cams_txn_active
+            WHERE folio_no = ? AND UPPER(TRIM(prodcode)) = ?
+        """, conn, params=(folio_no, product_code.strip().upper()))
+
+    if df.empty:
+        return df
+
+    df["_sort_date"] = pd.to_datetime(df["traddate"], errors="coerce", format="mixed")
+    df = df.sort_values("_sort_date", kind="stable").drop(columns=["_sort_date"]).reset_index(drop=True)
+    return df
+
+
+def get_isin_for_cams_product(prodcode: str) -> Optional[str]:
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT ISIN FROM bse_scheme_master
+            WHERE UPPER(TRIM(Channel_Partner_Code)) = ?
+            LIMIT 1
+        """, (prodcode.strip().upper(),)).fetchone()
+        return row[0] if row else None
+
+@st.cache_data(show_spinner=False)
+def get_client_kfin_schemes(folio_ids: list[str], _v: int) -> pd.DataFrame:
+    if not folio_ids:
+        return pd.DataFrame(columns=["folio_no", "prodcode", "scheme"])
+    placeholders = ",".join(["?"] * len(folio_ids))
+    with get_conn() as conn:
+        txns = pd.read_sql(f"""
+            SELECT DISTINCT td_acno AS folio_no, UPPER(TRIM(fmcode)) AS prodcode
+            FROM v_kfin_txn_active
+            WHERE td_acno IN ({placeholders})
+        """, conn, params=folio_ids)
+
+    bse = _bse_scheme_lookup(_v)
+    if bse.empty:
+        txns["scheme"] = txns["prodcode"]
+        return txns[["folio_no", "prodcode", "scheme"]]
+
+    merged = txns.merge(
+        bse.rename(columns={"product_code": "prodcode"}),
+        on="prodcode",
+        how="left",
+    )
+    merged["scheme"] = merged["scheme_name"].fillna(merged["prodcode"])
+    return merged[["folio_no", "prodcode", "scheme"]]
+
+
+def search_clients(query: str, limit: int = 20) -> pd.DataFrame:
+    """
+    Search bse_client_master by name, code, PAN, guardian PAN, email, mobile.
+    Includes minors who have empty primary_holder_pan but valid guardian_pan.
+    """
+    if not query or not query.strip():
+        return pd.DataFrame()
+    q = f"%{query.strip().upper()}%"
+    q_exact = query.strip().upper()
+
+    with get_conn() as conn:
+        df = pd.read_sql("""
+            SELECT
+                client_code,
+                COALESCE(
+                    NULLIF(TRIM(primary_holder_first_name || ' ' ||
+                              COALESCE(primary_holder_middle_name || ' ', '') ||
+                              primary_holder_last_name), ''),
+                    client_code
+                ) AS display_name,
+                COALESCE(
+                    NULLIF(TRIM(primary_holder_pan), ''),
+                    NULLIF(TRIM(guardian_pan), ''),
+                    '—'
+                ) AS display_pan,
+                tax_status,
+                CASE
+                    WHEN TRIM(COALESCE(primary_holder_pan,'')) = ''
+                    THEN 'Minor'
+                    ELSE 'Adult'
+                END AS client_category,
+                email,
+                indian_mobile_no AS mobile,
+                guardian_first_name || ' ' || guardian_last_name AS guardian_name
+            FROM bse_client_master
+            WHERE
+                UPPER(TRIM(client_code))                             LIKE ?
+                OR UPPER(TRIM(primary_holder_first_name))             LIKE ?
+                OR UPPER(TRIM(primary_holder_last_name))              LIKE ?
+                OR UPPER(TRIM(primary_holder_first_name || ' ' ||
+                              primary_holder_last_name))              LIKE ?
+                OR UPPER(TRIM(primary_holder_pan))                    LIKE ?
+                OR UPPER(TRIM(guardian_pan))                          LIKE ?
+                OR UPPER(TRIM(email))                                 LIKE ?
+                OR UPPER(TRIM(indian_mobile_no))                      LIKE ?
+            ORDER BY
+                CASE WHEN UPPER(TRIM(client_code)) = ? THEN 0
+                     WHEN UPPER(TRIM(primary_holder_first_name)) = ? THEN 1
+                     ELSE 2
+                END,
+                display_name
+            LIMIT ?
+        """, conn, params=(
+            q, q, q, q, q, q, q, q,
+            q_exact, q_exact,
+            limit
+        ))
+    return df
+
+
+
+def ensure_family_tables() -> None:
+    with get_conn() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS client_family (
+                family_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                family_name TEXT NOT NULL,
+                head_client_code TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS client_family_member (
+                family_id INTEGER NOT NULL,
+                client_code TEXT NOT NULL,
+                is_head INTEGER DEFAULT 0,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (family_id, client_code)
+            )
+        """)
+
+
+def ensure_monthly_brokerage_schema() -> None:
+    """Guarantee monthly_brokerage has the UNIQUE(amc, month, year) index
+    that the ON CONFLICT upsert in the Brokerage Report form depends on.
+    Without it, SQLite raises 'ON CONFLICT clause does not match any PRIMARY
+    KEY or UNIQUE constraint' and every manual insert silently fails."""
+    with get_conn() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS monthly_brokerage (
+                amc        TEXT NOT NULL,
+                month      TEXT NOT NULL,
+                year       INTEGER NOT NULL,
+                amount     REAL NOT NULL DEFAULT 0,
+                notes      TEXT,
+                timestamp  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS ux_monthly_brokerage_amy
+            ON monthly_brokerage(amc, month, year)
+        """)
+
+
+def get_family_for_client(client_code: str) -> Optional[dict]:
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT f.family_id, f.family_name, f.head_client_code
+            FROM client_family_member m JOIN client_family f ON m.family_id = f.family_id
+            WHERE m.client_code = ?
+        """, (client_code,)).fetchone()
+    if not row:
+        return None
+    return {"family_id": row[0], "family_name": row[1], "head_client_code": row[2]}
+
+
+def get_family_members(family_id: int) -> pd.DataFrame:
+    with get_conn() as conn:
+        return pd.read_sql("""
+            SELECT m.client_code, m.is_head,
+                   COALESCE(
+                       NULLIF(TRIM(
+                           COALESCE(b.primary_holder_first_name,'') || ' ' ||
+                           COALESCE(b.primary_holder_last_name,'')
+                       ), ''),
+                       m.client_code
+                   ) AS name
+            FROM client_family_member m
+            LEFT JOIN bse_client_master b ON m.client_code = b.client_code
+            WHERE m.family_id = ?
+        """, conn, params=(family_id,))
+
+
+def create_family(head_client_code: str, family_name: str) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO client_family (family_name, head_client_code) VALUES (?, ?)",
+            (family_name, head_client_code)
+        )
+        family_id = cur.lastrowid
+        conn.execute(
+            "INSERT INTO client_family_member (family_id, client_code, is_head) VALUES (?, ?, 1)",
+            (family_id, head_client_code)
+        )
+    return family_id
+
+
+def add_family_member(family_id: int, client_code: str) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO client_family_member (family_id, client_code, is_head) VALUES (?, ?, 0)",
+            (family_id, client_code)
+        )
+
+
+def remove_family_member(family_id: int, client_code: str) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM client_family_member WHERE family_id = ? AND client_code = ?",
+            (family_id, client_code)
+        )
+
+
+def delete_family(family_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM client_family_member WHERE family_id = ?", (family_id,))
+        conn.execute("DELETE FROM client_family WHERE family_id = ?", (family_id,))
+
+def get_family_folios_by_rta(family_id: int) -> tuple:
+    """Returns (cams_folio_list, kfin_folio_list) across all family members —
+    same matching logic as get_family_all_folios, but split by RTA since the
+    Valuation Report needs folio→RTA mapping, not just a flat folio set."""
+    members = get_family_members(family_id)
+    if members.empty:
+        return [], []
+
+    cams_folios = set()
+    kfin_folios = set()
+
+    with get_conn() as conn:
+        for _, member in members.iterrows():
+            client_code = member["client_code"]
+            identity = get_client_identity(client_code)
+            if not identity:
+                continue
+
+            name_clean = identity["name"].strip().upper() if identity["name"] else ""
+            match_pan = identity["match_pan"]
+
+            if identity["is_minor"]:
+                if name_clean:
+                    for row in conn.execute(
+                        "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        cams_folios.add(row[0])
+                    for row in conn.execute(
+                        "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        kfin_folios.add(row[0])
+            else:
+                if match_pan and match_pan.strip():
+                    pan_up = match_pan.strip().upper()
+                    for row in conn.execute(
+                        "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no)) = ?", (pan_up,)
+                    ).fetchall():
+                        cams_folios.add(row[0])
+                    for row in conn.execute(
+                        "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number)) = ?", (pan_up,)
+                    ).fetchall():
+                        kfin_folios.add(row[0])
+                if name_clean:
+                    for row in conn.execute(
+                        "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        cams_folios.add(row[0])
+                    for row in conn.execute(
+                        "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        kfin_folios.add(row[0])
+
+    return sorted(cams_folios), sorted(kfin_folios)
+
+def get_investor_names_for_folios(cams_folios: list, kfin_folios: list) -> dict:
+    """folio_id -> investor name, straight from the folio master tables."""
+    name_map = {}
+    with get_conn() as conn:
+        if cams_folios:
+            ph = ",".join(["?"] * len(cams_folios))
+            rows = conn.execute(
+                f"SELECT foliochk, inv_name FROM cams_wbr9_folio WHERE foliochk IN ({ph})",
+                cams_folios
+            ).fetchall()
+            for folio_id, name in rows:
+                name_map[folio_id] = (name or "").strip()
+        if kfin_folios:
+            ph = ",".join(["?"] * len(kfin_folios))
+            rows = conn.execute(
+                f"SELECT folio, investor_name FROM kfin_mfsd211_folio WHERE folio IN ({ph})",
+                kfin_folios
+            ).fetchall()
+            for folio_id, name in rows:
+                name_map.setdefault(folio_id, (name or "").strip())
+    return name_map
+
+
+def get_family_all_folios(family_id: int) -> set:
+    """
+    Gather ALL folio IDs for ALL family members.
+      • Adults  – matched by PAN in folio tables.
+      • Minors  – matched by investor_name (because their folio PAN is empty).
+    """
+    members = get_family_members(family_id)
+    if members.empty:
+        return set()
+
+    all_folios: set = set()
+
+    with get_conn() as conn:
+        for _, member in members.iterrows():
+            client_code = member["client_code"]
+            identity = get_client_identity(client_code)
+            if not identity:
+                continue
+
+            name_clean = identity["name"].strip().upper() if identity["name"] else ""
+            match_pan = identity["match_pan"]
+
+            if identity["is_minor"]:
+                if name_clean:
+                    for row in conn.execute(
+                        "SELECT foliochk FROM cams_wbr9_folio "
+                        "WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        all_folios.add(row[0])
+                    for row in conn.execute(
+                        "SELECT folio FROM kfin_mfsd211_folio "
+                        "WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        all_folios.add(row[0])
+            else:
+                if match_pan and match_pan.strip():
+                    pan_up = match_pan.strip().upper()
+                    for row in conn.execute(
+                        "SELECT foliochk FROM cams_wbr9_folio "
+                        "WHERE TRIM(UPPER(pan_no)) = ?", (pan_up,)
+                    ).fetchall():
+                        all_folios.add(row[0])
+                    for row in conn.execute(
+                        "SELECT folio FROM kfin_mfsd211_folio "
+                        "WHERE TRIM(UPPER(pan_number)) = ?", (pan_up,)
+                    ).fetchall():
+                        all_folios.add(row[0])
+                if name_clean:
+                    for row in conn.execute(
+                        "SELECT foliochk FROM cams_wbr9_folio "
+                        "WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        all_folios.add(row[0])
+                    for row in conn.execute(
+                        "SELECT folio FROM kfin_mfsd211_folio "
+                        "WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                        (name_clean,)
+                    ).fetchall():
+                        all_folios.add(row[0])
+
+    return all_folios
+
+
+def get_client_identity(client_code: str) -> Optional[dict]:
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT primary_holder_first_name || ' ' || primary_holder_last_name AS name,
+                   primary_holder_pan AS pan, guardian_pan AS guardian_pan
+            FROM bse_client_master WHERE client_code = ?
+        """, (client_code,)).fetchone()
+    if not row:
+        return None
+    name, pan, guardian_pan = row
+    is_minor = pan is None or str(pan).strip() == ""
+    match_pan = guardian_pan if is_minor else pan
+    return {"name": name, "pan": pan, "is_minor": is_minor, "match_pan": match_pan}
+
+@st.cache_data(show_spinner=False)
+def compute_client_holdings(
+    client_code: str,
+    nav_version: str,
+    _folio_nav_df: pd.DataFrame,
+    _v: int,
+) -> pd.DataFrame:
+    """
+    Same enrichment logic as the Clients tab, factored out so Family Portfolio
+    can reuse it per member.
+
+    nav_version: cheap string that changes when NAV updates (max nav_date).
+    Forces cache invalidation when NAV changes but data_version() doesn't.
+    """
+    folio_nav_df = _folio_nav_df
+
+    identity = get_client_identity(client_code)
+    if not identity:
+        return pd.DataFrame()
+    name, match_pan, is_minor = identity["name"], identity["match_pan"], identity["is_minor"]
+    name_clean = name.strip().upper() if name else ""
+
+    from init_db import get_shared_read_conn
+    _rconn = get_shared_read_conn()
+    if is_minor:
+        cams_f = pd.read_sql(
+            "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+            _rconn, params=(name_clean,))
+        kfin_f = pd.read_sql(
+            "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+            _rconn, params=(name_clean,))
+    else:
+        cams_f = pd.read_sql(
+            "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+            _rconn, params=(match_pan, name))
+        kfin_f = pd.read_sql(
+            "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
+            _rconn, params=(match_pan, name))
+
+    all_folios = set(cams_f['foliochk'].tolist() + kfin_f['folio'].tolist())
+    if not all_folios:
+        return pd.DataFrame()
+
+    holdings = folio_nav_df[folio_nav_df['folio_id'].isin(all_folios)].copy()
+    if holdings.empty:
+        return holdings
+
+    drop_leftover = [c for c in holdings.columns
+                     if c.endswith('_kfin') or c.endswith('_cams')
+                     or c in ('product_code_norm', 'invested_amount', 'total_units')]
+    holdings = holdings.drop(columns=drop_leftover, errors='ignore')
+    holdings['product_code_norm'] = holdings['product_code'].astype(str).str.strip().str.upper()
+
+    if 'KFinTech' in holdings['rta'].values:
+        kfin_invested_df = get_kfin_invested_per_scheme(sorted(kfin_f['folio'].tolist()), _v)
+        if not kfin_invested_df.empty:
+            kfin_invested_df['product_code_norm'] = kfin_invested_df['product_code'].astype(str).str.strip().str.upper()
+            holdings = holdings.merge(kfin_invested_df, on=['folio_id', 'product_code_norm'],
+                                      how='left', suffixes=('', '_kfin_fam'))
+            kfin_mask = holdings['rta'] == 'KFinTech'
+            has_txn = kfin_mask & holdings['invested_amount'].notna()
+            holdings.loc[has_txn, 'file_aum'] = holdings.loc[has_txn, 'invested_amount']
+            holdings.loc[has_txn, 'nav_based_aum'] = (
+                    holdings.loc[has_txn, 'units'] * holdings.loc[has_txn, 'current_nav']
+            )
+            holdings = holdings.drop(columns=['invested_amount', 'product_code_norm_kfin_fam'], errors='ignore')
+
+    if 'CAMS' in holdings['rta'].values:
+        cams_invested_df = get_cams_invested_per_scheme(sorted(cams_f['foliochk'].tolist()), _v)
+        if not cams_invested_df.empty:
+            cams_invested_df['product_code_norm'] = cams_invested_df['product_code'].astype(str).str.strip().str.upper()
+            holdings = holdings.merge(cams_invested_df, on=['folio_id', 'product_code_norm'],
+                                      how='left', suffixes=('', '_cams_fam'))
+            cams_mask = holdings['rta'] == 'CAMS'
+            has_txn = cams_mask & holdings['invested_amount'].notna()
+            holdings.loc[has_txn, 'file_aum'] = holdings.loc[has_txn, 'invested_amount']
+            holdings.loc[has_txn, 'units'] = holdings.loc[has_txn, 'total_units']
+            holdings.loc[has_txn, 'nav_based_aum'] = (
+                    holdings.loc[has_txn, 'units'] * holdings.loc[has_txn, 'current_nav']
+            )
+            holdings = holdings.drop(columns=['invested_amount', 'total_units', 'product_code_norm_cams_fam'],
+                                     errors='ignore')
+
+    holdings = holdings.drop(columns=['product_code_norm'], errors='ignore')
+    holdings['client_code'] = client_code
+    holdings['client_name'] = name
+    return holdings
+
+def get_kfin_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
+    with get_conn() as conn:
+        df = pd.read_sql("""
+            SELECT COALESCE(txn_date_iso, td_trdt) AS traddate,
+                   td_purred   AS trxntype,
+                   td_units    AS units,
+                   td_pop      AS purprice,
+                   td_amt      AS amount
+            FROM v_kfin_txn_active
+            WHERE td_acno = ? AND UPPER(TRIM(fmcode)) = ?
+        """, conn, params=(folio_no, product_code.strip().upper()))
+
+    if df.empty:
+        return df
+
+    df["_sort_date"] = pd.to_datetime(df["traddate"], errors="coerce", format="mixed")
+    df = df.sort_values("_sort_date", kind="stable").drop(columns=["_sort_date"]).reset_index(drop=True)
+    return df
+
+
+# ==================== VALUATION REPORT HELPERS ====================
+def fetch_all_folio_transactions(folio_no: str, rta: str) -> pd.DataFrame:
+    """
+    Reuses get_cams_txns_raw / get_kfin_txns_raw (same functions the
+    Clients > Portfolio and Transactions tabs already rely on), looping
+    over each scheme in the folio.
+
+    Sign convention matches the rest of the app:
+      - CAMS: units/amount stored positive; redemption = trxntype 'R1'
+        (same check as load_dashboard_summary / get_cams_invested_per_scheme)
+      - KFinTech: units/amount already signed at source (no direction
+        guessing needed — same assumption get_kfin_invested_per_scheme makes)
+    """
+    if rta == 'CAMS':
+        with get_conn() as conn:
+            codes = pd.read_sql(
+                "SELECT DISTINCT TRIM(UPPER(prodcode)) AS pc "
+                "FROM v_cams_txn_active WHERE folio_no = ?",
+                conn, params=(folio_no,)
+            )['pc'].tolist()
+        frames = []
+        for pc in codes:
+            t = get_cams_txns_raw(folio_no, pc)
+            if not t.empty:
+                t['product_code'] = pc
+                frames.append(t)
+        df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    else:
+        with get_conn() as conn:
+            codes = pd.read_sql(
+                "SELECT DISTINCT TRIM(UPPER(fmcode)) AS pc "
+                "FROM v_kfin_txn_active WHERE td_acno = ?",
+                conn, params=(folio_no,)
+            )['pc'].tolist()
+        frames = []
+        for pc in codes:
+            t = get_kfin_txns_raw(folio_no, pc)
+            if not t.empty:
+                t['product_code'] = pc
+                frames.append(t)
+        df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+    if df.empty:
+        return df
+
+    if 'trxntype' not in df.columns:
+        df['trxntype'] = ''
+
+    
+
+    df['_date'] = pd.to_datetime(df['traddate'], errors='coerce', format='mixed')
+    still_nat = df['_date'].isna() & df['traddate'].notna()
+    if still_nat.any():
+        log.warning("[VALUATION] Folio %s: %d rows with unparseable dates",
+                    folio_no, still_nat.sum())
+    df = df.dropna(subset=['_date'])
+
+    df['units'] = pd.to_numeric(df['units'], errors='coerce').fillna(0)
+    df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0)
+    df['purprice'] = pd.to_numeric(df['purprice'], errors='coerce')
+
+    if rta == 'CAMS':
+        is_redemption = df['trxntype'].astype(str).str.strip().str.upper() == 'R1'
+        df['direction'] = is_redemption.map({True: 'OUT', False: 'IN'})
+        df['signed_units'] = df['units'].where(~is_redemption, -df['units'])
+    else:
+        df['direction'] = df['units'].apply(
+            lambda u: 'OUT' if u < 0 else ('IN' if u > 0 else 'NEUTRAL')
+        )
+        df['signed_units'] = df['units']
+
+    df = df.sort_values('_date', kind='stable').reset_index(drop=True)
+    return df
+
+def calc_units_before(txn_df: pd.DataFrame, product_code: str,
+                      before_date: pd.Timestamp) -> float:
+    mask = (txn_df['product_code'] == product_code) & (txn_df['_date'] < before_date)
+    return max(float(txn_df.loc[mask, 'signed_units'].sum()), 0.0)
+
+
+def calc_units_upto(txn_df: pd.DataFrame, product_code: str,
+                    as_of_date: pd.Timestamp) -> float:
+    mask = (txn_df['product_code'] == product_code) & (txn_df['_date'] <= as_of_date)
+    return max(float(txn_df.loc[mask, 'signed_units'].sum()), 0.0)
+
+
+def calc_invested_upto(txn_df: pd.DataFrame, product_code: str,
+                       as_of_date: pd.Timestamp) -> float:
+    """
+    FIFO cost basis of units STILL HELD as of as_of_date.
+
+    Matches the 'Invested' figure shown in the Client tab, which the previous
+    implementation did not — it summed only purchases and ignored redemptions,
+    so any folio that had ever redeemed showed a wildly wrong gain/loss.
+
+    Falls back to net cash flow (IN sum minus OUT sum) if FIFO replay fails.
+    """
+    mask = (
+        (txn_df['product_code'] == product_code)
+        & (txn_df['_date'] <= as_of_date)
+    )
+    subset = txn_df.loc[mask].copy()
+    if subset.empty:
+        return 0.0
+
+    try:
+        lots, _ = cg_row.replay_folio_scheme(subset)
+        return float(sum(l.remaining_units * l.rate for l in lots))
+    except Exception as e:
+        log.warning("[VALUATION] FIFO replay failed for %s: %s — "
+                    "falling back to net cash flow", product_code, e)
+        in_mask  = subset['direction'] == 'IN'
+        out_mask = subset['direction'] == 'OUT'
+        return float(subset.loc[in_mask, 'amount'].sum()
+                     - subset.loc[out_mask, 'amount'].sum())
+
+
+
+# ==================== PDF GENERATION ====================
+
+
+def _find_font_path() -> tuple:
+    """
+    Try to find a Unicode-capable TTF font.
+    Returns (regular_path, bold_path) or (None, None).
+    """
+    candidates = [
+        # Linux
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        # macOS
+        ("/Library/Fonts/Arial Unicode.ttf",
+         "/Library/Fonts/Arial Bold.ttf"),
+        # Windows
+        (r"C:\Windows\Fonts\arial.ttf",
+         r"C:\Windows\Fonts\arialbd.ttf"),
+        # Common Linux alternatives
+        ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+        ("/usr/share/fonts/TTF/DejaVuSans.ttf",
+         "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"),
+    ]
+    for regular, bold in candidates:
+        if os.path.exists(regular):
+            return (regular, bold if os.path.exists(bold) else regular)
+    return (None, None)
+
+
+
+def _shorten_scheme_for_summary(name: str) -> str:
+    """
+    Truncate scheme name at the word 'FUND' (case-insensitive).
+    'BANDHAN SMALL CAP FUND REGULAR PLAN-GROWTH' → 'BANDHAN SMALL CAP FUND'
+    'SBI SILVER ETF FUND OF FUND - REGULAR PLAN - GROWTH' → 'SBI SILVER ETF FUND OF FUND'
+    If 'FUND' is not present, returns the original name unchanged.
+    """
+    if not name:
+        return ""
+    # Find the LAST occurrence of the whole word FUND
+    matches = list(re.finditer(r'\bFUND\b', name, flags=re.IGNORECASE))
+    if matches:
+        return name[:matches[-1].end()].strip()
+    return name.strip()
+
+def _truncate_to_width(pdf, text: str, max_width_mm: float) -> str:
+    """
+    Truncate `text` with an ellipsis so it fits within `max_width_mm`.
+    Uses fpdf2's own string-width measurement — correct across fonts
+    and fontsizes, unlike a naive character count.
+    """
+    if not text:
+        return ""
+    text = str(text)
+    if pdf.get_string_width(text) <= max_width_mm:
+        return text
+    for i in range(len(text) - 1, 0, -1):
+        candidate = text[:i].rstrip() + "…"
+        if pdf.get_string_width(candidate) <= max_width_mm:
+            return candidate
+    return "…"
+
+def generate_capital_gain_pdf(
+    client_name: str,
+    pan: str,
+    client_code: str,
+    fy_str: str,
+    detail_rows: list[dict],
+    total_buy: float,
+    total_sale: float,
+    total_gain: float,
+) -> bytes | None:
+    """PDF version of the capital gain report (FIFO realized gains, CAMS). Landscape — 13 columns."""
+    try:
+        from fpdf import FPDF
+    except ImportError:
+        return None
+
+    reg_path, bold_path = _find_font_path()
+    if not reg_path:
+        return None
+
+    pdf = FPDF(orientation='L', unit='mm', format='A4')
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_font('Main', '', reg_path, uni=True)
+    pdf.add_font('Main', 'B', bold_path, uni=True)
+    pdf.set_margins(12, 12, 12)
+
+    BLUE, DARK, GREY = (41, 128, 185), (44, 62, 80), (127, 140, 141)
+    LIGHT, WHITE = (236, 240, 241), (255, 255, 255)
+    GREEN, RED   = (39, 174, 96), (192, 57, 43)
+    PAGE_W = 297 - 24
+
+    def _fmt_inr(val):
+        try:    return f"\u20b9{float(val):,.2f}"
+        except (TypeError, ValueError): return "N/A"
+    def _fmt_units(val):
+        try:    return f"{float(val):.4f}"
+        except (TypeError, ValueError): return "N/A"
+    def _fmt_date(val):
+        if val is None: return ""
+        try:    return val.strftime("%d-%m-%Y")
+        except AttributeError: return str(val)
+
+    pdf.add_page()
+
+    # ── Header ──
+    pdf.set_font('Main', 'B', 16); pdf.set_text_color(*DARK)
+    pdf.cell(PAGE_W, 10, 'Capital Gain Report', align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+    pdf.set_font('Main', '', 9); pdf.set_text_color(*GREY)
+    pdf.cell(PAGE_W, 5, f'Client: {client_name}', new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 5, f'PAN: {pan or "N/A"}   |   Code: {client_code}   |   FY: {fy_str}',
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 5,
+             'Scope: CAMS folios only. KFinTech redemption tracking not yet implemented.',
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+
+    # ── Metric cards: Purchase / Redemption / Gain ──
+    pdf.set_fill_color(*LIGHT)
+    col_w = PAGE_W / 3
+    pdf.set_font('Main', 'B', 8); pdf.set_text_color(*GREY)
+    pdf.cell(col_w, 5, 'Total Purchase',   border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Total Redemption', border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Total Gain / Loss',border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font('Main', 'B', 11); pdf.set_text_color(*DARK)
+    pdf.cell(col_w, 7, _fmt_inr(total_buy),  border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 7, _fmt_inr(total_sale), border=0, fill=True, new_x="RIGHT")
+    pdf.set_text_color(*(GREEN if total_gain >= 0 else RED))
+    pdf.cell(col_w, 7, _fmt_inr(total_gain), border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(*DARK)
+    pdf.ln(3)
+
+    # ── Tax summary ──
+    stcg = sum(r.get("Gain/Loss", 0) for r in detail_rows if (r.get("Holding Days") or 0) < 365)
+    ltcg = sum(r.get("Gain/Loss", 0) for r in detail_rows if (r.get("Holding Days") or 0) >= 365)
+    LTCG_EXEMPTION = 125000
+    ltcg_taxable   = max(ltcg - LTCG_EXEMPTION, 0)
+
+    pdf.set_font('Main', 'B', 8); pdf.set_text_color(*GREY)
+    pdf.cell(col_w, 5, 'STCG (held < 12m)',              border=0, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'LTCG (held >= 12m)',             border=0, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Taxable LTCG (after 1.25L exemption)', border=0, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font('Main', 'B', 10); pdf.set_text_color(*DARK)
+    pdf.cell(col_w, 6, _fmt_inr(stcg),         border=0, new_x="RIGHT")
+    pdf.cell(col_w, 6, _fmt_inr(ltcg),         border=0, new_x="RIGHT")
+    pdf.cell(col_w, 6, _fmt_inr(ltcg_taxable), border=0, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+
+    # ── Grandfathering warning ──
+    if any(r.get("Purchase Date") and r["Purchase Date"] < date_cls(2018, 1, 31) for r in detail_rows):
+        pdf.set_font('Main', 'B', 8); pdf.set_text_color(*RED)
+        pdf.cell(PAGE_W, 5,
+                 'WARNING: Some purchases predate 31-Jan-2018. '
+                 'Grandfathering (FMV) rules NOT applied - LTCG cost basis may be understated.',
+                 new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(*DARK)
+        pdf.ln(2)
+
+    # ── Detail table (13 cols) ──
+    pdf.set_font('Main', 'B', 11); pdf.set_text_color(*BLUE)
+    pdf.cell(PAGE_W, 6, 'Realized Gains — Transaction Detail', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+
+    # Abbreviated labels so they fit in the narrow columns at 7pt.
+    # "Purchase Date" at 7pt is ~22mm; the column is only 15mm, so we
+    # use "Pur." / "Red." which any CA familiar with RTA reports reads instantly.
+    headers = ['Scheme', 'Folio',
+               'Pur. Date', 'Pur. Units', 'Pur. NAV', 'Pur. Value',
+               'Red. Date', 'Red. Units', 'Red. NAV', 'Red. Value',
+               'Days', 'Type', 'Gain/Loss']
+    # Sum must equal PAGE_W exactly. Rebalanced so the Scheme column
+    # has 78mm (~140 chars at 7pt) and the numeric columns are wide
+    # enough for both the abbreviated header and the value.
+    widths  = [78, 22, 15, 15, 13, 16, 15, 15, 13, 16, 12, 12, 0]
+    widths[-1] = PAGE_W - sum(widths[:-1])
+    if widths[-1] <= 0:
+        raise ValueError(
+            f"Column widths exceed page width by {-widths[-1]:.1f}mm "
+            f"(PAGE_W={PAGE_W:.1f}, used={sum(widths[:-1]):.1f})"
+        )
+    aligns  = ['L', 'C', 'C', 'R', 'R', 'R', 'C', 'R', 'R', 'R', 'C', 'C', 'R']
+
+    row_h = 6
+    pdf.set_font('Main', 'B', 7); pdf.set_fill_color(*BLUE); pdf.set_text_color(*WHITE)
+    for h, w in zip(headers, widths):
+        pdf.cell(w, row_h, h, border=1, align='C', fill=True)
+    pdf.ln()
+
+    rows_sorted = sorted(detail_rows, key=lambda r: (r.get("Redemption Date") or date_cls.min))
+    pdf.set_font('Main', '', 7); pdf.set_text_color(*DARK)
+    for i, row in enumerate(rows_sorted):
+        fill = (i % 2 == 1)
+        if fill:
+            pdf.set_fill_color(*LIGHT)
+        # Scheme is truncated by ACTUAL rendered width, not char count.
+        # Leave 1mm of padding so the text never touches the cell border.
+        scheme_txt = _truncate_to_width(
+            pdf, row.get('Scheme', ''), widths[0] - 1.0
+        )
+        vals = [
+            scheme_txt,
+            str(row.get('Folio', '')),
+            _fmt_date(row.get('Purchase Date')),
+            _fmt_units(row.get('Purchase Units')),
+            _fmt_units(row.get('Purchase NAV')),
+            _fmt_inr(row.get('Purchase Value')),
+            _fmt_date(row.get('Redemption Date')),
+            _fmt_units(row.get('Redemption Units')),
+            _fmt_units(row.get('Redemption NAV')),
+            _fmt_inr(row.get('Redemption Value')),
+            str(row.get('Holding Days', '')),
+            str(row.get('Type', '')),
+            _fmt_inr(row.get('Gain/Loss')),
+        ]
+        for v, w, a in zip(vals, widths, aligns):
+            pdf.cell(w, row_h, v, border=1, align=a, fill=fill)
+        pdf.ln()
+
+    pdf.set_font('Main', 'B', 7); pdf.set_fill_color(200, 200, 200)
+    total_vals = ['TOTAL', '', '', '', '', _fmt_inr(total_buy), '', '', '', _fmt_inr(total_sale),
+                  '', '', _fmt_inr(total_gain)]
+    for v, w, a in zip(total_vals, widths, aligns):
+        pdf.cell(w, row_h, v, border=1, align=a, fill=True)
+    pdf.ln(8)
+
+    pdf.set_font('Main', '', 7); pdf.set_text_color(*GREY)
+    pdf.cell(PAGE_W, 4,
+             f'Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}  |  '
+             f'Assumes equity taxation (STCG 20%, LTCG 12.5% above 1.25L exemption). '
+             f'Indicative only - consult your tax advisor.',
+             align='C', new_x="LMARGIN", new_y="NEXT")
+
+    return bytes(pdf.output())
+
+def generate_capital_gain_html(
+    client_name: str,
+    pan: str,
+    client_code: str,
+    fy_str: str,
+    detail_rows: list[dict],
+    total_buy: float,
+    total_sale: float,
+    total_gain: float,
+) -> str:
+    """Generate self-contained HTML for Capital Gain Report (email-friendly)."""
+    def fi(v):
+        try:    return f"₹{float(v):,.2f}"
+        except: return "N/A"
+    def fd(v):
+        if v is None: return ""
+        try:    return v.strftime("%d-%m-%Y")
+        except: return str(v)
+
+    gain_cls = "positive" if total_gain >= 0 else "negative"
+
+    # Tax split
+    stcg = sum(r.get("Gain/Loss", 0) for r in detail_rows if (r.get("Holding Days") or 0) < 365)
+    ltcg = sum(r.get("Gain/Loss", 0) for r in detail_rows if (r.get("Holding Days") or 0) >= 365)
+    LTCG_EXEMPTION = 125000
+    ltcg_taxable = max(ltcg - LTCG_EXEMPTION, 0)
+
+    pre_2018 = [r for r in detail_rows
+                if r.get("Purchase Date") and r["Purchase Date"] < date_cls(2018, 1, 31)]
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Capital Gain Report - {client_name}</title>
+<style>
+  @page {{ size: A4 landscape; margin: 12mm; }}
+  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #2c3e50; margin: 0; padding: 15px; }}
+  h1 {{ font-size: 17px; text-align: center; margin: 0 0 3px 0; }}
+  .meta {{ text-align: center; color: #7f8c8d; font-size: 9px; margin-bottom: 12px; }}
+  .metrics {{ display: flex; gap: 10px; margin-bottom: 8px; }}
+  .metric-box {{ flex: 1; background: #ecf0f1; padding: 8px; border-radius: 4px; text-align: center; }}
+  .metric-box .label {{ font-size: 8px; color: #7f8c8d; text-transform: uppercase; }}
+  .metric-box .value {{ font-size: 14px; font-weight: bold; margin-top: 2px; }}
+  .tax-row {{ display: flex; gap: 10px; margin-bottom: 14px; }}
+  .tax-box {{ flex: 1; background: #eaf2f8; padding: 6px 8px; border-radius: 4px; text-align: center; border-left: 3px solid #2980b9; }}
+  .tax-box .label {{ font-size: 8px; color: #7f8c8d; text-transform: uppercase; }}
+  .tax-box .value {{ font-size: 12px; font-weight: bold; margin-top: 2px; color: #2c3e50; }}
+  .positive {{ color: #27ae60; }}
+  .negative {{ color: #c0392b; }}
+  .warn {{ background: #fdecea; border-left: 4px solid #c0392b; padding: 8px; font-size: 9px; margin-bottom: 12px; border-radius: 3px; }}
+  table {{ border-collapse: collapse; width: 100%; margin-bottom: 10px; font-size: 8.5px; }}
+  th {{ background: #2980b9; color: white; padding: 4px 4px; text-align: center; font-weight: bold; }}
+  td {{ padding: 3px 4px; border: 1px solid #dcdcdc; }}
+  tr:nth-child(even) {{ background: #f7fafc; }}
+  .total-row {{ font-weight: bold; background: #e0e0e0 !important; }}
+  .right {{ text-align: right; }}
+  .center {{ text-align: center; }}
+  .footer {{ text-align: center; color: #aaa; font-size: 8px; margin-top: 20px; border-top: 1px solid #eee; padding-top: 6px; }}
+</style></head><body>
+<h1>Capital Gain Report</h1>
+<div class="meta">
+  {client_name} &nbsp;|&nbsp; PAN: {pan or "N/A"} &nbsp;|&nbsp; Code: {client_code} &nbsp;|&nbsp; FY: {fy_str}<br>
+  Scope: CAMS folios only. KFinTech redemption tracking not yet implemented.
+</div>
+<div class="metrics">
+  <div class="metric-box"><div class="label">Total Purchase</div><div class="value">{fi(total_buy)}</div></div>
+  <div class="metric-box"><div class="label">Total Redemption</div><div class="value">{fi(total_sale)}</div></div>
+  <div class="metric-box"><div class="label">Gain / Loss</div><div class="value {gain_cls}">{fi(total_gain)}</div></div>
+</div>
+<div class="tax-row">
+  <div class="tax-box"><div class="label">STCG (held &lt; 12m)</div><div class="value">{fi(stcg)}</div></div>
+  <div class="tax-box"><div class="label">LTCG (held ≥ 12m)</div><div class="value">{fi(ltcg)}</div></div>
+  <div class="tax-box"><div class="label">LTCG Exemption Used</div><div class="value">{fi(min(max(ltcg,0), LTCG_EXEMPTION))}</div></div>
+  <div class="tax-box"><div class="label">Taxable LTCG</div><div class="value">{fi(ltcg_taxable)}</div></div>
+</div>
+"""
+    if pre_2018:
+        html += (
+            f'<div class="warn">⚠️ <strong>{len(pre_2018)} purchase(s) predate 31-Jan-2018.</strong> '
+            f'Grandfathering (FMV) rules are NOT applied — LTCG cost basis may be understated. '
+            f'Verify before filing.</div>'
+        )
+
+    html += """<table>
+<tr>
+  <th class="left">Scheme</th>
+  <th class="center">Folio</th>
+  <th class="center">Purchase Date</th>
+  <th class="right">Purchase Units</th>
+  <th class="right">Purchase NAV</th>
+  <th class="right">Purchase Value</th>
+  <th class="center">Redemption Date</th>
+  <th class="right">Redemption Units</th>
+  <th class="right">Redemption NAV</th>
+  <th class="right">Redemption Value</th>
+  <th class="center">Holding Days</th>
+  <th class="center">Type</th>
+  <th class="right">Gain/Loss</th>
+</tr>
+"""
+
+    for r in sorted(detail_rows, key=lambda x: x.get('Redemption Date') or date_cls.min):
+        gl = r.get('Gain/Loss')
+        gl_cls = "positive" if gl and gl >= 0 else ("negative" if gl and gl < 0 else "")
+        html += f"""<tr>
+  <td>{r.get('Scheme', '')}</td>
+  <td class="center">{r.get('Folio', '')}</td>
+  <td class="center">{fd(r.get('Purchase Date'))}</td>
+  <td class="right">{r.get('Purchase Units', 0):.4f}</td>
+  <td class="right">{r.get('Purchase NAV', 0):.4f}</td>
+  <td class="right">{fi(r.get('Purchase Value'))}</td>
+  <td class="center">{fd(r.get('Redemption Date'))}</td>
+  <td class="right">{r.get('Redemption Units', 0):.4f}</td>
+  <td class="right">{r.get('Redemption NAV', 0):.4f}</td>
+  <td class="right">{fi(r.get('Redemption Value'))}</td>
+  <td class="center">{r.get('Holding Days', '')}</td>
+  <td class="center">{r.get('Type', '')}</td>
+  <td class="right {gl_cls}">{fi(gl)}</td>
+</tr>"""
+
+    html += f"""<tr class="total-row">
+  <td colspan="5" style="text-align: left;">TOTAL</td>
+  <td class="right">{fi(total_buy)}</td>
+  <td colspan="3"></td>
+  <td class="right">{fi(total_sale)}</td>
+  <td colspan="2"></td>
+  <td class="right {gain_cls}">{fi(total_gain)}</td>
+</tr>
+</table>
+<div class="footer">
+  Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")} &nbsp;|&nbsp;
+  Assumes equity taxation (STCG 20%, LTCG 12.5% above ₹1.25L exemption). Indicative only — consult your tax advisor.
+</div>
+</body></html>"""
+    return html
+
+
+def _txn_type_label(row) -> str:
+    """
+    Human-readable transaction type. Prefers the `direction` field
+    (IN/OUT/NEUTRAL) which is set for both RTAs, and falls back to the
+    raw trxntype code if direction is missing.
+    """
+    direction = str(row.get('direction', '')).strip().upper()
+    if direction == 'IN':
+        return 'Purchase'
+    if direction == 'OUT':
+        return 'Redemption'
+    if direction == 'NEUTRAL':
+        return 'Reversal'
+
+    raw = str(row.get('trxntype', '')).strip().upper()
+    if not raw:
+        return ''
+    if raw.startswith('R'):
+        return 'Redemption'
+    if raw.startswith('P'):
+        return 'Purchase'
+    if 'SWITCH' in raw:
+        return 'Switch In' if 'IN' in raw else 'Switch Out'
+    return raw
+
+def generate_valuation_html(
+    client_name: str,
+    pan: str,
+    client_code: str,
+    mobile: str,
+    val_date_str: str,
+    period_from_str: str,
+    summary_rows: list[dict],
+    rta_txns: dict,
+    total_invested: float,
+    total_value: float,
+    total_gain: float,
+    show_investor: bool = False,
+) -> str:
+    """Generate a self-contained HTML report (print → Save as PDF)."""
+    def fi(v):
+        try:
+            return f"₹{float(v):,.2f}"
+        except:
+            return "N/A"
+    def fp(v):
+        try:
+            return f"{float(v):.2f}%"
+        except:
+            return "N/A"
+    def fu(v):
+        try:
+            return f"{float(v):.4f}"
+        except:
+            return "N/A"
+
+    n_folios = len(set(r.get('Folio', '') for r in summary_rows))
+    gain_cls = "positive" if total_gain >= 0 else "negative"
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Valuation Report - {client_name}</title>
+<style>
+  @page {{ size: A4; margin: 12mm; }}
+  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #2c3e50; margin: 0; padding: 15px; }}
+  h1 {{ font-size: 17px; text-align: center; margin: 0 0 3px 0; }}
+  .meta {{ text-align: center; color: #7f8c8d; font-size: 9px; margin-bottom: 12px; }}
+  .metrics {{ display: flex; gap: 10px; margin-bottom: 14px; }}
+  .metric-box {{ flex: 1; background: #ecf0f1; padding: 8px; border-radius: 4px; text-align: center; }}
+  .metric-box .label {{ font-size: 8px; color: #7f8c8d; text-transform: uppercase; }}
+  .metric-box .value {{ font-size: 14px; font-weight: bold; margin-top: 2px; }}
+  .positive {{ color: #27ae60; }}
+  .negative {{ color: #c0392b; }}
+  h2 {{ font-size: 12px; color: #2980b9; border-bottom: 2px solid #2980b9; padding-bottom: 3px; margin: 16px 0 6px 0; }}
+  h3 {{ font-size: 11px; color: #2980b9; margin: 14px 0 4px 0; }}
+  .scheme-hdr {{ font-size: 9.5px; font-weight: bold; margin: 8px 0 3px 0; color: #2c3e50; }}
+  .no-txn {{ font-size: 9px; color: #aaa; font-style: italic; margin-bottom: 6px; }}
+  table {{ border-collapse: collapse; width: 100%; margin-bottom: 10px; font-size: 9px; table-layout: fixed; }}
+  th {{ background: #2980b9; color: white; padding: 4px 5px; text-align: center; font-weight: bold; }}
+  td {{ padding: 3px 5px; border: 1px solid #dcdcdc; word-wrap: break-word; overflow-wrap: break-word; white-space: normal; }}
+  tr:nth-child(even) {{ background: #f7fafc; }}
+  .total-row {{ font-weight: bold; background: #e0e0e0 !important; }}
+  .right {{ text-align: right; }}
+  .left {{ text-align: left; }}
+  .center {{ text-align: center; }}
+  .footer {{ text-align: center; color: #aaa; font-size: 8px; margin-top: 20px; border-top: 1px solid #eee; padding-top: 6px; }}
+  @media print {{ body {{ padding: 5px; }} .no-print {{ display: none; }} }}
+</style></head><body>
+<h1>Portfolio Valuation Report</h1>
+<div class="meta">
+  {client_name} &nbsp;|&nbsp; PAN: {pan or "N/A"} &nbsp;|&nbsp; Code: {client_code} &nbsp;|&nbsp; Mobile: {mobile or "N/A"}<br>
+  Period: {period_from_str} to {val_date_str}
+</div>
+<div class="metrics">
+  <div class="metric-box"><div class="label">Total Invested</div><div class="value">{fi(total_invested)}</div></div>
+  <div class="metric-box"><div class="label">Total Value</div><div class="value">{fi(total_value)}</div></div>
+  <div class="metric-box"><div class="label">Gain / Loss</div><div class="value {gain_cls}">{fi(total_gain)}</div></div>
+</div>
+"""
+
+    investor_th = '<th class="left" style="width:18%">Investor</th>' if show_investor else ''
+    investor_w  = '18%' if show_investor else '0%'
+    scheme_w    = '32%' if show_investor else '38%'
+    html += f"""<h2>Scheme Summary</h2>
+<table>
+<tr>{investor_th}<th class="left" style="width:{scheme_w}">Scheme</th><th class="center" style="width:12%">Folio</th><th class="right" style="width:14%">Invested</th><th class="right" style="width:14%">Value</th><th class="right" style="width:14%">Gain/Loss</th><th class="right" style="width:14%">Return %</th></tr>"""
+
+    for r in summary_rows:
+        gl = r.get('Gain/Loss')
+        gl_cls = "positive" if gl and gl >= 0 else ("negative" if gl and gl < 0 else "")
+        ret = (
+            f"{(gl / r['Invested'] * 100):.2f}%"
+            if gl is not None and r.get('Invested', 0) > 0 else "N/A"
+        )
+        investor_td = f'<td class="left">{r.get("Investor","")}</td>' if show_investor else ''
+        scheme_display = _shorten_scheme_for_summary(r.get('Scheme', ''))
+        html += f"""<tr>
+{investor_td}
+<td class="left">{scheme_display}</td>
+<td class="center">{r.get('Folio','')}</td>
+<td class="right">{fi(r.get('Invested'))}</td>
+<td class="right">{fi(r.get('Value'))}</td>
+<td class="right {gl_cls}">{fi(gl)}</td>
+<td class="right">{ret}</td></tr>"""
+
+    total_ret = f"{(total_gain/total_invested*100):.2f}%" if total_invested > 0 else "N/A"
+    total_investor_td = '<td class="left"></td>' if show_investor else ''
+    html += f"""<tr class="total-row">
+{total_investor_td}<td class="left">TOTAL</td><td class="center">{n_folios} folios</td>
+<td class="right">{fi(total_invested)}</td><td class="right">{fi(total_value)}</td>
+<td class="right {gain_cls}">{fi(total_gain)}</td><td class="right">{total_ret}</td></tr>
+</table>
+"""
+
+    # Missing-NAV footnote
+    missing = [r for r in summary_rows if r.get('Value') is None]
+    if missing:
+        html += (
+            f'<div style="background:#fdecea;border-left:4px solid #c0392b;'
+            f'padding:8px;font-size:9px;margin-bottom:12px;border-radius:3px;">'
+            f'⚠️ <strong>{len(missing)} of {len(summary_rows)} scheme(s)</strong> have '
+            f'no NAV available for the valuation date. Total Value is understated. '
+            f'Affected: {", ".join(r.get("Scheme","?") for r in missing[:5])}'
+            f'{"..." if len(missing) > 5 else ""}</div>'
+        )
+
+    html += """<h2>Transactions</h2>"""
+
+    all_entries = rta_txns.get('CAMS', []) + rta_txns.get('KFinTech', [])
+    all_entries.sort(key=lambda e: e['label'])
+
+    for entry in all_entries:
+            label   = entry['label']
+            opening = entry['opening']
+            tdf     = entry['df']
+            html += f'<div class="scheme-hdr">{label} &mdash; Opening: {opening:.4f} units</div>'
+
+            if tdf.empty:
+                html += '<div class="no-txn">(no transactions during this period)</div>'
+                continue
+
+            html += """<table>
+<tr><th class="center">Date</th><th class="left">Type</th><th class="right">Units</th><th class="right">Price</th><th class="right">Amount</th><th class="right">Balance</th></tr>"""
+
+            for _, row in tdf.iterrows():
+                d = row['_date'].strftime('%d-%m-%Y') if pd.notna(row['_date']) else ''
+                price = row.get('purprice', None)
+                if price is None:
+                    price = row.get('td_pop', None)
+                html += f"""<tr>
+<td class="center">{d}</td>
+<td class="left">{_txn_type_label(row)}</td>
+<td class="right">{fu(row.get('signed_units',0))}</td>
+<td class="right">{fu(price) if pd.notna(price) else ''}</td>
+<td class="right">{fi(row.get('amount',0))}</td>
+<td class="right">{fu(row.get('Balance',0))}</td></tr>"""
+
+            html += "</table>"
+
+    html += f"""<div class="footer">
+Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}<br>
+Valuations are based on AMFI NAVs as of the valuation date (or latest available)
+and are for information only. Past performance is not indicative of future results.
+Consult your financial advisor before making investment decisions.
+</div>
+</body></html>"""
+    return html
+
+
+def generate_valuation_pdf(
+    client_name: str,
+    pan: str,
+    client_code: str,
+    mobile: str,
+    val_date_str: str,
+    period_from_str: str,
+    summary_rows: list[dict],
+    rta_txns: dict,
+    total_invested: float,
+    total_value: float,
+    total_gain: float,
+    show_investor: bool = False,
+) -> bytes | None:
+    """
+    Generate a PDF bytes buffer for the valuation report.
+    Returns None if fpdf2 is not installed or no font found.
+    """
+    try:
+        from fpdf import FPDF
+    except ImportError:
+        return None
+
+    reg_path, bold_path = _find_font_path()
+    if not reg_path:
+        return None
+
+    pdf = FPDF(orientation='P', unit='mm', format='A4')
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.add_font('Main', '', reg_path, uni=True)
+    pdf.add_font('Main', 'B', bold_path, uni=True)
+    pdf.set_margins(12, 12, 12)
+
+    # ── Colour palette ──
+    BLUE   = (41, 128, 185)
+    DARK   = (44, 62, 80)
+    GREY   = (127, 140, 141)
+    LIGHT  = (236, 240, 241)
+    WHITE  = (255, 255, 255)
+    GREEN  = (39, 174, 96)
+    RED    = (192, 57, 43)
+    PAGE_W = 210 - 24  # A4 width minus margins
+
+    def _fmt_inr(val) -> str:
+        try:
+            return f"\u20b9{float(val):,.2f}"
+        except (TypeError, ValueError):
+            return "N/A"
+
+    def _fmt_pct(val) -> str:
+        try:
+            return f"{float(val):.2f}%"
+        except (TypeError, ValueError):
+            return "N/A"
+
+    def _fmt_units(val) -> str:
+        try:
+            return f"{float(val):.4f}"
+        except (TypeError, ValueError):
+            return "N/A"
+
+    def _truncate_for_cell(text: str, col_width_mm: float, font_size_pt: float = 7) -> str:
+        """Truncate text with ellipsis so it never exceeds the cell width in fpdf2."""
+        if not text:
+            return ""
+        # Approx chars per mm at 7pt (~0.55 mm/char for typical TTF fonts)
+        max_chars = int(col_width_mm / 0.55)
+        if len(text) > max_chars:
+            return text[: max_chars - 1].strip() + "…"
+        return text
+
+    # ════════════════════════════════════════
+    # PAGE 1 — HEADER + SUMMARY TABLE
+    # ════════════════════════════════════════
+    pdf.add_page()
+
+    # Title
+    pdf.set_font('Main', 'B', 16)
+    pdf.set_text_color(*DARK)
+    pdf.cell(PAGE_W, 10, 'Portfolio Valuation Report', align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+
+    # Client info
+    pdf.set_font('Main', '', 9)
+    pdf.set_text_color(*GREY)
+    pdf.cell(PAGE_W, 5, f'Client: {client_name}', new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 5,
+             f'PAN: {pan or "N/A"}   |   Code: {client_code}   |   Mobile: {mobile or "N/A"}',
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 5,
+             f'Period: {period_from_str} to {val_date_str}',
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+
+    # Metrics bar
+    pdf.set_fill_color(*LIGHT)
+    col_w = PAGE_W / 3
+    pdf.set_font('Main', 'B', 8)
+    pdf.set_text_color(*GREY)
+    pdf.cell(col_w, 5, 'Total Invested', border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Total Value', border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Gain / Loss', border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_font('Main', 'B', 11)
+    pdf.set_text_color(*DARK)
+    pdf.cell(col_w, 7, _fmt_inr(total_invested), border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 7, _fmt_inr(total_value), border=0, fill=True, new_x="RIGHT")
+    gain_color = GREEN if total_gain >= 0 else RED
+    pdf.set_text_color(*gain_color)
+    pdf.cell(col_w, 7, _fmt_inr(total_gain), border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(*DARK)
+    pdf.ln(6)
+
+    # Section header
+    pdf.set_font('Main', 'B', 11)
+    pdf.set_text_color(*BLUE)
+    pdf.cell(PAGE_W, 6, 'Scheme Summary', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+
+    # Summary table
+    if show_investor:
+        s_headers = ['Investor', 'Scheme', 'Folio', 'Invested', 'Value', 'Gain/Loss', 'Return %']
+        s_widths  = [30, 40, 16, 24, 24, 24, 28]  # sums to 186 = PAGE_W
+        scheme_col_idx = 1
+    else:
+        s_headers = ['Scheme', 'Folio', 'Invested', 'Value', 'Gain/Loss', 'Return %']
+        s_widths  = [55, 20, 28, 28, 28, 27]  # sums to 186 = PAGE_W
+        scheme_col_idx = 0
+    # Adjust last col to fill (kept for safety if PAGE_W/headers change later)
+    s_widths[-1] = PAGE_W - sum(s_widths[:-1])
+
+    row_h = 6
+    pdf.set_font('Main', 'B', 7)
+    pdf.set_fill_color(*BLUE)
+    pdf.set_text_color(*WHITE)
+    for h, w in zip(s_headers, s_widths):
+        pdf.cell(w, row_h, h, border=1, align='C', fill=True)
+    pdf.ln()
+
+    pdf.set_font('Main', '', 7)
+    pdf.set_text_color(*DARK)
+    aligns = ['L', 'L', 'C', 'R', 'R', 'R', 'R'] if show_investor else ['L', 'C', 'R', 'R', 'R', 'R']
+
+    for i, row in enumerate(summary_rows):
+        if i % 2 == 1:
+            pdf.set_fill_color(*LIGHT)
+            fill = True
+        else:
+            fill = False
+
+        short_scheme = _shorten_scheme_for_summary(str(row.get('Scheme', '')))
+        if show_investor:
+            scheme_text = _truncate_for_cell(short_scheme, s_widths[scheme_col_idx], 7)
+            vals = [str(row.get('Investor', '')), scheme_text, str(row.get('Folio', ''))]
+        else:
+            scheme_text = _truncate_for_cell(short_scheme, s_widths[scheme_col_idx], 7)
+            vals = [scheme_text, str(row.get('Folio', ''))]
+        vals += [
+            _fmt_inr(row.get('Invested')),
+            _fmt_inr(row.get('Value')),
+            _fmt_inr(row.get('Gain/Loss')),
+            _fmt_pct(
+                (row.get('Gain/Loss', 0) / row.get('Invested', 1) * 100)
+                if row.get('Gain/Loss') is not None and row.get('Invested', 0) > 0
+                else None
+            ),
+        ]
+        for v, w, a in zip(vals, s_widths, aligns):
+            pdf.cell(w, row_h, v, border=1, align=a, fill=fill)
+        pdf.ln()
+
+    # Total row
+    pdf.set_font('Main', 'B', 7)
+    pdf.set_fill_color(200, 200, 200)
+    n_folios = len(set(r.get('Folio', '') for r in summary_rows))
+    if show_investor:
+        total_vals = ['', 'TOTAL', f'{n_folios} folios']
+    else:
+        total_vals = ['TOTAL', f'{n_folios} folios']
+    total_vals += [
+        _fmt_inr(total_invested),
+        _fmt_inr(total_value),
+        _fmt_inr(total_gain),
+        _fmt_pct(total_gain / total_invested * 100) if total_invested > 0 else 'N/A',
+    ]
+    for v, w, a in zip(total_vals, s_widths, aligns):
+        pdf.cell(w, row_h, v, border=1, align=a, fill=True)
+    pdf.ln(8)
+
+    # ════════════════════════════════════════
+    # TRANSACTIONS — PER RTA
+    # ════════════════════════════════════════
+    t_headers = ['Date', 'Type', 'Units', 'Price', 'Amount', 'Balance']
+    t_widths  = [22, 22, 22, 22, 28, 22]
+    t_widths[-1] = PAGE_W - sum(t_widths[:-1])
+    t_aligns  = ['C', 'L', 'R', 'R', 'R', 'R']
+
+    all_entries = rta_txns.get('CAMS', []) + rta_txns.get('KFinTech', [])
+    all_entries.sort(key=lambda e: e['label'])
+
+    for entry in all_entries:
+            label   = entry['label']
+            opening = entry['opening']
+            tdf     = entry['df']
+
+            pdf.set_font('Main', 'B', 8)
+            pdf.set_text_color(*DARK)
+            pdf.cell(PAGE_W, 5,
+                     f'{label}  —  Opening: {opening:.4f} units',
+                     new_x="LMARGIN", new_y="NEXT")
+
+            if tdf.empty:
+                pdf.set_font('Main', '', 7)
+                pdf.set_text_color(*GREY)
+                pdf.cell(PAGE_W, 5, '(no transactions during this period)',
+                         new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(3)
+                continue
+
+            # Table header
+            pdf.set_font('Main', 'B', 6.5)
+            pdf.set_fill_color(*BLUE)
+            pdf.set_text_color(*WHITE)
+            for h, w in zip(t_headers, t_widths):
+                pdf.cell(w, 5, h, border=1, align='C', fill=True)
+            pdf.ln()
+
+            # Rows
+            pdf.set_font('Main', '', 6.5)
+            pdf.set_text_color(*DARK)
+            for r_idx, (_, row) in enumerate(tdf.iterrows()):
+                if r_idx % 2 == 1:
+                    pdf.set_fill_color(*LIGHT)
+                    fill = True
+                else:
+                    fill = False
+
+                date_str = row['_date'].strftime('%d-%m-%Y') if pd.notna(row['_date']) else ''
+                price = row.get('purprice', row.get('td_pop', None))
+                amount = row.get('amount', 0)
+
+                vals = [
+                    date_str,
+                    _truncate_to_width(pdf, _txn_type_label(row), t_widths[1] - 1.0),
+                    _fmt_units(row.get('signed_units', 0)),
+                    _fmt_units(price) if pd.notna(price) else '',
+                    _fmt_inr(amount),
+                    _fmt_units(row.get('Balance', 0)),
+                ]
+                for v, w, a in zip(vals, t_widths, t_aligns):
+                    pdf.cell(w, 4.5, v, border=1, align=a, fill=fill)
+                pdf.ln()
+
+            pdf.ln(4)
+
+    # ── Footer ──
+    pdf.set_font('Main', '', 7)
+    pdf.set_text_color(*GREY)
+    pdf.cell(PAGE_W, 4,
+             f'Report generated on {datetime.now().strftime("%d/%m/%Y %H:%M")}',
+             align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(1)
+    pdf.set_font('Main', '', 6.5)
+    pdf.multi_cell(
+        PAGE_W, 3.5,
+        'Valuations are based on AMFI NAVs as of the valuation date (or latest '
+        'available) and are for information only. Past performance is not '
+        'indicative of future results. Consult your financial advisor before '
+        'making investment decisions.',
+        align='C',
+    )
+
+    return bytes(pdf.output())
+
+
+
+def generate_email_body(client_name: str, report_type: str,
+                        period_str: str | None = None) -> str:
+    """
+    Professional HTML email wrapper — used for both Capital Gain & Valuation emails.
+
+    period_str: human-readable period label, e.g. "FY 2025-26" or
+                "01-Apr-2026 to 23-Sep-2026". Shown in the header so the
+                recipient knows which report they're looking at without
+                opening the attachment.
+    """
+    greeting = f"Dear {client_name},"
+    period_line = f"<br><strong>Period:</strong> {period_str}" if period_str else ""
+
+    if report_type == "Capital Gain":
+        intro = """
+<p>Please find attached your <strong>Capital Gain Report</strong>. This report
+details realized capital gains/losses on your mutual fund redemptions, computed
+using the <strong>FIFO (First In, First Out)</strong> cost-basis method.</p>
+
+<p><strong>What's in the report:</strong></p>
+<ul>
+    <li>Purchase and redemption details for every matched lot</li>
+    <li>STCG / LTCG classification by holding period</li>
+    <li>Realized gain/loss per transaction</li>
+    <li>Tax summary (equity assumption)</li>
+</ul>
+"""
+    else:  # Valuation
+        intro = """
+<p>Please find attached your <strong>Portfolio Valuation Report</strong>. This
+report gives a snapshot of your mutual fund holdings, current valuations, and
+investment performance as of the valuation date.</p>
+
+<p><strong>What's in the report:</strong></p>
+<ul>
+    <li>Scheme-wise investment summary with current valuations</li>
+    <li>Gain/loss analysis across holdings</li>
+    <li>Detailed transaction history for the selected period</li>
+</ul>
+"""
+
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6; color: #333; margin: 0; padding: 20px;
+            background-color: #f9f9f9;
+        }}
+        .email-container {{
+            max-width: 700px; margin: 0 auto; background: white;
+            padding: 30px; border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }}
+        .header {{ border-bottom: 3px solid #2980b9; padding-bottom: 15px; margin-bottom: 20px; }}
+        .header h2 {{ color: #2980b9; margin: 0; font-size: 24px; }}
+        .greeting {{ font-size: 16px; color: #2c3e50; margin-bottom: 15px; }}
+        .intro-section {{
+            background: #ecf0f1; padding: 15px;
+            border-left: 4px solid #2980b9; margin: 20px 0; border-radius: 4px;
+        }}
+        .intro-section p, .intro-section li {{ color: #2c3e50; font-size: 14px; }}
+        .intro-section ul {{ margin: 10px 0; padding-left: 20px; }}
+        .attachment-note {{
+            background: #d5f4e6; border-left: 4px solid #27ae60;
+            padding: 15px; margin: 25px 0; border-radius: 4px;
+        }}
+        .attachment-note strong {{ color: #27ae60; }}
+        .feedback-section {{
+            background: #fff3cd; border-left: 4px solid #f39c12;
+            padding: 15px; margin: 25px 0; border-radius: 4px;
+        }}
+        .feedback-section h3 {{ color: #e67e22; margin-top: 0; font-size: 16px; }}
+        .feedback-section p {{ margin: 8px 0; color: #7d6608; font-size: 14px; }}
+        .footer {{
+            border-top: 1px solid #ddd; padding-top: 20px; margin-top: 30px;
+            color: #7f8c8d; font-size: 12px;
+        }}
+        .signature {{ margin-top: 20px; color: #2c3e50; }}
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <h2>📊 {report_type} Report</h2>
+        </div>
+
+        <div class="greeting">
+            {greeting}{period_line}
+        </div>
+
+        <div class="intro-section">
+            {intro}
+        </div>
+
+        <div class="attachment-note">
+            <strong>✓ Report Attached</strong><br>
+            Your <strong>{report_type} Report</strong> is attached to this email
+            as a PDF. You can download, print, or save it for your records.
+        </div>
+
+        <div class="feedback-section">
+            <h3>⏰ Please Review Within 24–48 Hours</h3>
+            <p>
+                Kindly review the attached report carefully. If you notice any
+                discrepancy — a missing transaction, incorrect folio number, or
+                a valuation that doesn't match your records — please reply to
+                this email within 24–48 hours so we can correct it.
+            </p>
+        </div>
+
+        <p style="color: #2c3e50; margin: 20px 0;"><strong>What to check:</strong></p>
+        <ul style="color: #2c3e50; margin: 10px 0;">
+            <li>Folio numbers and scheme names</li>
+            <li>Transaction dates, units, and amounts</li>
+            <li>NAV values used and valuation date</li>
+            <li>For Capital Gain reports: purchase and redemption dates per matched lot</li>
+        </ul>
+
+        <div class="footer">
+            <p>
+                <strong>Contact:</strong> If you have any questions about this
+                report, please reply to this email.
+            </p>
+            <p>
+                <strong>Generated:</strong> {datetime.now().strftime("%d %B %Y at %I:%M %p")}<br>
+                This is an automated report from the Portfolio Intelligence platform.
+            </p>
+            <p style="margin-top: 20px; color: #34495e;">
+                Thank you for your continued trust.
+            </p>
+            <div class="signature">
+                <strong>Best Regards,</strong><br>
+                Portfolio Intelligence Team<br>
+                <em>Your Investment Partner</em>
+            </div>
+        </div>
+    </div>
+</body>
+</html>"""
+
+# ==================== Cams, Karvy and Manual entir Brokerage Data HELPERS ====================
+def _resolve_amc_via_isin(get_conn, scheme_code_col_sql: str, table: str, scheme_code_value_alias: str):
+    """
+    Not used directly — kept as documentation of the join shape.
+    Actual resolution happens inline in the loader below via a single
+    bse_scheme_master join, exactly like get_all_folios_with_isin_and_nav().
+    """
+    pass
+
+
+@st.cache_data(show_spinner=False)
+def load_brokerage_report(_get_conn, _v: int) -> dict:
+    """
+    Returns {
+        "merged":     DataFrame[amc, month, file_amount, manual_amount, variance, status]
+        "detail":     DataFrame[amc, rta, client, folio, scheme_code, isin, txn_date,
+                                 txn_amount, brokerage_pct, brokerage_amount, brokerage_type]
+        "manual_raw": DataFrame[amc, month, manual_amount]
+    }
+
+    AMC resolution path (matches Dashboard's proven join):
+        brokerage.folio_no / account_number
+            -> cams_wbr9_folio.foliochk / kfin_mfsd211_folio.folio   (get product code)
+            -> Channel_Partner_Code (bse_scheme_master) -> ISIN
+            -> _amfi.get_amc(isin)                       (canonical AMC name)
+
+    Date handling: CAMS proc_date is DD-MM-YYYY, KFin proc_date is
+    YYYY-MM-DD. Each is parsed in its OWN format BEFORE concatenation —
+    parsing a combined column once with a single dayfirst= flag lets
+    pandas' format inference lock onto whichever format it sees first
+    and silently return NaT for every row in the other format.
+    """
+    # ---- Resolve BSE's AMC fallback column FIRST, on its own connection,
+    #      BEFORE opening the connection used for the real reads ----
+    bse_amc_col = _get_bse_amc_column(_get_conn)
+    bse_amc_select = f"MAX({bse_amc_col}) AS bse_amc_name" if bse_amc_col else "NULL AS bse_amc_name"
+    bse_dedup = f"""
+        SELECT
+            UPPER(TRIM(Channel_Partner_Code)) AS cp_code,
+            MAX(ISIN) AS ISIN,
+            {bse_amc_select}
+        FROM bse_scheme_master
+        WHERE Channel_Partner_Code IS NOT NULL AND TRIM(Channel_Partner_Code) != ''
+        GROUP BY UPPER(TRIM(Channel_Partner_Code))
+    """
+
+    # ---- CAMS brokerage -> cams_wbr9_folio (get product code) -> Channel_Partner_Code -> ISIN ----
+    cams_sql = f"""
+        SELECT
+            cb.proc_date              AS proc_date,
+            cb.brokerage_accrual_month AS accrual_month,
+            cb.inv_name               AS client,
+            cb.folio_no               AS folio,
+            cb.scheme_code            AS scheme_code,
+            cb.trxn_no                AS txn_no,
+            cb.plot_amount            AS txn_amount,
+            cb.brkage_rate            AS brokerage_pct,
+            cb.brkage_amt             AS brokerage_amount,
+            cb.brkage_type            AS brokerage_type,
+            cf.product                AS folio_product_code,
+            sm.ISIN                   AS isin,
+            sm.bse_amc_name           AS bse_amc_name,
+            'CAMS'                    AS rta
+        FROM cams_wbr77_brokerage cb
+        LEFT JOIN cams_wbr9_folio cf
+            ON UPPER(TRIM(cb.folio_no)) = UPPER(TRIM(cf.foliochk))
+        LEFT JOIN ({bse_dedup}) sm
+            ON UPPER(TRIM(cf.product)) = sm.cp_code
+    """
+
+    # ---- KFin brokerage -> kfin_mfsd211_folio (get product_code) -> Channel_Partner_Code -> ISIN ----
+    kfin_sql = f"""
+        SELECT
+            kb.process_date        AS proc_date,
+            NULL                   AS accrual_month,
+            kb.investor_name       AS client,
+            kb.account_number      AS folio,
+            kb.scheme_code         AS scheme_code,
+            kb.transaction_number  AS txn_no,
+            kb.amount           AS txn_amount,
+            kb.percentage          AS brokerage_pct,
+            kb.brokerage        AS brokerage_amount,
+            kb.brokerage_type      AS brokerage_type,
+            kf.product_code        AS folio_product_code,
+            sm.ISIN                AS isin,
+            sm.bse_amc_name        AS bse_amc_name,
+            'KFinTech'             AS rta
+        FROM kfin_mfsd205_brokerage kb
+        LEFT JOIN kfin_mfsd211_folio kf
+            ON UPPER(TRIM(kb.account_number)) = UPPER(TRIM(kf.folio))
+        LEFT JOIN ({bse_dedup}) sm
+            ON UPPER(TRIM(kf.product_code)) = sm.cp_code
+    """
+
+    # ---- Open the connection once, run both reads on it, then close ----
+    with _get_conn() as conn:
+        cams_df = pd.read_sql(cams_sql, conn)
+        kfin_df = pd.read_sql(kfin_sql, conn)
+        manual_df = pd.read_sql("SELECT amc, month, year, amount FROM monthly_brokerage", conn)
+
+    # ---- Parse each RTA's date format SEPARATELY, before combining ----
+    # NOTE: both CAMS and KFin proc_date are YYYY-MM-DD in this dataset —
+    # confirmed via direct query (e.g. CAMS: '2026-02-06', '2026-05-06').
+    # dayfirst=True on an already year-first string SILENTLY SWAPS month
+    # and day (e.g. '2026-02-06' -> June 2nd instead of Feb 6th) instead
+    # of raising an error, which is what caused older-month CAMS rows to
+    # disappear (they got miscategorized into the current month). Use
+    # dayfirst=False for both — if a future upload genuinely uses
+    # DD-MM-YYYY, change that side's flag back to True at that time.
+    if not cams_df.empty:
+        cams_df["proc_date"] = pd.to_datetime(cams_df["proc_date"], errors="coerce", dayfirst=False)
+    if not kfin_df.empty:
+        kfin_df["proc_date"] = pd.to_datetime(kfin_df["proc_date"], errors="coerce", dayfirst=False)
+
+    detail = pd.concat([cams_df, kfin_df], ignore_index=True)
+
+    # ---- AMC name: AMFI-canonical (via ISIN) first, then BSE fallback, then raw product code ----
+    detail["amfi_amc_name"] = detail["isin"].apply(
+        lambda i: _amfi.get_amc(i) if pd.notna(i) and str(i).strip() else None
+    )
+    detail["amc"] = detail["amfi_amc_name"]
+    detail["amc"] = detail["amc"].fillna(detail["bse_amc_name"])
+    detail["amc"] = detail["amc"].fillna(detail["folio_product_code"])
+    detail["amc"] = detail["amc"].fillna(detail["scheme_code"])
+    detail["amc"] = detail["amc"].fillna("⚠️ Unresolved")
+
+    # ---- Month key: prefer explicit accrual_month (CAMS), else derive from
+    #      the already-parsed proc_date. Anything still unresolved falls
+    #      into an explicit "Unknown" bucket instead of silently vanishing
+    #      from downstream filters (which never match NaN). ----
+    month_from_accrual = detail["accrual_month"].astype(str).str.strip()
+    month_from_proc = detail["proc_date"].dt.strftime("%Y-%m")
+    detail["month"] = month_from_accrual.where(
+        month_from_accrual.str.match(r"^\d{4}-\d{2}$", na=False), month_from_proc
+    )
+    detail["month"] = detail["month"].fillna("Unknown")
+
+    detail["txn_amount"] = pd.to_numeric(detail["txn_amount"], errors="coerce")
+    detail["brokerage_pct"] = pd.to_numeric(detail["brokerage_pct"], errors="coerce")
+    detail["brokerage_amount"] = pd.to_numeric(detail["brokerage_amount"], errors="coerce").fillna(0.0)
+    detail["txn_date"] = detail["proc_date"].dt.strftime("%Y-%m-%d")
+
+    # ---- File-side grouped by AMC + month ----
+    file_grouped = (
+        detail.dropna(subset=["month"])
+        .groupby(["amc", "month"], dropna=False)["brokerage_amount"]
+        .sum()
+        .reset_index()
+        .rename(columns={"brokerage_amount": "file_amount"})
+    )
+
+    # ---- Manual entries ----
+    if not manual_df.empty:
+        manual_df["month"] = manual_df["year"].astype(str) + "-" + manual_df["month"].astype(str).str.zfill(2)
+        manual_grouped = (
+            manual_df.groupby(["amc", "month"], dropna=False)["amount"]
+            .sum()
+            .reset_index()
+            .rename(columns={"amount": "manual_amount"})
+        )
+    else:
+        manual_grouped = pd.DataFrame(columns=["amc", "month", "manual_amount"])
+
+    merged = pd.merge(file_grouped, manual_grouped, on=["amc", "month"], how="outer")
+    merged["file_amount"] = merged["file_amount"].fillna(0.0)
+    merged["manual_amount"] = merged["manual_amount"].fillna(0.0)
+    merged["variance"] = merged["file_amount"] - merged["manual_amount"]
+
+    def _status(row):
+        if row["manual_amount"] == 0 and row["file_amount"] > 0:
+            return "⚠️ Not yet received"
+        if row["file_amount"] == 0 and row["manual_amount"] > 0:
+            return "❓ Received, no file match"
+        if abs(row["variance"]) < 1:
+            return "✅ Matched"
+        return "🔶 Mismatch"
+
+    if not merged.empty:
+        merged["status"] = merged.apply(_status, axis=1)
+        merged = merged.sort_values(["month", "amc"], ascending=[False, True])
+    else:
+        merged["status"] = pd.Series(dtype="object")
+
+    return {"merged": merged, "detail": detail, "manual_raw": manual_grouped}
+
+
+def format_brokerage_inr(val) -> str:
+    try:
+        return f"Rs {float(val):,.2f}"
+    except (TypeError, ValueError):
+        return "Rs -"
+
+
+@st.cache_data(show_spinner=False)
+def load_dedup_sip_counts(_v: int) -> dict:
+    def _clean_regn(val):
+        if pd.isna(val):
+            return ""
+        s = str(val).strip().upper()
+        s = s.replace(".0", "") if s.endswith(".0") else s
+        return re.sub(r'[^A-Z0-9]', '', s)
+
+    active_statuses = ["ACTIVE", "LIVE SIP", "REGISTERED"]
+
+    with get_conn() as conn:
+        bse = pd.read_sql("SELECT status, xsip_regn_no AS regn FROM bse_sip", conn)
+        cams = pd.read_sql("""
+            SELECT
+                CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END AS status,
+                request_ref_no AS regn
+            FROM cams_wbr49_sip
+        """, conn)
+        kfin = pd.read_sql("SELECT status, reg_slno AS regn FROM kfin_mfsd243_sip", conn)
+
+    bse = bse[bse["status"].astype(str).str.strip().str.upper().isin(active_statuses)].copy()
+    cams = cams[cams["status"].astype(str).str.strip().str.upper().isin(active_statuses)].copy()
+    kfin = kfin[kfin["status"].astype(str).str.strip().str.upper().isin(active_statuses)].copy()
+
+    bse["_key"] = bse["regn"].apply(_clean_regn)
+    cams["_key"] = cams["regn"].apply(_clean_regn)
+    kfin["_key"] = kfin["regn"].apply(_clean_regn)
+
+    bse_keys = set(bse["_key"])
+    rta_keys = set(cams["_key"]) | set(kfin["_key"])
+
+    bse_unmatched = bse[~bse["_key"].isin(rta_keys)]
+    cams_direct = cams[~cams["_key"].isin(bse_keys)]
+    kfin_direct = kfin[~kfin["_key"].isin(bse_keys)]
+
+    return {
+        "active_sips_deduped": len(bse) + len(cams_direct) + len(kfin_direct),
+        "bse_sips": len(bse),
+        "bse_unmatched_in_rta": len(bse_unmatched),
+        "cams_direct_sips": len(cams_direct),
+        "kfin_direct_sips": len(kfin_direct),
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# EMAIL REPORT BUTTON UI COMPONENT
+# ══════════════════════════════════════════════════════════════
+def render_email_report_button(
+    client_code: str,
+    client_name: str,
+    report_type: str,  # "Capital Gain" or "Valuation"
+    fy_str: str = None,
+    period_str: str = None,
+    html_content: str = None,
+    pdf_content: bytes = None,
+    key_prefix: str = "email",
+):
+    """
+    Render an 'Email Report' button with recipient input and status display.
+    
+    Returns:
+        True if email was triggered, False otherwise
+    """
+    
+    # Get client email
+    client_email = mail_sync.get_client_email(client_code)
+    creds_configured = mail_sync.credentials_configured()
+    
+    # Check if Gmail is configured
+    if not creds_configured:
+        st.caption("📧 *Gmail not configured — set up in Admin > Mailback Sync to enable emailing*")
+        return False
+    
+    with st.expander("📧 Email This Report", expanded=False):
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+                recipient_email = st.text_input(
+                "Recipient Email",
+                value=client_email or "",
+                placeholder="client@example.com",
+                key=f"{key_prefix}_recipient_{client_code}"
+            )
+        with col2:
+            st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+            send_btn = st.button(
+                "📤 Send",
+                type="primary",
+                width="stretch",
+                key=f"{key_prefix}_send_btn_{client_code}",
+                disabled=not recipient_email or not pdf_content
+            )
+
+        # Optional CC
+        cc_input = st.text_input(
+            "CC (optional, comma-separated)",
+            placeholder="advisor@example.com, partner@example.com",
+            key=f"{key_prefix}_cc_{client_code}"
+        )
+
+    
+        cc_list = [e.strip() for e in cc_input.split(",") if e.strip()] if cc_input else None
+        
+        # Status display
+    
+        email_status = mail_sync.get_email_status()
+        if email_status["sending"]:
+            st.info("⏳ Sending email...")
+        elif email_status["done"]:
+            if email_status["ok"]:
+                st.success(email_status["msg"])
+            else:
+                st.error(email_status["msg"])
+        
+        if send_btn and recipient_email and pdf_content:
+            safe_name = client_name.replace(" ", "_").replace("/", "-")[:30]
+            if report_type == "Capital Gain" and fy_str:
+                filename = f"Capital_Gain_{safe_name}_FY{fy_str}.pdf"
+                subject = f"Capital Gain Report - FY {fy_str} - {client_name}"
+            else:
+                filename = f"Valuation_{safe_name}_{datetime.now().strftime('%Y%m%d')}.pdf"
+                subject = f"Portfolio Valuation Report - {client_name} - {datetime.now().strftime('%d/%m/%Y')}"
+
+            with st.spinner("Sending email..."):
+                _send = getattr(mail_sync, "send_report_email_background", None) or mail_sync.send_report_email
+                success, msg = _send(
+                    to_email=recipient_email,
+                    subject=subject,
+                    html_body=generate_email_body(client_name, report_type, period_str),
+                    pdf_bytes=pdf_content,
+                    pdf_filename=filename,
+                    cc_emails=cc_list,
+                )
+
+            if success:
+                st.success(msg)
+            else:
+                st.error(msg)
+            return True
+    
+    return False
+
+
+# ==================== FOLIO JOIN (CAMS/KFin × BSE × AMFI) ====================
+
+def _get_bse_amc_column(get_conn) -> Optional[str]:
+    """
+    Probe bse_scheme_master's actual schema to find whichever column holds
+    the AMC/fund-house name string. Used only as a fallback label for ISINs
+    that don't resolve via AMFI.
+    """
+    candidates = [
+        "amc_code", "amc_ind", "amc_name",
+        "AMC", "AMC_Name", "AMC_NAME", "Amc_Name",
+        "Fund_Name", "FUND_NAME", "Fund", "FUND",
+        "AMC_Code", "AMC_CODE",
+    ]
+    with get_conn() as conn:
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(bse_scheme_master)").fetchall()]
+    # log.info("[NAV-FLOW] bse_scheme_master columns: %s", cols)
+    for c in candidates:
+        if c in cols:
+            log.info("[NAV-FLOW] Using '%s' as BSE AMC-name fallback column", c)
+            return c
+    log.warning("[NAV-FLOW] No AMC-name column found in bse_scheme_master (checked %s). "
+                "BSE fallback name disabled — rows will rely on AMFI ISIN match only.", candidates)
+    return None
+
+@st.cache_data(show_spinner=False)
+def get_all_folios_with_isin_and_nav(_get_conn, _v: int, _force_reload: bool = False) -> pd.DataFrame:
+    """
+    Master batch function — reads NAV/AMC from the saved file (NOT live AMFI):
+      1. Load AMFI NAV + AMC index from disk (in-memory cached per process)
+      2. Query CAMS folio master JOIN deduplicated bse_scheme_master
+      3. Query KFin folio master JOIN deduplicated bse_scheme_master + units
+      4. Map NAV + AMC name (canonical, from saved file) in-memory by ISIN
+      5. Return combined DataFrame
+
+    _force_reload=True re-reads the saved file from disk (not the network) —
+    use this if you just ran download_and_save_nav() and want fresh numbers
+    without restarting the app.
+
+    NOTE: param is _get_conn (leading underscore) so Streamlit's cache
+    decorator skips hashing it — get_conn is a function object and can't
+    be hashed. All internal DB calls must use _get_conn(), not get_conn().
+    """
+    log.info("=" * 60)
+    log.info("[NAV-FLOW] Starting get_all_folios_with_isin_and_nav()")
+
+    # ── Step 1: Load NAV + AMC index from saved file ──
+    log.info("[NAV-FLOW][Step 1] Loading AMFI NAV + AMC index from saved file (_force_reload=%s)...",
+             _force_reload)
+    nav_map = _amfi.load(force=_force_reload)
+    log.info("[NAV-FLOW][Step 1] Index ready: %s ISINs (NAV), %s ISINs (AMC)",
+             len(nav_map), len(_amfi._amc_by_isin))
+    if not nav_map:
+        log.error("[NAV-FLOW][Step 1] nav_map is EMPTY — no saved NAV file found or it's unreadable. "
+                  "Every row downstream will have current_nav=None, so total AUM will be 0. "
+                  "Fix: call download_and_save_nav_if_needed() at startup, or use the admin "
+                  "'Redownload NAV' button. Checked dir: %s", os.path.abspath(NAV_TEXT_DIR))
+
+    # ── Step 2: Deduplicated BSE Scheme Master subquery ──
+    log.info("[NAV-FLOW][Step 2] Building deduplicated BSE lookup...")
+    bse_amc_col = _get_bse_amc_column(_get_conn)
+    bse_amc_select = f"MAX({bse_amc_col}) AS bse_amc_name" if bse_amc_col else "NULL AS bse_amc_name"
+    bse_dedup = f"""
+        SELECT 
+            UPPER(TRIM(Channel_Partner_Code)) AS cp_code,
+            MAX(ISIN) AS ISIN,
+            MAX(Scheme_Name) AS Scheme_Name,
+            {bse_amc_select}
+        FROM bse_scheme_master
+        WHERE Channel_Partner_Code IS NOT NULL AND TRIM(Channel_Partner_Code) != ''
+        GROUP BY UPPER(TRIM(Channel_Partner_Code))
+    """
+
+    # ── Step 3: CAMS Query ──
+    log.info("[NAV-FLOW][Step 3] Building CAMS SQL...")
+    cams_sql = f"""
+    SELECT 
+        f.foliochk          AS folio_id,
+        f.product           AS product_code,
+        f.inv_name          AS investor_name,
+        f.rupee_bal         AS file_aum,
+        f.clos_bal          AS units,
+        bsm.ISIN            AS isin,
+        bsm.Scheme_Name     AS scheme_name,
+        bsm.bse_amc_name    AS bse_amc_name,
+        'CAMS'              AS rta
+    FROM cams_wbr9_folio f
+    LEFT JOIN ({bse_dedup}) bsm
+        ON UPPER(TRIM(f.product)) = bsm.cp_code
+    WHERE f.product IS NOT NULL AND TRIM(f.product) != ''
+    """
+
+    # ── Step 4: KFin Query ──
+    log.info("[NAV-FLOW][Step 4] Building KFin SQL...")
+    kfin_sql = f"""
+    SELECT 
+        f.folio             AS folio_id,
+        f.product_code      AS product_code,
+        f.investor_name     AS investor_name,
+        NULL                AS file_aum,
+        u.total_units       AS units,
+        bsm.ISIN            AS isin,
+        bsm.Scheme_Name     AS scheme_name,
+        bsm.bse_amc_name    AS bse_amc_name,
+        'KFinTech'          AS rta
+    FROM kfin_mfsd211_folio f
+    INNER JOIN (
+        SELECT 
+            td_acno AS folio_id,
+            fmcode  AS product_code,
+            SUM(td_units) AS total_units
+        FROM v_kfin_txn_active
+        WHERE td_units IS NOT NULL
+        GROUP BY td_acno, fmcode
+        HAVING total_units != 0
+    ) u 
+        ON f.folio = u.folio_id 
+        AND UPPER(TRIM(f.product_code)) = UPPER(TRIM(u.product_code))
+    LEFT JOIN ({bse_dedup}) bsm
+        ON UPPER(TRIM(f.product_code)) = bsm.cp_code
+    WHERE f.product_code IS NOT NULL AND TRIM(f.product_code) != ''
+    """
+
+    # ── Step 5: Execute Queries ──
+    log.info("[NAV-FLOW][Step 5] Executing SQL queries...")
+    with _get_conn() as conn:
+        cams_df = pd.read_sql(cams_sql, conn)
+        log.info("[NAV-FLOW][Step 5] CAMS rows fetched: %s", len(cams_df))
+        kfin_df = pd.read_sql(kfin_sql, conn)
+        log.info("[NAV-FLOW][Step 5] KFin rows fetched: %s", len(kfin_df))
+
+    # ── Step 6: Combine ──
+    combined = pd.concat([cams_df, kfin_df], ignore_index=True)
+    log.info("[NAV-FLOW][Step 6] Combined rows: %s", len(combined))
+
+    # ── Step 7: NAV + AMC Lookup ──
+    log.info("[NAV-FLOW][Step 7] Mapping ISIN → NAV and ISIN → AMC name...")
+
+    def _lookup_nav(isin):
+        if pd.isna(isin) or not str(isin).strip():
+            return pd.Series([None, None])
+        hit = nav_map.get(str(isin).strip().upper())
+        return pd.Series(hit) if hit else pd.Series([None, None])
+
+    nav_cols = combined["isin"].apply(_lookup_nav)
+    combined["current_nav"] = nav_cols[0]
+    combined["nav_date"] = nav_cols[1]
+
+    combined["amfi_amc_name"] = combined["isin"].apply(
+        lambda i: _amfi.get_amc(i) if pd.notna(i) and str(i).strip() else None
+    )
+
+    combined["amc_name"] = combined["amfi_amc_name"].fillna(combined["bse_amc_name"])
+    combined["amc_name_source"] = combined["amfi_amc_name"].apply(
+        lambda x: "AMFI" if pd.notna(x) and str(x).strip() else None
+    )
+    combined.loc[combined["amc_name_source"].isna() & combined["bse_amc_name"].notna(),
+    "amc_name_source"] = "BSE (unresolved)"
+    combined["amc_name_source"] = combined["amc_name_source"].fillna("Unknown")
+
+    total_with_isin = combined["isin"].notna().sum()
+    total_with_nav = combined["current_nav"].notna().sum()
+    total_with_amc = combined["amc_name"].notna().sum()
+    total_amfi_amc = (combined["amc_name_source"] == "AMFI").sum()
+    log.info("[NAV-FLOW][Step 7] ISIN→NAV: %s with ISIN, %s with NAV (%s%% coverage)",
+             total_with_isin, total_with_nav,
+             round(total_with_nav / total_with_isin * 100, 2) if total_with_isin else 0)
+    log.info("[NAV-FLOW][Step 7] AMC name resolved: %s/%s rows (%s via AMFI-canonical, %s via BSE fallback)",
+             total_with_amc, len(combined), total_amfi_amc, total_with_amc - total_amfi_amc)
+
+    # ── Step 8: Calculate AUM ──
+    combined["nav_based_aum"] = combined.apply(
+        lambda r: r["units"] * r["current_nav"]
+        if pd.notna(r.get("units")) and pd.notna(r["current_nav"])
+        else None,
+        axis=1
+    )
+    total_aum = combined["nav_based_aum"].sum()
+    log.info("[NAV-FLOW][Step 8] Total NAV-based AUM: ₹%s", f"{total_aum:,.2f}" if pd.notna(total_aum) else "N/A")
+
+    # ── Step 9: Final Flags & Reorder ──
+    combined["has_isin"] = combined["isin"].notna()
+    combined["has_nav"] = combined["current_nav"].notna()
+    combined["has_amc"] = combined["amc_name"].notna()
+
+    front = [
+        "rta", "folio_id", "investor_name", "product_code",
+        "scheme_name", "isin", "has_isin",
+        "amc_name", "amc_name_source", "has_amc",
+        "current_nav", "nav_date", "has_nav",
+        "units", "file_aum", "nav_based_aum"
+    ]
+    front = [c for c in front if c in combined.columns]
+    back = [c for c in combined.columns if c not in front]
+    result = combined[front + back]
+
+    log.info("[NAV-FLOW] Complete. Returning %s rows x %s cols", len(result), len(result.columns))
+    log.info("=" * 60)
+    return result
+
+
+
+@st.cache_data(show_spinner=False)
+def get_folio_nav_summary(_get_conn, _v: int, _force_reload: bool = False) -> dict:
+    """Quick stats for Streamlit metrics."""
+    log.info("[NAV-FLOW] Generating folio NAV summary...")
+
+    df = get_all_folios_with_isin_and_nav(_get_conn, _v, _force_reload=_force_reload)
+    cams_df = df[df["rta"] == "CAMS"]
+    kfin_df = df[df["rta"] == "KFinTech"]
+
+    cams_nav_aum = float(cams_df["nav_based_aum"].sum()) if "nav_based_aum" in cams_df.columns else 0.0
+    cams_file_aum = float(cams_df["file_aum"].sum()) if "file_aum" in cams_df.columns else 0.0
+    kfin_nav_aum = float(kfin_df["nav_based_aum"].sum()) if "nav_based_aum" in kfin_df.columns else 0.0
+
+    cams_unmatched = int((cams_df["has_isin"] & ~cams_df["has_nav"]).sum())
+    kfin_unmatched = int((kfin_df["has_isin"] & ~kfin_df["has_nav"]).sum())
+
+    return {
+        "total_folios": len(df),
+        "cams_folios": len(cams_df),
+        "kfin_folios": len(kfin_df),
+        "with_isin": int(df["has_isin"].sum()),
+        "isin_coverage_pct": round(df["has_isin"].mean() * 100, 2) if len(df) else 0,
+        "with_nav": int(df["has_nav"].sum()),
+        "nav_coverage_pct": round(df["has_nav"].mean() * 100, 2) if len(df) else 0,
+        "with_amc": int(df["has_amc"].sum()),
+        "amc_coverage_pct": round(df["has_amc"].mean() * 100, 2) if len(df) else 0,
+        "amc_resolved_via_amfi": int((df["amc_name_source"] == "AMFI").sum()),
+
+        "total_aum": cams_nav_aum + kfin_nav_aum,
+        "cams_aum": cams_nav_aum,
+        "cams_file_aum": cams_file_aum,
+        "cams_unmatched_nav": cams_unmatched,
+        "kfin_aum": kfin_nav_aum,
+        "kfin_unmatched_nav": kfin_unmatched,
+
+        "cams_with_nav": int(cams_df["has_nav"].sum()),
+        "cams_total": len(cams_df),
+        "kfin_with_nav": int(kfin_df["has_nav"].sum()),
+        "kfin_total": len(kfin_df),
+
+        "df": df,
+    }
+
+def load_amc_breakdown_by_isin(get_conn, _v) -> pd.DataFrame:
+
+    """AMC-wise AUM + folio breakdown, grouped by canonical AMFI AMC name (via ISIN)."""
+    df = get_all_folios_with_isin_and_nav(get_conn, _v)
+    if df.empty:
+        return pd.DataFrame()
+
+    df = df.copy()
+    df["amc_name"] = df["amc_name"].fillna("⚠️ Unresolved (no ISIN match)")
+
+    grouped = (
+        df.groupby(["amc_name", "rta"], dropna=False)
+        .agg(
+            folios=("folio_id", "nunique"),
+            records=("folio_id", "count"),
+            aum=("nav_based_aum", "sum"),
+        )
+        .reset_index()
+        .sort_values("aum", ascending=False)
+    )
+    return grouped
+
+
+@st.cache_data(show_spinner=False)
+def load_active_amcs(_v: int) -> list:
+    """AMCs you currently have business with (from folio holdings, not brokerage files)."""
+    df = get_all_folios_with_isin_and_nav(get_conn, _v)
+    if df.empty:
+        return []
+    return sorted(df["amc_name"].dropna().unique().tolist())
+
+
+# ══════════════════════════════════════════════════════════════
+# SHARED ENRICHED FOLIO+NAV DATAFRAME (server-wide cache)
+# ══════════════════════════════════════════════════════════════
+@st.cache_data(show_spinner="⏳ Loading NAV data...", ttl=1800)
+def get_enriched_folio_nav_df(_v: int) -> pd.DataFrame:
+    """
+    Single source of truth for folio+NAV+invested data.
+    Shared across ALL browser sessions. Recomputes only on:
+      - data_version() change (upload happened)
+      - TTL expiry (30 min safety net)
+    """
+    log.info("[NAV-ENRICH] Cache miss — rebuilding enriched folio_nav_df (v=%s)", _v)
+
+    # NOTE: no network calls here. The standalone background_worker.py
+    # is responsible for keeping the NAV snapshot fresh on disk. If the
+    # snapshot is missing, this just works with whatever's available.
+
+    folio_nav_df = get_all_folios_with_isin_and_nav(get_conn, _v)
+    if folio_nav_df.empty:
+        return folio_nav_df
+
+    folio_nav_df['product_code_norm'] = (
+        folio_nav_df['product_code'].astype(str).str.strip().str.upper()
+    )
+
+    # ── CAMS: overwrite file_aum & units from transaction sums ──
+    cams_folios_all = folio_nav_df.loc[folio_nav_df['rta'] == 'CAMS', 'folio_id'].unique().tolist()
+    if cams_folios_all:
+        cams_invested_all = get_cams_invested_per_scheme(cams_folios_all, _v)
+        if not cams_invested_all.empty:
+            cams_invested_all['product_code_norm'] = (
+                cams_invested_all['product_code'].astype(str).str.strip().str.upper()
+            )
+            folio_nav_df = folio_nav_df.merge(
+                cams_invested_all,
+                on=['folio_id', 'product_code_norm'],
+                how='left',
+                suffixes=('', '_cams'),
+            )
+            m = folio_nav_df['rta'] == 'CAMS'
+            has = m & folio_nav_df['invested_amount'].notna()
+            folio_nav_df.loc[has, 'file_aum']      = folio_nav_df.loc[has, 'invested_amount']
+            folio_nav_df.loc[has, 'units']         = folio_nav_df.loc[has, 'total_units']
+            folio_nav_df.loc[has, 'nav_based_aum'] = (
+                folio_nav_df.loc[has, 'units'] * folio_nav_df.loc[has, 'current_nav']
+            )
+            folio_nav_df = folio_nav_df.drop(
+                columns=['invested_amount', 'total_units', 'product_code_norm_cams'],
+                errors='ignore',
+            )
+
+    # ── KFinTech: overwrite file_aum from transaction sums ──
+    kfin_folios_all = folio_nav_df.loc[folio_nav_df['rta'] == 'KFinTech', 'folio_id'].unique().tolist()
+    if kfin_folios_all:
+        kfin_invested_all = get_kfin_invested_per_scheme(kfin_folios_all, _v)
+        if not kfin_invested_all.empty:
+            kfin_invested_all['product_code_norm'] = (
+                kfin_invested_all['product_code'].astype(str).str.strip().str.upper()
+            )
+            folio_nav_df = folio_nav_df.merge(
+                kfin_invested_all,
+                on=['folio_id', 'product_code_norm'],
+                how='left',
+                suffixes=('', '_kfin'),
+            )
+            m = folio_nav_df['rta'] == 'KFinTech'
+            has = m & folio_nav_df['invested_amount'].notna()
+            folio_nav_df.loc[has, 'file_aum']      = folio_nav_df.loc[has, 'invested_amount']
+            folio_nav_df.loc[has, 'nav_based_aum'] = (
+                folio_nav_df.loc[has, 'units'] * folio_nav_df.loc[has, 'current_nav']
+            )
+            folio_nav_df = folio_nav_df.drop(
+                columns=['invested_amount', 'product_code_norm_kfin'],
+                errors='ignore',
+            )
+
+    folio_nav_df = folio_nav_df.drop(columns=['product_code_norm'], errors='ignore')
+
+    # ── Guarantee numeric dtypes at the source so every downstream
+    #    arithmetic/diff/sort op stays float64. Any TEXT row from SQLite
+    #    will otherwise poison the whole column into object dtype.
+    for col in ("units", "current_nav", "file_aum", "nav_based_aum"):
+        if col in folio_nav_df.columns:
+            folio_nav_df[col] = pd.to_numeric(folio_nav_df[col], errors="coerce")
+
+    log.info("[NAV-ENRICH] Rebuilt %s rows", len(folio_nav_df))
+    return folio_nav_df
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def get_folio_nav_summary_cached(_v: int) -> dict:
+    return get_folio_nav_summary(get_conn, _v)
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def get_client_xirr_batch(_v: int, folio_key: tuple) -> dict:
+    """
+    Cached XIRR computation for a client's folios.
+    folio_key: sorted tuple of (folio_id, rta, product_code, current_value_rounded).
+    Including current_value makes the cache invalidate when NAV changes.
+    """
+    result = {}
+    for folio_id, rta, prodcode, current_value in folio_key:
+        try:
+            xres = xirr.compute_xirr_for_folio(
+                folio_no=folio_id,
+                _get_conn=get_conn,
+                rta=rta,
+                product_code=prodcode,
+                current_value=current_value,
+                verbose=False,
+            )
+            if xres and xres.get("xirr") is not None:
+                result[folio_id] = xres["xirr_pct"]
+        except Exception as e:
+            log.warning("[XIRR] %s failed: %s", folio_id, e)
+    return result
+
+
+def normalize_folio(folio: str) -> str:
+    if not folio:
+        return ""
+    try:
+        if pd.isna(folio):
+            return ""
+    except Exception:
+        pass
+    return str(folio).strip().split("/")[0].strip().lower()
+
+
+def theme_plotly(fig, dark: bool):
+    text_c = "#e6edf3" if dark else "#1a1a2e"
+    grid_c = "#30363d" if dark else "#e2e8f0"
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font_color=text_c,
+        title_font_color=text_c,
+        legend_font_color=text_c,
+        xaxis=dict(gridcolor=grid_c, linecolor=grid_c),
+        yaxis=dict(gridcolor=grid_c, linecolor=grid_c),
+    )
+    return fig
+
+
+# Calcute the Invested Amount for Karvy Schemes
+@st.cache_data(show_spinner=False)
+def get_kfin_invested_amount(folio_list, _v: int):
+    if not folio_list:
+        return 0.0
+
+    with get_conn() as conn:
+        placeholders = ','.join(['?'] * len(folio_list))
+        query = f"""
+            SELECT COALESCE(SUM(td_amt), 0) as total_invested
+            FROM v_kfin_txn_active 
+            WHERE td_acno IN ({placeholders})
+        """
+        result = conn.execute(query, folio_list).fetchone()[0]
+        return float(result) if result is not None else 0.0
+
+
+@st.cache_data(show_spinner=False)
+def get_kfin_invested_per_scheme(folio_list: list, _v: int) -> pd.DataFrame:
+    """
+    Return invested amount PER SCHEME for KFin folios.
+    Groups by folio + product_code so each scheme gets its own total.
+    """
+    if not folio_list:
+        return pd.DataFrame(columns=["folio_id", "product_code", "invested_amount"])
+
+    placeholders = ",".join(["?"] * len(folio_list))
+    with get_conn() as conn:
+        query = f"""
+            SELECT
+                td_acno   AS folio_id,
+                UPPER(TRIM(fmcode)) AS product_code,
+                COALESCE(SUM(td_amt), 0) AS invested_amount
+            FROM v_kfin_txn_active
+            WHERE td_acno IN ({placeholders})
+            GROUP BY td_acno, UPPER(TRIM(fmcode))
+        """
+        return pd.read_sql(query, conn, params=folio_list)
+
+
+@st.cache_data(show_spinner=False)
+def get_cams_invested_per_scheme(folio_list: list, _v: int) -> pd.DataFrame:
+    """
+    Return invested amount (FIFO cost basis) AND total units PER SCHEME for CAMS folios.
+
+    invested_amount = sum(remaining_units * purchase_rate) across all open lots.
+    total_units     = sum(remaining_units) — same net units as before.
+
+    Uses cg.replay_folio_scheme() so redemptions consume oldest lots first.
+    """
+    if not folio_list:
+        return pd.DataFrame(columns=["folio_id", "product_code", "invested_amount", "total_units"])
+
+    # ── Detect which column holds the scheme code ──
+    scheme_col_candidates = [
+        "prodcode", "product_code", "scheme_code", "schemecode",
+        "scheme", "product", "fund_code", "fundcode", "plan_code", "plancode"
+    ]
+    scheme_col = None
+    with get_conn() as conn:
+        # Check the view instead of the raw table
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(v_cams_txn_active)").fetchall()]
+    for c in scheme_col_candidates:
+        if c in cols:
+            scheme_col = c
+            break
+
+    placeholders = ",".join(["?"] * len(folio_list))
+    with get_conn() as conn:
+        if scheme_col:
+            query = f"""
+                SELECT
+                    folio_no      AS folio_id,
+                    UPPER(TRIM({scheme_col})) AS product_code,
+                    COALESCE(txn_date_iso, traddate) AS traddate,
+                    trxntype,
+                    trxn_nature,
+                    units,
+                    purprice,
+                    amount
+                FROM v_cams_txn_active
+                WHERE folio_no IN ({placeholders})
+            """
+        else:
+            query = f"""
+                SELECT
+                    folio_no      AS folio_id,
+                    NULL          AS product_code,
+                    COALESCE(txn_date_iso, traddate) AS traddate,
+                    trxntype,
+                    trxn_nature,
+                    units,
+                    purprice,
+                    amount
+                FROM v_cams_txn_active
+                WHERE folio_no IN ({placeholders})
+            """
+        df = pd.read_sql(query, conn, params=folio_list)
+
+    if df.empty:
+        return pd.DataFrame(columns=["folio_id", "product_code", "invested_amount", "total_units"])
+
+    # ── Chronological sort (critical for FIFO) ──
+    df["_sort_date"] = pd.to_datetime(df["traddate"], errors="coerce", format="mixed")
+    df = df.sort_values(["folio_id", "product_code", "_sort_date"], kind="stable").reset_index(drop=True)
+    df = df.drop(columns=["_sort_date"])
+
+    # ── Compute FIFO cost basis per folio+scheme ──
+    results = []
+    for (fid, pcode), group in df.groupby(["folio_id", "product_code"]):
+        try:
+            lots, _ = cg.replay_folio_scheme(group)
+            remaining_units = sum(l.remaining_units for l in lots)
+            fifo_cost = sum(l.remaining_units * l.rate for l in lots)
+            results.append({
+                "folio_id": fid,
+                "product_code": pcode,
+                "invested_amount": fifo_cost,
+                "total_units": remaining_units,
+            })
+        except Exception as e:
+            log.warning("FIFO failed for CAMS folio %s / %s: %s", fid, pcode, e)
+            # Fallback to net cash flow (same as old behaviour)
+            net_amount = 0.0
+            net_units = 0.0
+            for _, r in group.iterrows():
+                is_redemption = str(r.get("trxntype", "")).strip().upper() == "R1"
+                amt = float(r["amount"]) if pd.notna(r["amount"]) else 0.0
+                ut = float(r["units"]) if pd.notna(r["units"]) else 0.0
+                if is_redemption:
+                    net_amount -= amt
+                    net_units -= ut
+                else:
+                    net_amount += amt
+                    net_units += ut
+            results.append({
+                "folio_id": fid,
+                "product_code": pcode,
+                "invested_amount": net_amount,
+                "total_units": net_units,
+            })
+
+    return pd.DataFrame(results)
+
+
+# ==================== CONSOLIDATED CLIENT LOADER ====================
+@st.cache_data
+def load_all_clients_with_display(_v: int) -> pd.DataFrame:
+    """Single source of truth for client search across all tabs."""
+    with get_conn() as conn:
+        return pd.read_sql("""
+            SELECT 
+                client_code,
+                primary_holder_first_name || ' ' || primary_holder_last_name AS name,
+                primary_holder_pan AS pan,
+                guardian_pan,
+                indian_mobile_no AS mobile,
+                email,
+                city
+            FROM bse_client_master
+        """, conn)
+
+def render_client_selector(key_prefix: str, exclude_minors: bool = False) -> tuple:
+    """Reusable client selector UI. Returns (client_code, client_row)."""
+    clients_df = load_all_clients_with_display(data_version())
+    
+    if clients_df.empty:
+        st.warning("No clients found.")
+        return None, None
+    
+    if exclude_minors:
+        clients_df = clients_df[clients_df['pan'].notna() & (clients_df['pan'].str.strip() != '')]
+    
+    clients_df['display'] = clients_df.apply(
+        lambda r: f"{r['name']} | PAN: {r['pan'] or 'Minor'} | {r['client_code']}",
+        axis=1
+    )
+    
+    selected = st.selectbox(
+        "🔍 Select Client",
+        clients_df['display'].tolist(),
+        index=None,
+        placeholder="Type to search...",
+        key=f"{key_prefix}_client_select"
+    )
+    
+    if not selected:
+        return None, None
+    
+    return selected, clients_df[clients_df['display'] == selected].iloc[0]
+
+
+# ==================== DATA LOADERS ====================
+@st.cache_data(show_spinner=False)
+def load_table_summary(table: str, _v: int) -> pd.DataFrame:
+    with get_conn() as conn:
+        return pd.read_sql(f"SELECT * FROM {table} LIMIT 1000", conn)
+
+
+@st.cache_data(show_spinner=False)
+def load_db_stats(_v: int) -> dict:
+    stats = {}
+    with get_conn() as conn:
+        tables = [
+            "bse_client_master", "bse_sip", "bse_scheme_master",
+            "cams_wbr4_aum", "cams_wbr9_folio", "cams_wbr2_transaction",
+            "cams_wbr49_sip", "cams_wbr77_brokerage",
+            "kfin_mfsd203_aum", "kfin_mfsd211_folio", "kfin_mfsd201_transaction",
+            "kfin_mfsd243_sip", "kfin_mfsd205_brokerage",
+            "monthly_brokerage", "amc_code_map"
+        ]
+        for t in tables:
+            try:
+                stats[t] = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+            except:
+                stats[t] = 0
+    return stats
+
+@st.cache_data(show_spinner=False)
+def load_dashboard_summary(_v: int) -> dict:
+    """Load key metrics for dashboard."""
+    summary = {}
+    with get_conn() as conn:
+        # ── BSE ──
+        summary["total_clients"] = conn.execute("SELECT COUNT(*) FROM bse_client_master").fetchone()[0]
+        summary["total_xsip"] = conn.execute("SELECT COUNT(*) FROM bse_sip").fetchone()[0]
+        summary["active_xsip"] = conn.execute(
+            "SELECT COUNT(*) FROM bse_sip WHERE LOWER(COALESCE(status, '')) LIKE '%active%'"
+        ).fetchone()[0]
+        summary["bse_schemes"] = conn.execute("SELECT COUNT(*) FROM bse_scheme_master").fetchone()[0]
+
+        # ── CAMS ──
+        summary["cams_folios"] = conn.execute(
+            "SELECT COUNT(DISTINCT foliochk) FROM cams_wbr9_folio"
+        ).fetchone()[0]
+        summary["cams_txns"] = conn.execute("SELECT COUNT(*) FROM v_cams_txn_active").fetchone()[0]
+        summary["cams_sips"] = conn.execute("SELECT COUNT(*) FROM cams_wbr49_sip").fetchone()[0]
+        # Invested amount = sum of transaction amounts (same logic as KFin)
+        summary["cams_aum"] = conn.execute(
+            "SELECT COALESCE(SUM(CASE WHEN trxntype = 'R1' THEN -amount ELSE amount END), 0) FROM v_cams_txn_active"
+        ).fetchone()[0]
+        summary["cams_brokerage"] = conn.execute(
+            "SELECT COALESCE(SUM(brkage_amt), 0) FROM cams_wbr77_brokerage"
+        ).fetchone()[0]
+        summary["cams_amcs"] = conn.execute(
+            "SELECT COUNT(DISTINCT amc_code) FROM cams_wbr9_folio WHERE COALESCE(amc_code, '') != ''"
+        ).fetchone()[0]
+
+        # ── KFinTech ──
+        summary["kfin_folios"] = conn.execute(
+            "SELECT COUNT(DISTINCT Folio) FROM kfin_mfsd211_folio"
+        ).fetchone()[0]
+        summary["kfin_txns"] = conn.execute("SELECT COUNT(*) FROM v_kfin_txn_active").fetchone()[0]
+        summary["kfin_sips"] = conn.execute("SELECT COUNT(*) FROM kfin_mfsd243_sip").fetchone()[0]
+        summary["kfin_brokerage"] = conn.execute(
+            "SELECT COALESCE(SUM(brokerage), 0) FROM kfin_mfsd205_brokerage"
+        ).fetchone()[0]
+        summary["kfin_amcs"] = conn.execute(
+            "SELECT COUNT(DISTINCT Fund) FROM kfin_mfsd211_folio WHERE COALESCE(Fund, '') != ''"
+        ).fetchone()[0]
+
+        # KFin AUM: sum td_amt grouped by td_acno from MFSD201
+        try:
+            kfin_aum_result = conn.execute("""
+                                           SELECT COALESCE(SUM(inner_sum), 0)
+                                           FROM (SELECT td_acno, SUM(td_amt) as inner_sum
+                                                 FROM v_kfin_txn_active
+                                                 GROUP BY td_acno)
+                                           """).fetchone()[0]
+            summary["kfin_aum"] = float(kfin_aum_result) if kfin_aum_result else 0.0
+        except Exception as e:
+            log.warning("KFin AUM calculation failed: %s", e)
+            summary["kfin_aum"] = 0.0
+
+        # ── Totals ──
+        summary["total_aum"] = summary["cams_aum"] + summary["kfin_aum"]
+        summary["total_brokerage"] = summary["cams_brokerage"] + summary["kfin_brokerage"]
+
+    return summary
+
+
+@st.cache_data(show_spinner=False)
+def load_amc_breakdown(_v: int) -> pd.DataFrame:
+    """AMC-wise AUM and folio summary. KFin uses Fund column, td_acno for join."""
+    with get_conn() as conn:
+        # ── CAMS ──
+        # ── CAMS ──
+        # Folio counts from folio master
+        cams_wbr9_folio_df = pd.read_sql("""
+            SELECT amc_code as amc,
+                   COUNT(DISTINCT foliochk) as folios,
+                   COUNT(*) as records
+            FROM cams_wbr9_folio 
+            WHERE COALESCE(amc_code, '') != ''
+            GROUP BY amc_code
+        """, conn)
+
+        # AUM from transactions (invested amount) instead of rupee_bal
+        cams_txn_aum_df = pd.read_sql("""
+                                      SELECT amc_code                                                                 as amc,
+                                             COALESCE(SUM(CASE WHEN trxntype = 'R1' THEN -amount ELSE amount END),
+                                                      0)                                                              as aum
+                                      FROM v_cams_txn_active
+                                      WHERE COALESCE(amc_code, '') != ''
+                                      GROUP BY amc_code
+                                      """, conn)
+
+        if cams_wbr9_folio_df.empty and cams_txn_aum_df.empty:
+            cams_combined = pd.DataFrame()
+        elif cams_wbr9_folio_df.empty:
+            cams_combined = cams_txn_aum_df.copy()
+            cams_combined["folios"] = 0
+            cams_combined["records"] = 0
+        elif cams_txn_aum_df.empty:
+            cams_combined = cams_wbr9_folio_df.copy()
+            cams_combined["aum"] = 0.0
+        else:
+            cams_combined = cams_wbr9_folio_df.merge(cams_txn_aum_df, on="amc", how="outer").fillna(0)
+
+        if not cams_combined.empty:
+            cams_combined["rta"] = "CAMS"
+
+        # ── KFinTech ──
+        # AUM from transactions grouped by Fund (AMC) via td_acno join
+        try:
+            kfin_mfsd203_aum_df = pd.read_sql("""
+                                              SELECT kf.Fund                     as amc,
+                                                     COALESCE(SUM(kt.td_amt), 0) as aum
+                                              FROM v_kfin_txn_active kt
+                                                       JOIN kfin_mfsd211_folio kf ON kt.td_acno = kf.Folio
+                                              WHERE COALESCE(kf.Fund, '') != ''
+                                              GROUP BY kf.Fund
+                                              """, conn)
+        except Exception as e:
+            log.warning("KFin AUM breakdown failed: %s", e)
+            kfin_mfsd203_aum_df = pd.DataFrame(columns=["amc", "aum"])
+
+        try:
+            kfin_mfsd211_folio_df = pd.read_sql("""
+                                                SELECT Fund                  as amc,
+                                                       COUNT(DISTINCT Folio) as folios,
+                                                       COUNT(*)              as records
+                                                FROM kfin_mfsd211_folio
+                                                WHERE COALESCE(Fund, '') != ''
+                                                GROUP BY Fund
+                                                """, conn)
+        except Exception as e:
+            log.warning("KFin folio breakdown failed: %s", e)
+            kfin_mfsd211_folio_df = pd.DataFrame(columns=["amc", "folios", "records"])
+
+        if kfin_mfsd203_aum_df.empty and kfin_mfsd211_folio_df.empty:
+            kfin_combined = pd.DataFrame()
+        elif kfin_mfsd203_aum_df.empty:
+            kfin_combined = kfin_mfsd211_folio_df.copy()
+            kfin_combined["aum"] = 0.0
+        elif kfin_mfsd211_folio_df.empty:
+            kfin_combined = kfin_mfsd203_aum_df.copy()
+            kfin_combined["folios"] = 0
+            kfin_combined["records"] = 0
+        else:
+            kfin_combined = kfin_mfsd211_folio_df.merge(kfin_mfsd203_aum_df, on="amc", how="outer").fillna(0)
+
+        if not kfin_combined.empty:
+            kfin_combined["rta"] = "KFinTech"
+
+        # ── Combine ──
+        if cams_combined.empty and kfin_combined.empty:
+            return pd.DataFrame()
+
+        combined = pd.concat([cams_combined, kfin_combined], ignore_index=True)
+        for col in ["amc", "folios", "records", "aum", "rta"]:
+            if col not in combined.columns:
+                combined[col] = 0 if col != "rta" else ""
+        combined = combined[["amc", "folios", "records", "aum", "rta"]]
+        combined = combined.sort_values("aum", ascending=False)
+        return combined
+
+@st.cache_data(show_spinner=False)
+def load_recent_uploads(_v: int, limit: int = 10) -> pd.DataFrame:
+    """Show recent upload batches."""
+    with get_conn() as conn:
+        batches = []
+        for table, batch_col in [
+            ("bse_client_master", "upload_batch"),
+            ("bse_sip", "upload_batch"),
+            ("bse_scheme_master", "upload_batch"),
+            ("cams_wbr4_aum", "upload_batch"),
+            ("cams_wbr9_folio", "upload_batch"),
+            ("cams_wbr2_transaction", "upload_batch"),
+            ("cams_wbr49_sip", "upload_batch"),
+            ("cams_wbr77_brokerage", "upload_batch"),
+            ("kfin_mfsd203_aum", "upload_batch"),
+            ("kfin_mfsd211_folio", "upload_batch"),
+            ("kfin_mfsd201_transaction", "upload_batch"),
+            ("kfin_mfsd243_sip", "upload_batch"),
+            ("kfin_mfsd205_brokerage", "upload_batch"),
+        ]:
+            try:
+                rows = conn.execute(f"""
+                    SELECT '{table}' as source_table, 
+                           {batch_col} as batch_id,
+                           COUNT(*) as row_count,
+                           MAX(id) as max_id
+                    FROM {table}
+                    WHERE {batch_col} IS NOT NULL
+                    GROUP BY {batch_col}
+                    ORDER BY max_id DESC
+                    LIMIT {limit}
+                """).fetchall()
+                batches.extend(rows)
+            except:
+                pass
+
+        if not batches:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(batches, columns=["Table", "Batch ID", "Rows", "_max_id"])
+        df = df.sort_values("_max_id", ascending=False).head(limit)
+        return df.drop(columns=["_max_id"])
+
+
+# ==================== APP INIT ====================
+st.set_page_config(page_title="MFD Portfolio Intelligence", layout="wide", page_icon="📊")
+
+ensure_db()
+aum_recon.ensure_schema()   # txn_overrides table + active-only txn views (needs base tables)
+ensure_family_tables()
+ensure_monthly_brokerage_schema()   # UNIQUE(amc,month,year) for the upsert
+
+
+# ==================== BSE SCHEME MASTER AUTO-DOWNLOAD ====================
+# Moved to background_worker.py — Streamlit no longer triggers downloads
+# on startup. Use the Admin Panel button for manual runs.
+
+
+# # ==================== CAMS MAILBACK AUTO-SYNC ====================
+# def _auto_cams_mailback_sync():
+#     """Non-blocking: starts background IMAP sync if needed, once per day."""
+#     import cams_mailback_sync as cms
+
+#     if not st.session_state.get("cams_mailback_auto_toggle", True):
+#         return
+
+#     last_run = st.session_state.get("cams_mailback_auto_last_run")
+#     today = datetime.now().strftime("%Y-%m-%d")
+#     if last_run == today:
+#         return
+
+#     st.session_state["cams_mailback_auto_last_run"] = today
+
+#     status = cms.get_sync_status()
+#     if status["running"]:
+#         st.info("⏳ Syncing in background...")
+#     elif status["done"]:
+#         st.success(status["msg"]) if status["ok"] else st.error(status["msg"])
+
+# Background workers (mailback IMAP poller, NAV schedule, BSE Selenium)
+# now run in the standalone `background_worker.py` process, not inside
+# Streamlit. Do NOT re-add a startup call here — it would double-run them.
+
+
+# ==================== GLOBAL BSE DOWNLOAD/PARSE NOTIFICATION ====================
+# Reads the last BSE result written by the standalone background worker
+# (via bse_auto's status file), and shows a toast once per session.
+def _notify_bse_scheme_status():
+    from bse_auto import get_download_status
+    status = get_download_status()
+    if status["done"] and not st.session_state.get("bse_notified", False):
+        st.session_state["bse_notified"] = True
+        if status["ok"]:
+            st.toast(f"✅ BSE Scheme Master ready: {status['msg']}")
+        else:
+            st.toast(f"❌ BSE download failed: {status['msg']}")
+
+
+_notify_bse_scheme_status()
+
+
+
+# ══════════════════════════════════════════════════════════════
+# CACHE WARM-UP — runs once per server process
+# NOTE: does NOT trigger any network downloads — assumes the standalone
+# background_worker.py has already fetched today's NAV. If the snapshot
+# is missing, caches still warm but use whatever file is on disk.
+# ══════════════════════════════════════════════════════════════
+@st.cache_resource(show_spinner=False)
+def _warm_caches_once() -> bool:
+    log.info("[WARMUP] Warming caches (no network fetch)...")
+    try:
+        _ = get_enriched_folio_nav_df(data_version())
+    except Exception as e:
+        log.warning("[WARMUP] folio_nav_df warmup failed: %s", e)
+    try:
+        _ = load_all_clients_with_display(data_version())
+    except Exception as e:
+        log.warning("[WARMUP] clients warmup failed: %s", e)
+    try:
+        _ = load_previous_nav_map_cached()
+    except Exception as e:
+        log.warning("[WARMUP] prev nav warmup failed: %s", e)
+    log.info("[WARMUP] Done")
+    return True
+
+
+_warm_caches_once()
+
+# ══════════════════════════════════════════════════════════════
+# WORKER WATCHDOG — catch missed cron runs on startup
+# ══════════════════════════════════════════════════════════════
+# Cron fires at 11:00 and 15:00 IST. If the app process was down
+# (or crashed and restarted) across one of those slots, .worker_run_stamp
+# goes stale. This launches a catch-up worker once per app process.
+#
+# @st.cache_resource ensures the check runs ONCE per Streamlit process,
+# not on every rerun (which would happen many times per minute).
+@st.cache_resource(show_spinner=False)
+def _worker_watchdog_startup_check() -> dict:
+    try:
+        from worker_watchdog import check_and_launch_if_stale
+        result = check_and_launch_if_stale()
+        log.info("[WATCHDOG] Startup check: %s", result)
+        return result
+    except Exception as e:
+        log.exception("[WATCHDOG] Startup check failed")
+        return {"triggered": False, "reason": str(e)}
+
+
+_watchdog_startup = _worker_watchdog_startup_check()
+
+if _watchdog_startup.get("triggered"):
+    st.toast(
+        f"⏰ Missed cron detected — catch-up worker launched "
+        f"({_watchdog_startup['reason']})",
+        icon="⏰",
+    )
+
+# ══════════════════════════════════════════════════════════════
+# CROSS-PROCESS REFRESH WATCHERS
+# ══════════════════════════════════════════════════════════════
+# Two independent signals can indicate data changed underneath us:
+#
+#   1. data_version() — bumped by any upload path (UI, mailback sync,
+#      worker). File-backed, so the worker's bump is visible here.
+#   2. The worker stamp file — human-readable record of the last worker
+#      run. Included so you can eyeball it via `cat` without SQL.
+#
+# If either moved, we clear every cache that reads the DB or NAV files.
+
+WORKER_STAMP_FILE = os.environ.get(
+    "WORKER_STAMP_FILE",
+    str(Path(__file__).resolve().parent / ".worker_run_stamp"),
+)
+
+
+@st.cache_resource(show_spinner=False)
+def _get_refresh_state() -> dict:
+    """Mutable holder, survives across reruns within a process."""
+    return {"data_version": None, "stamp": None}
+
+
+def _read_worker_stamp() -> str | None:
+    try:
+        p = Path(WORKER_STAMP_FILE)
+        return p.read_text().strip() if p.exists() else None
+    except Exception:
+        return None
+
+
+def _clear_all_data_caches() -> None:
+    """Single source of truth for which caches must die when data changes."""
+    get_enriched_folio_nav_df.clear()
+    get_folio_nav_summary_cached.clear()
+    load_previous_nav_map_cached.clear()
+    get_or_fetch_nav_for_date_cached.clear()
+    get_all_folios_with_isin_and_nav.clear()
+    load_all_clients_with_display.clear()
+    load_dashboard_summary.clear()
+    load_brokerage_report.clear()
+    # AMFI index is loaded from a NAV text file on disk — force a re-read.
+    _amfi.load(force=True)
+
+
+def _check_for_data_changes() -> None:
+    """Called on every rerun (and by the polling fragment). Cheap — reads
+    one file. Clears caches if either signal moved."""
+    state = _get_refresh_state()
+    current_ver = data_version()
+    current_stamp = _read_worker_stamp()
+
+    # First run in this process — record baselines, don't refresh.
+    if state["data_version"] is None:
+        state["data_version"] = current_ver
+        state["stamp"] = current_stamp
+        return
+
+    version_changed = current_ver != state["data_version"]
+    stamp_changed = current_stamp != state["stamp"]
+
+    if not (version_changed or stamp_changed):
+        return
+
+    if version_changed:
+        log.info("[REFRESH-WATCH] data_version %s → %s",
+                 state["data_version"], current_ver)
+    if stamp_changed:
+        log.info("[REFRESH-WATCH] worker stamp changed: %s", current_stamp)
+
+    state["data_version"] = current_ver
+    state["stamp"] = current_stamp
+
+    _clear_all_data_caches()
+    st.toast("🔄 Data updated — portfolio refreshed.")
+
+
+def _check_for_data_changes_on_rerun() -> None:
+    """Wrapper used at module scope. Logs failures instead of crashing the
+    whole app if a cache clear hiccups."""
+    try:
+        _check_for_data_changes()
+    except Exception:
+        log.exception("[REFRESH-WATCH] check failed")
+
+
+@st.fragment(run_every="60s")
+def _refresh_watcher_poller() -> None:
+    """Re-runs every 60s even without user interaction. Essential for a
+    24/7 wall-mounted dashboard that nobody touches between cron runs.
+
+    Also runs the watchdog — its internal 15-min debounce ensures the
+    check_and_launch_if_stale() call is cheap (just a file stat) on most
+    ticks."""
+    _check_for_data_changes()
+
+    # Watchdog tick — debounced internally, safe to call every 60s.
+    try:
+        from worker_watchdog import check_and_launch_if_stale
+        _wd = check_and_launch_if_stale()
+        if _wd.get("triggered"):
+            log.warning("[WATCHDOG] Poller fired catch-up worker: %s", _wd)
+            st.toast("⏰ Cron was missed — catch-up worker launched.", icon="⏰")
+    except Exception:
+        log.exception("[WATCHDOG] Poller tick failed")
+
+
+# Check once immediately (fast — just file reads), then start the poller.
+_check_for_data_changes_on_rerun()
+
+
+# -------------------- THEME (native Streamlit System/Light/Dark) --------------------
+current_theme = st.context.theme.type
+dark = current_theme == "dark"
+
+st.html(THEME_WATCHER_JS)
+
+if "last_theme" not in st.session_state:
+    st.session_state["last_theme"] = current_theme
+elif st.session_state["last_theme"] != current_theme:
+    st.session_state["last_theme"] = current_theme
+    st.rerun()
+
+st.markdown(render_theme(dark), unsafe_allow_html=True)
+
+# ==================== CSS FIXES ====================
+
+st.markdown("""
+<style>
+    [data-testid="stDataFrame"] > div[data-testid="stDataFrameContainer"] {
+        background-color: transparent !important;
+    }
+    [data-testid="stDataFrame"] th {
+        white-space: nowrap !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ==================== SIDEBAR NAVIGATION ====================
+with st.sidebar:
+    st.markdown("## 📊 MFD Portfolio")
+    st.divider()
+
+    nav_options = ["📊 Dashboard", "👥 Clients", "📋 Transactions", "💰 Brokerages & Sub Brokers Report", "📊 Reports", "🧮 Capital Gains", "🔍 AUM Reconciliation", "⚙️ Admin Panel"]
+
+    if "nav_mode" not in st.session_state or st.session_state["nav_mode"] not in nav_options:
+        st.session_state["nav_mode"] = "📊 Dashboard"
+        
+
+    selected_nav = st.radio(
+        "Navigation",
+        nav_options,
+        index=nav_options.index(st.session_state["nav_mode"]),
+        label_visibility="collapsed"
+    )
+
+    if selected_nav != st.session_state["nav_mode"]:
+        st.session_state["nav_mode"] = selected_nav
+        st.rerun()
+
+    st.divider()
+    st.caption("Minimal UI v2.0")
+
+mode = st.session_state.get("nav_mode", "📊 Dashboard")
+
+# ══════════════════════════════════════════════════════════════
+# SUB-BROKER SCHEMA
+# ══════════════════════════════════════════════════════════════
+def ensure_sub_broker_tables() -> None:
+    with get_conn() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sub_brokers (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                name         TEXT NOT NULL,
+                email        TEXT,
+                phone        TEXT,
+                role         TEXT NOT NULL DEFAULT 'Sub-Broker',
+                sharing_pct  REAL NOT NULL DEFAULT 50.0,
+                is_active    INTEGER DEFAULT 1,
+                notes        TEXT,
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sub_broker_clients (
+                sub_broker_id INTEGER NOT NULL,
+                client_code   TEXT NOT NULL UNIQUE,
+                assigned_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (sub_broker_id, client_code)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sub_broker_payouts (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                sub_broker_id      INTEGER NOT NULL,
+                period_type        TEXT NOT NULL,
+                period_key         TEXT NOT NULL,
+                brokerage_generated REAL NOT NULL DEFAULT 0,
+                share_amount       REAL NOT NULL DEFAULT 0,
+                transferred_amount REAL NOT NULL DEFAULT 0,
+                transfer_date      TEXT,
+                transfer_reference TEXT,
+                transfer_notes     TEXT,
+                status             TEXT NOT NULL DEFAULT 'pending',
+                created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(sub_broker_id, period_type, period_key)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sbc_sub    ON sub_broker_clients(sub_broker_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sbc_client ON sub_broker_clients(client_code)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sbp_sub    ON sub_broker_payouts(sub_broker_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sbp_period ON sub_broker_payouts(period_type, period_key)")
+
+
+# ══════════════════════════════════════════════════════════════
+# SUB-BROKER CRUD
+# ══════════════════════════════════════════════════════════════
+def list_sub_brokers() -> pd.DataFrame:
+    with get_conn() as conn:
+        return pd.read_sql("""
+            SELECT sb.id, sb.name, sb.email, sb.phone, sb.role,
+                   sb.sharing_pct, sb.is_active, sb.notes, sb.created_at,
+                   (SELECT COUNT(*) FROM sub_broker_clients sbc
+                    WHERE sbc.sub_broker_id = sb.id) AS client_count
+            FROM sub_brokers sb
+            ORDER BY sb.is_active DESC, sb.name
+        """, conn)
+
+
+def create_sub_broker(name: str, email: str, phone: str,
+                      sharing_pct: float, notes: str = "") -> int:
+    with get_conn() as conn:
+        cur = conn.execute("""
+            INSERT INTO sub_brokers (name, email, phone, role, sharing_pct, notes)
+            VALUES (?, ?, ?, 'Sub-Broker', ?, ?)
+        """, (name.strip(), email.strip() or None, phone.strip() or None,
+              float(sharing_pct), notes.strip() or None))
+        return cur.lastrowid
+
+
+def update_sub_broker(sb_id: int, **kwargs) -> None:
+    allowed = {"name", "email", "phone", "sharing_pct", "is_active", "notes"}
+    fields = {k: v for k, v in kwargs.items() if k in allowed}
+    if not fields:
+        return
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    with get_conn() as conn:
+        conn.execute(f"UPDATE sub_brokers SET {set_clause} WHERE id = ?",
+                     list(fields.values()) + [sb_id])
+
+
+def delete_sub_broker(sb_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM sub_broker_clients WHERE sub_broker_id = ?", (sb_id,))
+        conn.execute("DELETE FROM sub_broker_payouts WHERE sub_broker_id = ?", (sb_id,))
+        conn.execute("DELETE FROM sub_brokers WHERE id = ?", (sb_id,))
+
+
+def assign_clients_to_sub_broker(sb_id: int, client_codes: list) -> None:
+    with get_conn() as conn:
+        for cc in client_codes:
+            conn.execute("DELETE FROM sub_broker_clients WHERE client_code = ?", (cc,))
+            conn.execute("""
+                INSERT INTO sub_broker_clients (sub_broker_id, client_code)
+                VALUES (?, ?)
+            """, (sb_id, cc))
+
+
+def unassign_client_from_sub_broker(sb_id: int, client_code: str) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM sub_broker_clients WHERE sub_broker_id = ? AND client_code = ?",
+            (sb_id, client_code)
+        )
+
+
+def get_clients_for_sub_broker(sb_id: int) -> pd.DataFrame:
+    with get_conn() as conn:
+        return pd.read_sql("""
+            SELECT sbc.client_code,
+                   COALESCE(
+                       NULLIF(TRIM(COALESCE(bcm.primary_holder_first_name,'') || ' ' ||
+                                   COALESCE(bcm.primary_holder_last_name,'')), ''),
+                       sbc.client_code
+                   ) AS name,
+                   bcm.primary_holder_pan AS pan,
+                   bcm.indian_mobile_no   AS mobile,
+                   bcm.email,
+                   sbc.assigned_at
+            FROM sub_broker_clients sbc
+            LEFT JOIN bse_client_master bcm ON sbc.client_code = bcm.client_code
+            WHERE sbc.sub_broker_id = ?
+            ORDER BY name
+        """, conn, params=(sb_id,))
+
+
+def get_client_to_sub_broker_map() -> dict:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT client_code, sub_broker_id FROM sub_broker_clients"
+        ).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def get_folio_to_client_code_map(_v: int) -> dict:
+    """Map folio_id → client_code via PAN matching (adults + minor/guardian)."""
+    with get_conn() as conn:
+        cams = pd.read_sql("""
+            SELECT foliochk AS folio, UPPER(TRIM(pan_no)) AS pan
+            FROM cams_wbr9_folio
+            WHERE pan_no IS NOT NULL AND TRIM(pan_no) != ''
+            UNION ALL
+            SELECT foliochk AS folio, UPPER(TRIM(guard_pan)) AS pan
+            FROM cams_wbr9_folio
+            WHERE guard_pan IS NOT NULL AND TRIM(guard_pan) != ''
+        """, conn)
+        kfin = pd.read_sql("""
+            SELECT folio AS folio, UPPER(TRIM(pan_number)) AS pan
+            FROM kfin_mfsd211_folio
+            WHERE pan_number IS NOT NULL AND TRIM(pan_number) != ''
+        """, conn)
+        clients = pd.read_sql("""
+            SELECT client_code,
+                   UPPER(TRIM(primary_holder_pan)) AS pan
+            FROM bse_client_master
+            WHERE primary_holder_pan IS NOT NULL AND TRIM(primary_holder_pan) != ''
+            UNION ALL
+            SELECT client_code,
+                   UPPER(TRIM(guardian_pan)) AS pan
+            FROM bse_client_master
+            WHERE guardian_pan IS NOT NULL AND TRIM(guardian_pan) != ''
+        """, conn)
+
+    folios  = pd.concat([cams, kfin], ignore_index=True).drop_duplicates("folio")
+    clients = clients.drop_duplicates("pan", keep="first")
+    merged  = folios.merge(clients, on="pan", how="left")
+    return dict(zip(merged["folio"].astype(str), merged["client_code"]))
+
+
+# ══════════════════════════════════════════════════════════════
+# SUB-BROKER PAYOUT RECORDS
+# ══════════════════════════════════════════════════════════════
+def list_payouts(sub_broker_id: int | None = None) -> pd.DataFrame:
+    q = """
+        SELECT p.id, p.sub_broker_id, sb.name AS sub_broker_name,
+               p.period_type, p.period_key,
+               p.brokerage_generated, p.share_amount,
+               p.transferred_amount, p.transfer_date,
+               p.transfer_reference, p.transfer_notes,
+               p.status, p.created_at, p.updated_at
+        FROM sub_broker_payouts p
+        LEFT JOIN sub_brokers sb ON p.sub_broker_id = sb.id
+    """
+    params = []
+    if sub_broker_id is not None:
+        q += " WHERE p.sub_broker_id = ?"
+        params.append(sub_broker_id)
+    q += " ORDER BY p.period_key DESC, sb.name"
+    with get_conn() as conn:
+        return pd.read_sql(q, conn, params=params)
+
+
+def record_payout(sb_id: int, period_type: str, period_key: str,
+                  brokerage_generated: float, share_amount: float,
+                  transferred_amount: float, transfer_date: str,
+                  transfer_reference: str = "", transfer_notes: str = "") -> None:
+    if transferred_amount <= 0:
+        status = "pending"
+    elif transferred_amount + 0.01 >= share_amount:
+        status = "transferred"
+    else:
+        status = "partial"
+
+    with get_conn() as conn:
+        conn.execute("""
+            INSERT INTO sub_broker_payouts
+                (sub_broker_id, period_type, period_key,
+                 brokerage_generated, share_amount,
+                 transferred_amount, transfer_date, transfer_reference,
+                 transfer_notes, status, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(sub_broker_id, period_type, period_key) DO UPDATE SET
+                brokerage_generated = excluded.brokerage_generated,
+                share_amount        = excluded.share_amount,
+                transferred_amount  = excluded.transferred_amount,
+                transfer_date       = excluded.transfer_date,
+                transfer_reference  = excluded.transfer_reference,
+                transfer_notes      = excluded.transfer_notes,
+                status              = excluded.status,
+                updated_at          = CURRENT_TIMESTAMP
+        """, (sb_id, period_type, period_key,
+              float(brokerage_generated), float(share_amount),
+              float(transferred_amount), transfer_date,
+              transfer_reference.strip() or None,
+              transfer_notes.strip() or None, status))
+
+
+def delete_payout(payout_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM sub_broker_payouts WHERE id = ?", (payout_id,))
+
+
+# ══════════════════════════════════════════════════════════════
+# BROKERAGE ATTRIBUTION + SHARING COMPUTATION
+# ══════════════════════════════════════════════════════════════
+def _attribute_brokerage(period_type: str, period_key: str) -> pd.DataFrame:
+    """Return brokerage detail rows for the period, enriched with sub_broker_id."""
+    data = load_brokerage_report(get_conn, data_version())
+    detail = data["detail"].copy()
+    if detail.empty:
+        return detail
+
+    if period_type == "month":
+        detail = detail[detail["month"] == period_key]
+    else:  # year
+        detail = detail[detail["month"].astype(str).str.startswith(period_key + "-")]
+
+    if detail.empty:
+        return detail
+
+    folio_client = get_folio_to_client_code_map(data_version())
+    client_sb    = get_client_to_sub_broker_map()
+
+    detail["client_code"]   = detail["folio"].astype(str).map(folio_client)
+    detail["sub_broker_id"] = detail["client_code"].map(client_sb)
+    return detail
+
+
+def compute_sub_broker_summary(period_type: str, period_key: str) -> pd.DataFrame:
+    """One row per sub-broker with their brokerage + share for the period."""
+    detail = _attribute_brokerage(period_type, period_key)
+    sbs    = list_sub_brokers()
+    if detail.empty or sbs.empty:
+        return pd.DataFrame()
+
+    sb_lookup = sbs.set_index("id").to_dict("index")
+    assigned  = detail[detail["sub_broker_id"].notna()]
+
+    rows = []
+    for sb_id, grp in assigned.groupby("sub_broker_id"):
+        if sb_id not in sb_lookup:
+            continue
+        sb = sb_lookup[sb_id]
+        pct  = float(sb["sharing_pct"] or 0.0)
+        brok = float(grp["brokerage_amount"].sum())
+        share = brok * pct / 100.0
+        rows.append({
+            "sub_broker_id":    int(sb_id),
+            "name":             sb["name"],
+            "sharing_pct":      pct,
+            "clients":          int(grp["client_code"].nunique()),
+            "total_brokerage":  brok,
+            "sub_broker_share": share,
+            "my_share":         brok - share,
+        })
+    return pd.DataFrame(rows)
+
+
+def get_available_brokerage_periods() -> tuple[list, list]:
+    data = load_brokerage_report(get_conn, data_version())
+    detail = data["detail"]
+    if detail.empty:
+        return [], []
+    months = sorted(
+        [m for m in detail["month"].dropna().unique() if m and m != "Unknown"],
+        reverse=True,
+    )
+    years = sorted({m[:4] for m in months if len(m) >= 4}, reverse=True)
+    return months, years
+
+
+# ══════════════════════════════════════════════════════════════
+# PDF / EXCEL GENERATION FOR SHARING REPORT
+# ══════════════════════════════════════════════════════════════
+def _period_label(period_type: str, period_key: str) -> str:
+    if period_type == "year":
+        return f"Year {period_key}"
+    try:
+        from datetime import datetime as _dt
+        return _dt.strptime(period_key, "%Y-%m").strftime("%B %Y")
+    except Exception:
+        return period_key
+
+
+def generate_brokerage_sharing_pdf(
+    sub_broker_name: str,
+    sharing_pct: float,
+    period_label: str,
+    client_rows: list[dict],
+    total_brokerage: float,
+    sub_broker_share: float,
+    my_share: float,
+    transfer: dict | None = None,
+) -> bytes | None:
+    try:
+        from fpdf import FPDF
+    except ImportError:
+        return None
+
+    reg_path, bold_path = _find_font_path()
+    if not reg_path:
+        return None
+
+    pdf = FPDF(orientation='P', unit='mm', format='A4')
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_font('Main', '', reg_path, uni=True)
+    pdf.add_font('Main', 'B', bold_path, uni=True)
+    pdf.set_margins(12, 12, 12)
+
+    BLUE, DARK, GREY = (41, 128, 185), (44, 62, 80), (127, 140, 141)
+    LIGHT, WHITE = (236, 240, 241), (255, 255, 255)
+    GREEN, RED, AMBER = (39, 174, 96), (192, 57, 43), (243, 156, 18)
+    PAGE_W = 210 - 24
+
+    def _inr(v):
+        try:    return f"\u20b9{float(v):,.2f}"
+        except Exception: return "N/A"
+
+    pdf.add_page()
+
+    pdf.set_font('Main', 'B', 15); pdf.set_text_color(*DARK)
+    pdf.cell(PAGE_W, 9, 'Sub-Broker Brokerage Sharing Report', align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+
+    pdf.set_font('Main', '', 10); pdf.set_text_color(*GREY)
+    pdf.cell(PAGE_W, 5, f'Sub-Broker: {sub_broker_name}', new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 5, f'Period: {period_label}   |   Sharing: {sharing_pct:.2f}%',
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+
+    # Metric cards
+    pdf.set_fill_color(*LIGHT); col_w = PAGE_W / 3
+    pdf.set_font('Main', 'B', 8); pdf.set_text_color(*GREY)
+    pdf.cell(col_w, 5, 'Total Brokerage',   border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Sub-Broker Share',  border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Your Net Share',    border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font('Main', 'B', 12); pdf.set_text_color(*DARK)
+    pdf.cell(col_w, 8, _inr(total_brokerage),  border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 8, _inr(sub_broker_share), border=0, fill=True, new_x="RIGHT")
+    pdf.set_text_color(*GREEN)
+    pdf.cell(col_w, 8, _inr(my_share), border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(*DARK)
+    pdf.ln(5)
+
+    # Transfer status
+    if transfer:
+        status = transfer.get("status", "pending")
+        if status == "transferred":
+            bg, fg = (212, 239, 223), GREEN
+        elif status == "partial":
+            bg, fg = (252, 243, 207), AMBER
+        else:
+            bg, fg = (250, 219, 216), RED
+
+        pdf.set_fill_color(*bg); pdf.set_text_color(*DARK)
+        pdf.set_font('Main', 'B', 9)
+        pdf.cell(PAGE_W, 6,
+                 f"Transfer Status: {status.upper()}   |   "
+                 f"Transferred: {_inr(transfer.get('transferred_amount', 0))}   |   "
+                 f"Date: {transfer.get('transfer_date') or '-'}",
+                 border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
+        if transfer.get("transfer_reference"):
+            pdf.set_font('Main', '', 8); pdf.set_text_color(*GREY)
+            pdf.cell(PAGE_W, 4, f"Reference: {transfer['transfer_reference']}",
+                     new_x="LMARGIN", new_y="NEXT")
+        if transfer.get("transfer_notes"):
+            pdf.set_font('Main', '', 8); pdf.set_text_color(*GREY)
+            pdf.cell(PAGE_W, 4, f"Notes: {transfer['transfer_notes']}",
+                     new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(3)
+
+    # Client table
+    pdf.set_font('Main', 'B', 11); pdf.set_text_color(*BLUE)
+    pdf.cell(PAGE_W, 6, 'Client-wise Breakdown', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(1)
+
+    headers = ['Client Code', 'Client Name', 'Txns', 'Brokerage', 'Sub-Broker Share', 'My Share']
+    widths  = [30, 60, 15, 27, 30, 24]
+    widths[-1] = PAGE_W - sum(widths[:-1])
+    aligns  = ['L', 'L', 'C', 'R', 'R', 'R']
+
+    row_h = 6
+    pdf.set_font('Main', 'B', 8); pdf.set_fill_color(*BLUE); pdf.set_text_color(*WHITE)
+    for h, w in zip(headers, widths):
+        pdf.cell(w, row_h, h, border=1, align='C', fill=True)
+    pdf.ln()
+
+    pdf.set_font('Main', '', 8); pdf.set_text_color(*DARK)
+    for i, r in enumerate(client_rows):
+        fill = (i % 2 == 1)
+        if fill:
+            pdf.set_fill_color(*LIGHT)
+        vals = [
+            str(r.get("client_code", "")),
+            _truncate_to_width(pdf, str(r.get("client_name", "")), widths[1] - 1.0),
+            str(r.get("txns", "")),
+            _inr(r.get("brokerage", 0)),
+            _inr(r.get("sub_broker_share", 0)),
+            _inr(r.get("my_share", 0)),
+        ]
+        for v, w, a in zip(vals, widths, aligns):
+            pdf.cell(w, row_h, v, border=1, align=a, fill=fill)
+        pdf.ln()
+
+    # Total row
+    pdf.set_font('Main', 'B', 8); pdf.set_fill_color(200, 200, 200)
+    totals = ['', 'TOTAL', str(sum(int(r.get("txns", 0)) for r in client_rows)),
+              _inr(total_brokerage), _inr(sub_broker_share), _inr(my_share)]
+    for v, w, a in zip(totals, widths, aligns):
+        pdf.cell(w, row_h, v, border=1, align=a, fill=True)
+    pdf.ln(8)
+
+    pdf.set_font('Main', '', 7); pdf.set_text_color(*GREY)
+    pdf.cell(PAGE_W, 4,
+             f"Generated on {datetime.now().strftime('%d/%m/%Y %H:%M')}  |  "
+             f"Brokerage attributed via PAN matching on folio master. Indicative only.",
+             align='C', new_x="LMARGIN", new_y="NEXT")
+
+    return bytes(pdf.output())
+
+
+def generate_brokerage_sharing_excel(
+    sub_broker_name: str,
+    sharing_pct: float,
+    period_label: str,
+    client_rows: list[dict],
+    total_brokerage: float,
+    sub_broker_share: float,
+    my_share: float,
+    transfer: dict | None = None,
+) -> bytes | None:
+    """Returns xlsx bytes. Falls back to CSV bytes if openpyxl unavailable."""
+    summary = pd.DataFrame([
+        {"Field": "Sub-Broker",       "Value": sub_broker_name},
+        {"Field": "Period",           "Value": period_label},
+        {"Field": "Sharing %",        "Value": sharing_pct},
+        {"Field": "Total Brokerage",  "Value": total_brokerage},
+        {"Field": "Sub-Broker Share", "Value": sub_broker_share},
+        {"Field": "My Net Share",     "Value": my_share},
+    ])
+    if transfer:
+        summary = pd.concat([summary, pd.DataFrame([
+            {"Field": "Transfer Status",    "Value": transfer.get("status", "")},
+            {"Field": "Amount Transferred", "Value": transfer.get("transferred_amount", 0)},
+            {"Field": "Transfer Date",      "Value": transfer.get("transfer_date", "")},
+            {"Field": "Transfer Reference", "Value": transfer.get("transfer_reference", "")},
+            {"Field": "Transfer Notes",     "Value": transfer.get("transfer_notes", "")},
+        ])], ignore_index=True)
+
+    detail = pd.DataFrame(client_rows)
+
+    try:
+        import io
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+            summary.to_excel(writer, sheet_name="Summary", index=False)
+            detail.to_excel(writer,  sheet_name="Client Detail", index=False)
+        return buf.getvalue()
+    except Exception:
+        csv = f"SUMMARY\n{summary.to_csv(index=False)}\n\nDETAIL\n{detail.to_csv(index=False)}"
+        return csv.encode("utf-8")
+
+
+# ══════════════════════════════════════════════════════════════
+# EMAIL SENDING FOR SHARING REPORT
+# ══════════════════════════════════════════════════════════════
+def generate_brokerage_email_body(
+    sub_broker_name: str,
+    period_label: str,
+    total_brokerage: float,
+    sub_broker_share: float,
+    my_share: float,
+    transfer: dict | None = None,
+) -> str:
+    def fi(v):
+        try:    return f"₹{float(v):,.2f}"
+        except Exception: return "—"
+
+    transfer_block = ""
+    if transfer:
+        status = (transfer.get("status") or "pending").lower()
+        if status == "transferred":
+            colour, label = "#27ae60", "✅ Transferred"
+        elif status == "partial":
+            colour, label = "#f39c12", "⏳ Partially Transferred"
+        else:
+            colour, label = "#c0392b", "⏰ Pending"
+        transfer_block = f"""
+        <div style="background:#f8f9fa;border-left:4px solid {colour};padding:14px 18px;margin:20px 0;border-radius:4px;">
+          <div style="font-size:13px;font-weight:bold;color:{colour};margin-bottom:8px;">{label}</div>
+          <table style="width:100%;font-size:13px;color:#2c3e50;">
+            <tr><td style="padding:3px 0;">Amount Transferred</td>
+                <td style="text-align:right;font-weight:bold;">{fi(transfer.get('transferred_amount', 0))}</td></tr>
+            <tr><td style="padding:3px 0;">Transfer Date</td>
+                <td style="text-align:right;">{transfer.get('transfer_date') or '—'}</td></tr>
+            <tr><td style="padding:3px 0;">Reference</td>
+                <td style="text-align:right;">{transfer.get('transfer_reference') or '—'}</td></tr>
+            <tr><td style="padding:3px 0;">Notes</td>
+                <td style="text-align:right;">{transfer.get('transfer_notes') or '—'}</td></tr>
+          </table>
+        </div>
+        """
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="font-family:'Segoe UI',Tahoma,sans-serif;color:#333;background:#f9f9f9;padding:20px;margin:0;">
+  <div style="max-width:680px;margin:0 auto;background:#fff;padding:30px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div style="border-bottom:3px solid #2980b9;padding-bottom:14px;margin-bottom:20px;">
+      <h2 style="color:#2980b9;margin:0;font-size:22px;">💹 Brokerage Sharing Statement</h2>
+      <div style="color:#7f8c8d;font-size:13px;margin-top:6px;">Period: <strong>{period_label}</strong></div>
+    </div>
+
+    <p style="font-size:15px;color:#2c3e50;">Dear <strong>{sub_broker_name}</strong>,</p>
+
+    <p style="font-size:14px;color:#2c3e50;line-height:1.6;">
+      Please find below the brokerage generated on your assigned clients for <strong>{period_label}</strong>,
+      along with your share and the transfer status.
+    </p>
+
+    <table style="width:100%;border-collapse:collapse;margin:22px 0;font-size:14px;">
+      <tr style="background:#ecf0f1;">
+        <td style="padding:12px 16px;color:#7f8c8d;font-size:12px;text-transform:uppercase;">Total Brokerage</td>
+        <td style="padding:12px 16px;text-align:right;font-weight:bold;color:#2c3e50;">{fi(total_brokerage)}</td>
+      </tr>
+      <tr style="background:#eaf2f8;">
+        <td style="padding:12px 16px;color:#7f8c8d;font-size:12px;text-transform:uppercase;">Your Share</td>
+        <td style="padding:12px 16px;text-align:right;font-weight:bold;color:#27ae60;">{fi(sub_broker_share)}</td>
+      </tr>
+      <tr>
+        <td style="padding:12px 16px;color:#7f8c8d;font-size:12px;text-transform:uppercase;">Firm's Share</td>
+        <td style="padding:12px 16px;text-align:right;font-weight:bold;color:#2c3e50;">{fi(my_share)}</td>
+      </tr>
+    </table>
+
+    {transfer_block}
+
+    <div style="background:#d5f4e6;border-left:4px solid #27ae60;padding:12px 16px;margin:20px 0;border-radius:4px;font-size:13px;color:#1e7e46;">
+      <strong>✓ Detailed report attached</strong><br>
+      Please review the attached PDF for the full client-wise breakdown.
+    </div>
+
+    <p style="font-size:13px;color:#7f8c8d;line-height:1.6;">
+      If you notice any discrepancy in the amounts, client attribution, or sharing percentage,
+      please reply to this email within 24–48 hours so we can correct it.
+    </p>
+
+    <div style="border-top:1px solid #ddd;padding-top:16px;margin-top:26px;color:#7f8c8d;font-size:12px;">
+      Generated: {datetime.now().strftime('%d %B %Y at %I:%M %p')}<br>
+      This is an automated statement from the Portfolio Intelligence platform.
+    </div>
+  </div>
+</body></html>"""
+
+
+def send_brokerage_sharing_email(
+    to_email: str,
+    subject: str,
+    html_body: str,
+    pdf_bytes: bytes | None = None,
+    pdf_filename: str = "sharing.pdf",
+    excel_bytes: bytes | None = None,
+    excel_filename: str = "sharing.xlsx",
+    cc_emails: list | None = None,
+) -> tuple[bool, str]:
+    """Sends an email with both PDF and Excel attachments. Requires Gmail creds
+    to be configured in Admin → Mailback Auto-Sync."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.application import MIMEApplication
+    import cams_mailback_sync as cms
+
+    creds = cms.get_credentials()
+    if not creds["imap_user"] or not creds["imap_app_password"]:
+        return False, "Gmail not configured — set up in Admin → Mailback Auto-Sync."
+    if not to_email or "@" not in to_email:
+        return False, "Invalid recipient email."
+
+    try:
+        msg = MIMEMultipart("mixed")
+        msg["From"]    = creds["imap_user"]
+        msg["To"]      = to_email
+        msg["Subject"] = subject
+        if cc_emails:
+            msg["Cc"] = ", ".join(cc_emails)
+
+        alt = MIMEMultipart("alternative")
+        alt.attach(MIMEText("Please view this email in HTML mode.", "plain", "utf-8"))
+        alt.attach(MIMEText(html_body, "html", "utf-8"))
+        msg.attach(alt)
+
+        if pdf_bytes:
+            part = MIMEApplication(pdf_bytes, Name=pdf_filename)
+            part["Content-Disposition"] = f'attachment; filename="{pdf_filename}"'
+            msg.attach(part)
+        if excel_bytes:
+            part = MIMEApplication(excel_bytes, Name=excel_filename)
+            part["Content-Disposition"] = f'attachment; filename="{excel_filename}"'
+            msg.attach(part)
+
+        recipients = [to_email] + (cc_emails or [])
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as server:
+            server.login(creds["imap_user"], creds["imap_app_password"])
+            server.send_message(msg, to_addrs=recipients)
+        log.info("[BROK-EMAIL] Sent '%s' to %s", subject, to_email)
+        return True, f"✅ Email sent to {to_email}"
+    except smtplib.SMTPAuthenticationError:
+        return False, "❌ Authentication failed. Check Gmail App Password."
+    except Exception as e:
+        log.exception("[BROK-EMAIL] Failed")
+        return False, f"❌ Failed to send: {e}"
+
+
+# ══════════════════════════════════════════════════════════════
+# UI: SUB-BROKERS MANAGEMENT
+# ══════════════════════════════════════════════════════════════
+def render_sub_brokers_ui() -> None:
+    st.subheader("👥 Sub Brokers")
+    st.caption("Create sub-brokers, set their sharing percentage, and assign clients.")
+
+    with st.expander("➕ Create New Sub-Broker", expanded=False):
+        with st.form("create_sb_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                sb_name  = st.text_input("Name *")
+                sb_email = st.text_input("Email")
+                sb_phone = st.text_input("Phone")
+            with c2:
+                sb_pct = st.number_input(
+                    "Brokerage Sharing % *", 0.0, 100.0, 50.0, 1.0,
+                    help="Percentage of brokerage generated on this sub-broker's "
+                         "assigned clients that goes to the sub-broker."
+                )
+                sb_notes = st.text_input("Notes (optional)")
+            if st.form_submit_button("Create Sub-Broker", type="primary"):
+                if not sb_name.strip():
+                    st.error("Name is required.")
+                else:
+                    create_sub_broker(sb_name, sb_email, sb_phone, sb_pct, sb_notes)
+                    st.success(f"Created sub-broker: {sb_name}")
+                    st.rerun()
+
+    sbs = list_sub_brokers()
+    if sbs.empty:
+        st.info("No sub-brokers yet. Create one above.")
+        return
+
+    st.markdown("### All Sub-Brokers")
+    st.dataframe(
+        sbs[["id", "name", "email", "phone", "role",
+             "sharing_pct", "client_count", "is_active", "notes"]].rename(columns={
+            "id": "ID", "name": "Name", "email": "Email", "phone": "Phone",
+            "role": "Role", "sharing_pct": "Sharing %",
+            "client_count": "Clients", "is_active": "Active", "notes": "Notes",
+        }),
+        width="stretch", hide_index=True,
+        column_config={
+            "Sharing %": st.column_config.NumberColumn(format="%.2f%%"),
+            "Active":    st.column_config.CheckboxColumn(),
+        },
+    )
+
+    st.divider()
+    st.markdown("### 🎯 Client Assignment")
+
+    sb_options = {
+        f"{row['name']} — {row['sharing_pct']:.0f}% ({row['client_count']} clients)": row["id"]
+        for _, row in sbs.iterrows()
+    }
+    sel_label = st.selectbox("Select Sub-Broker", list(sb_options.keys()), key="sb_manage_sel")
+    sel_sb_id = sb_options[sel_label]
+
+    assigned = get_clients_for_sub_broker(sel_sb_id)
+
+    ac1, ac2 = st.columns([3, 2])
+    with ac1:
+        st.markdown(f"**Assigned Clients ({len(assigned)})**")
+        if not assigned.empty:
+            st.dataframe(
+                assigned[["client_code", "name", "pan", "email", "mobile"]].rename(columns={
+                    "client_code": "Code", "name": "Name", "pan": "PAN",
+                    "email": "Email", "mobile": "Mobile",
+                }),
+                width="stretch", hide_index=True,
+            )
+        else:
+            st.caption("No clients assigned yet.")
+
+    with ac2:
+        st.markdown("**Add Clients**")
+        all_clients = load_all_clients_with_display(data_version())
+        assigned_codes = set(assigned["client_code"].tolist()) if not assigned.empty else set()
+        addable = all_clients[~all_clients["client_code"].isin(assigned_codes)].copy()
+        addable["display"] = addable.apply(
+            lambda r: f"{r['name']} | {r['client_code']}", axis=1
+        )
+        sel_clients = st.multiselect(
+            "Search and select clients",
+            addable["display"].tolist(),
+            key=f"sb_add_clients_{sel_sb_id}",
+        )
+        if st.button("➕ Assign Selected", key=f"sb_assign_btn_{sel_sb_id}", type="primary"):
+            codes = [s.rsplit(" | ", 1)[-1] for s in sel_clients]
+            if codes:
+                assign_clients_to_sub_broker(sel_sb_id, codes)
+                st.success(f"Assigned {len(codes)} client(s).")
+                st.rerun()
+            else:
+                st.warning("No clients selected.")
+
+    st.divider()
+    st.markdown("### ⚙️ Edit or Delete")
+
+    edit_label = st.selectbox("Select Sub-Broker to Edit", list(sb_options.keys()), key="sb_edit_sel")
+    edit_sb_id = sb_options[edit_label]
+    edit_row   = sbs[sbs["id"] == edit_sb_id].iloc[0]
+
+    with st.form(f"edit_sb_{edit_sb_id}"):
+        ec1, ec2 = st.columns(2)
+        with ec1:
+            new_name  = st.text_input("Name", value=edit_row["name"])
+            new_email = st.text_input("Email", value=edit_row["email"] or "")
+            new_phone = st.text_input("Phone", value=edit_row["phone"] or "")
+        with ec2:
+            new_pct = st.number_input(
+                "Sharing %", 0.0, 100.0, float(edit_row["sharing_pct"]), 1.0,
+            )
+            new_active = st.checkbox("Active", value=bool(edit_row["is_active"]))
+            new_notes  = st.text_input("Notes", value=edit_row["notes"] or "")
+        if st.form_submit_button("💾 Save Changes", type="primary"):
+            update_sub_broker(
+                edit_sb_id,
+                name=new_name, email=new_email, phone=new_phone,
+                sharing_pct=new_pct, is_active=1 if new_active else 0, notes=new_notes,
+            )
+            st.success("Updated.")
+            st.rerun()
+
+    if st.button("🗑️ Delete Sub-Broker", key=f"del_sb_{edit_sb_id}"):
+        delete_sub_broker(edit_sb_id)
+        st.success("Deleted.")
+        st.rerun()
+
+    if not assigned.empty:
+        st.divider()
+        st.markdown("**Remove a client assignment**")
+        rem_choice = st.selectbox(
+            "Client to unassign",
+            assigned["client_code"].tolist(),
+            key=f"sb_unassign_{sel_sb_id}",
+        )
+        if st.button("Remove Assignment", key=f"sb_unassign_btn_{sel_sb_id}"):
+            unassign_client_from_sub_broker(sel_sb_id, rem_choice)
+            st.success("Removed.")
+            st.rerun()
+
+
+# ══════════════════════════════════════════════════════════════
+# UI: SUB-BROKER SHARING REPORT
+# ══════════════════════════════════════════════════════════════
+def render_sub_broker_sharing_report() -> None:
+    st.subheader("💹 Sub-Broker Sharing Report")
+    st.caption(
+        "Brokerage generated on clients assigned to a sub-broker is split by "
+        "the sub-broker's sharing percentage. Record transfers here and email "
+        "monthly/yearly statements to sub-brokers."
+    )
+
+    months, years = get_available_brokerage_periods()
+    if not months and not years:
+        st.info("No brokerage data yet. Upload CAMS WBR77 / KFin MFSD205 files first.")
+        return
+
+    # ── Period selector ──
+    pc1, pc2 = st.columns([1, 2])
+    with pc1:
+        period_type = st.radio("Period Type", ["Monthly", "Yearly"],
+                               horizontal=True, key="sb_period_type")
+    period_type = "month" if period_type == "Monthly" else "year"
+    with pc2:
+        if period_type == "month":
+            period_key = st.selectbox("Month", months, key="sb_month_pick")
+        else:
+            period_key = st.selectbox("Year", years, key="sb_year_pick")
+
+    period_label = _period_label(period_type, period_key)
+
+    # ── Scope selector: firm-wide, or one specific sub-broker ──
+    sbs_all = list_sub_brokers()
+    scope_options = ["🏢 Firm-wide (all clients)"]
+    if not sbs_all.empty:
+        scope_options += [
+            f"👤 {row['name']} ({row['sharing_pct']:.0f}%)"
+            for _, row in sbs_all.iterrows()
+        ]
+
+    scope_col, spacer_col = st.columns([1, 1])
+    with scope_col:
+        sb_scope = st.selectbox("View Scope", scope_options, key="sb_scope_pick")
+
+    selected_sb_id = None
+    if not sb_scope.startswith("🏢"):
+        sb_name_pick = sb_scope[2:].rsplit(" (", 1)[0]
+        match = sbs_all[sbs_all["name"] == sb_name_pick]
+        if not match.empty:
+            selected_sb_id = int(match.iloc[0]["id"])
+            st.caption(
+                f"Scoped to **{sb_name_pick}** — only this sub-broker's assigned "
+                f"clients are included below. Unassigned brokerage is excluded."
+            )
+
+    detail = _attribute_brokerage(period_type, period_key)
+    if detail.empty:
+        st.info(f"No brokerage found for {period_label}.")
+        return
+
+    # Apply scope filter
+    if selected_sb_id is not None:
+        detail = detail[detail["sub_broker_id"] == selected_sb_id].copy()
+
+    total_brok      = float(detail["brokerage_amount"].sum())
+    assigned        = detail[detail["sub_broker_id"].notna()]
+    unassigned_brok = float(detail[detail["sub_broker_id"].isna()]["brokerage_amount"].sum())
+
+    summary = compute_sub_broker_summary(period_type, period_key)
+
+    # Attach transfer records
+    payouts = list_payouts()
+    payouts_period = payouts[
+        (payouts["period_type"] == period_type) &
+        (payouts["period_key"]  == period_key)
+    ] if not payouts.empty else pd.DataFrame()
+    payout_map = (
+        payouts_period.set_index("sub_broker_id").to_dict("index")
+        if not payouts_period.empty else {}
+    )
+
+    total_sb_share = float(summary["sub_broker_share"].sum()) if not summary.empty else 0.0
+    total_my_share = total_brok - total_sb_share
+
+    # ── KPIs ──
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("📄 Total Brokerage",       format_brokerage_inr(total_brok))
+    c2.metric("👥 Sub-Brokers' Share",    format_brokerage_inr(total_sb_share))
+    c3.metric("💼 Your Net Share",        format_brokerage_inr(total_my_share))
+    c4.metric("❔ Unassigned Brokerage",  format_brokerage_inr(unassigned_brok),
+              help="Folios whose clients aren't assigned to any sub-broker.")
+
+    st.divider()
+
+    if summary.empty:
+        st.info("No sub-brokers have assigned clients with brokerage in this period.")
+    else:
+        # Build display table with transfer status
+        rows = []
+        for _, r in summary.iterrows():
+            sb_id = int(r["sub_broker_id"])
+            pay   = payout_map.get(sb_id, {})
+            transferred = float(pay.get("transferred_amount", 0) or 0)
+            rows.append({
+                "Sub-Broker":       r["name"],
+                "Sharing %":        r["sharing_pct"],
+                "Clients":          int(r["clients"]),
+                "Total Brokerage":  r["total_brokerage"],
+                "Sub-Broker Share": r["sub_broker_share"],
+                "My Share":         r["my_share"],
+                "Transferred":      transferred,
+                "Status":           (pay.get("status") or "pending").upper(),
+                "Transfer Date":    pay.get("transfer_date") or "—",
+            })
+        summary_df = pd.DataFrame(rows).sort_values("Total Brokerage", ascending=False)
+
+        st.markdown("### 📊 Summary")
+        st.dataframe(
+            summary_df, width="stretch", hide_index=True,
+            column_config={
+                "Sharing %":        st.column_config.NumberColumn(format="%.2f%%"),
+                "Total Brokerage":  st.column_config.NumberColumn(format="₹ %.2f"),
+                "Sub-Broker Share": st.column_config.NumberColumn(format="₹ %.2f"),
+                "My Share":         st.column_config.NumberColumn(format="₹ %.2f"),
+                "Transferred":      st.column_config.NumberColumn(format="₹ %.2f"),
+            },
+        )
+
+        # ── RECORD TRANSFER ──
+        st.divider()
+        st.markdown("### 💸 Record / Update Transfer")
+        st.caption(
+            "Record when you've actually paid the sub-broker. This is stored per "
+            "sub-broker and period — you can update it any time."
+        )
+
+        t_col1, t_col2 = st.columns([1, 2])
+        sb_pick = {
+            f"{r['name']} (share: {format_brokerage_inr(r['sub_broker_share'])})": int(r["sub_broker_id"])
+            for _, r in summary.iterrows()
+        }
+        with t_col1:
+            sb_choice_label = st.selectbox("Sub-Broker", list(sb_pick.keys()), key="sb_transfer_sb")
+            sb_choice_id    = sb_pick[sb_choice_label]
+            current_row     = summary[summary["sub_broker_id"] == sb_choice_id].iloc[0]
+            current_pay     = payout_map.get(sb_choice_id, {})
+
+        with t_col2:
+            with st.form(f"transfer_form_{sb_choice_id}_{period_key}"):
+                f1, f2 = st.columns(2)
+                with f1:
+                    t_amount = st.number_input(
+                        "Amount Transferred (₹)",
+                        min_value=0.0,
+                        value=float(current_pay.get("transferred_amount", 0) or 0),
+                        step=100.0,
+                    )
+                    t_date = st.date_input(
+                        "Transfer Date",
+                        value=(
+                            datetime.strptime(current_pay["transfer_date"], "%Y-%m-%d").date()
+                            if current_pay.get("transfer_date") else date_cls.today()
+                        ),
+                    )
+                with f2:
+                    t_ref = st.text_input(
+                        "Reference (UTR / Cheque No.)",
+                        value=current_pay.get("transfer_reference", "") or "",
+                    )
+                    t_notes = st.text_input(
+                        "Notes",
+                        value=current_pay.get("transfer_notes", "") or "",
+                    )
+
+                if st.form_submit_button("💾 Save Transfer Record", type="primary"):
+                    record_payout(
+                        sb_id=sb_choice_id,
+                        period_type=period_type,
+                        period_key=period_key,
+                        brokerage_generated=float(current_row["total_brokerage"]),
+                        share_amount=float(current_row["sub_broker_share"]),
+                        transferred_amount=t_amount,
+                        transfer_date=t_date.strftime("%Y-%m-%d"),
+                        transfer_reference=t_ref,
+                        transfer_notes=t_notes,
+                    )
+                    st.success("Transfer recorded.")
+                    st.rerun()
+
+        # ── DRILLDOWN ──
+        st.divider()
+        st.markdown("### 🔍 Client-level Drill-down")
+
+        drill_options = ["All Sub-Brokers"] + summary["name"].tolist()
+        sel_sb_name = st.selectbox("Select Sub-Broker", drill_options, key="sb_drilldown_sel")
+
+        sbs_df    = list_sub_brokers()
+        sb_lookup = sbs_df.set_index("id").to_dict("index")
+        target_id = next((sid for sid, v in sb_lookup.items() if v["name"] == sel_sb_name), None)
+
+        if sel_sb_name == "All Sub-Brokers":
+            drill = assigned.copy()
+        else:
+            drill = assigned[assigned["sub_broker_id"] == target_id].copy()
+
+        drill["sub_broker_name"] = drill["sub_broker_id"].map(
+            lambda x: sb_lookup.get(x, {}).get("name", "?")
+        )
+        drill["sharing_pct"] = drill["sub_broker_id"].map(
+            lambda x: float(sb_lookup.get(x, {}).get("sharing_pct", 0.0))
+        )
+
+        client_grouped = (
+            drill.groupby(["sub_broker_name", "client_code", "sharing_pct"], dropna=False)
+            .agg(brokerage=("brokerage_amount", "sum"),
+                 txns=("brokerage_amount", "count"))
+            .reset_index()
+        )
+        client_grouped["sub_broker_share"] = (
+            client_grouped["brokerage"] * client_grouped["sharing_pct"] / 100.0
+        )
+        client_grouped["my_share"] = (
+            client_grouped["brokerage"] - client_grouped["sub_broker_share"]
+        )
+
+        with get_conn() as conn:
+            clients_master = pd.read_sql("""
+                SELECT client_code,
+                       COALESCE(
+                           NULLIF(TRIM(COALESCE(primary_holder_first_name,'') || ' ' ||
+                                       COALESCE(primary_holder_last_name,'')), ''),
+                           client_code
+                       ) AS client_name
+                FROM bse_client_master
+            """, conn)
+        client_grouped = client_grouped.merge(clients_master, on="client_code", how="left")
+
+        st.dataframe(
+            client_grouped.rename(columns={
+                "sub_broker_name":  "Sub-Broker",
+                "client_code":      "Client Code",
+                "client_name":      "Client Name",
+                "brokerage":        "Brokerage",
+                "txns":             "Txns",
+                "sharing_pct":      "Sharing %",
+                "sub_broker_share": "Sub-Broker Share",
+                "my_share":         "My Share",
+            })[["Sub-Broker", "Client Code", "Client Name", "Txns",
+                "Brokerage", "Sharing %", "Sub-Broker Share", "My Share"]],
+            width="stretch", hide_index=True,
+            column_config={
+                "Brokerage":        st.column_config.NumberColumn(format="₹ %.2f"),
+                "Sharing %":        st.column_config.NumberColumn(format="%.2f%%"),
+                "Sub-Broker Share": st.column_config.NumberColumn(format="₹ %.2f"),
+                "My Share":         st.column_config.NumberColumn(format="₹ %.2f"),
+            },
+        )
+
+        # ── SEND EMAIL ──
+        st.divider()
+        st.markdown("### 📧 Email Statement")
+        st.caption(
+            "Send the sharing statement for this period to a sub-broker. "
+            "PDF + Excel attached, includes the current transfer status."
+        )
+
+        email_sb_label = st.selectbox("Send to Sub-Broker",
+                                      list(sb_pick.keys()), key="sb_email_sb")
+        email_sb_id    = sb_pick[email_sb_label]
+        email_sb_row   = sbs_df[sbs_df["id"] == email_sb_id].iloc[0]
+        email_sb_name  = email_sb_row["name"]
+
+        # Build per-sub-broker client rows for attachment
+        sb_client_rows = (
+            client_grouped[client_grouped["sub_broker_name"] == email_sb_name]
+            .to_dict("records")
+        )
+        if not sb_client_rows:
+            st.info(f"No client brokerage found for {email_sb_name} in {period_label}.")
+        else:
+            summary_row = summary[summary["sub_broker_id"] == email_sb_id].iloc[0]
+            transfer_info = payout_map.get(email_sb_id)
+
+            ec1, ec2 = st.columns([2, 1])
+            with ec1:
+                to_email = st.text_input(
+                    "Recipient Email",
+                    value=email_sb_row["email"] or "",
+                    placeholder="sub-broker@example.com",
+                    key=f"sb_email_to_{email_sb_id}_{period_key}",
+                )
+                cc_input = st.text_input(
+                    "CC (optional, comma separated)",
+                    placeholder="advisor@example.com",
+                    key=f"sb_email_cc_{email_sb_id}_{period_key}",
+                )
+            with ec2:
+                st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                send_clicked = st.button(
+                    "📤 Send Email", type="primary", width="stretch",
+                    key=f"sb_email_send_{email_sb_id}_{period_key}",
+                    disabled=not to_email,
+                )
+
+            if send_clicked and to_email:
+                with st.spinner("Generating and sending..."):
+                    pdf_bytes = generate_brokerage_sharing_pdf(
+                        sub_broker_name=email_sb_name,
+                        sharing_pct=float(email_sb_row["sharing_pct"]),
+                        period_label=period_label,
+                        client_rows=sb_client_rows,
+                        total_brokerage=float(summary_row["total_brokerage"]),
+                        sub_broker_share=float(summary_row["sub_broker_share"]),
+                        my_share=float(summary_row["my_share"]),
+                        transfer=transfer_info,
+                    )
+                    excel_bytes = generate_brokerage_sharing_excel(
+                        sub_broker_name=email_sb_name,
+                        sharing_pct=float(email_sb_row["sharing_pct"]),
+                        period_label=period_label,
+                        client_rows=sb_client_rows,
+                        total_brokerage=float(summary_row["total_brokerage"]),
+                        sub_broker_share=float(summary_row["sub_broker_share"]),
+                        my_share=float(summary_row["my_share"]),
+                        transfer=transfer_info,
+                    )
+                    html_body = generate_brokerage_email_body(
+                        sub_broker_name=email_sb_name,
+                        period_label=period_label,
+                        total_brokerage=float(summary_row["total_brokerage"]),
+                        sub_broker_share=float(summary_row["sub_broker_share"]),
+                        my_share=float(summary_row["my_share"]),
+                        transfer=transfer_info,
+                    )
+                    safe_name = "".join(c if c.isalnum() else "_" for c in email_sb_name)
+                    safe_period = period_key.replace("-", "_")
+                    pdf_name = f"Brokerage_{safe_name}_{safe_period}.pdf"
+                    xlsx_name = f"Brokerage_{safe_name}_{safe_period}.xlsx"
+                    subject = f"Brokerage Sharing Statement — {period_label}"
+                    cc_list = [e.strip() for e in cc_input.split(",") if e.strip()] if cc_input else None
+
+                    ok, msg = send_brokerage_sharing_email(
+                        to_email=to_email,
+                        subject=subject,
+                        html_body=html_body,
+                        pdf_bytes=pdf_bytes,
+                        pdf_filename=pdf_name,
+                        excel_bytes=excel_bytes,
+                        excel_filename=xlsx_name,
+                        cc_emails=cc_list,
+                    )
+                if ok:
+                    st.success(msg)
+                else:
+                    st.error(msg)
+
+        # ── TRANSFER HISTORY ──
+        st.divider()
+        st.markdown("### 📜 Transfer History")
+
+        all_payouts = list_payouts()
+        if all_payouts.empty:
+            st.info("No transfers recorded yet.")
+        else:
+            h1, h2 = st.columns([3, 1])
+            with h1:
+                hist = all_payouts.copy()
+                hist["period"] = hist.apply(
+                    lambda r: _period_label(r["period_type"], r["period_key"]),
+                    axis=1,
+                )
+            st.dataframe(
+                hist[["sub_broker_name", "period", "brokerage_generated",
+                      "share_amount", "transferred_amount", "transfer_date",
+                      "transfer_reference", "status", "transfer_notes"]].rename(columns={
+                    "sub_broker_name":     "Sub-Broker",
+                    "period":              "Period",
+                    "brokerage_generated": "Brokerage",
+                    "share_amount":        "Share",
+                    "transferred_amount":  "Transferred",
+                    "transfer_date":       "Date",
+                    "transfer_reference":  "Reference",
+                    "status":              "Status",
+                    "transfer_notes":      "Notes",
+                }),
+                width="stretch", hide_index=True,
+                column_config={
+                    "Brokerage":   st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Share":       st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Transferred": st.column_config.NumberColumn(format="₹ %.2f"),
+                },
+            )
+
+            del_payout_id = st.selectbox(
+                "Delete a record (by ID)",
+                [None] + all_payouts["id"].tolist(),
+                key="sb_delete_payout_sel",
+            )
+            if del_payout_id and st.button("🗑️ Delete Selected Transfer Record",
+                                           key="sb_delete_payout_btn"):
+                delete_payout(int(del_payout_id))
+                st.success("Deleted.")
+                st.rerun()
+
+    if unassigned_brok > 0:
+        with st.expander(f"❔ Unassigned Brokerage Breakdown — {format_brokerage_inr(unassigned_brok)}"):
+            unassigned_clients = (
+                detail[detail["sub_broker_id"].isna()]
+                .groupby("client_code", dropna=False)["brokerage_amount"].sum()
+                .sort_values(ascending=False)
+            )
+            st.caption(
+                "These folios couldn't be attributed to a sub-broker. Common reasons: "
+                "no PAN in folio master, or the client isn't assigned to any sub-broker."
+            )
+            st.dataframe(
+                unassigned_clients.reset_index().rename(columns={
+                    "client_code": "Client Code",
+                    "brokerage_amount": "Brokerage",
+                }),
+                width="stretch", hide_index=True,
+                column_config={"Brokerage": st.column_config.NumberColumn(format="₹ %.2f")},
+            )
+
+
+# Initialize the sub-broker tables now that the function is defined above.
+ensure_sub_broker_tables()
+
+# ==================== 📊 DASHBOARD ====================
+if mode == "📊 Dashboard":
+    st.header("📊 Portfolio Overview")
+
+    # ── Auto-fetch NAV on first load ──
+    nav_ready = False
+    folio_nav_df = pd.DataFrame()
+    nav_stats = {}
+
+    try:
+        folio_nav_df = get_enriched_folio_nav_df(data_version())
+        nav_stats = get_folio_nav_summary_cached(data_version())
+        nav_ready = not folio_nav_df.empty
+    except Exception as e:
+        st.error(f"Failed to fetch NAV: {e}")
+        log.exception("NAV load failed")
+        folio_nav_df = pd.DataFrame()
+        nav_stats = {}
+        nav_ready = False
+
+    # ── Skeleton loading if NAV not ready ──
+    if not nav_ready:
+        st.info("⏳ Loading portfolio data... Please wait.")
+        skel1, skel2, skel3 = st.columns(3)
+        with skel1:
+            st.markdown(
+                '<div style="background:#1e1e2e;border-radius:12px;padding:20px;height:100px;">'
+                '<div style="background:#30363d;height:14px;width:60%;border-radius:4px;margin-bottom:12px;"></div>'
+                '<div style="background:#30363d;height:28px;width:80%;border-radius:4px;"></div></div>',
+                unsafe_allow_html=True)
+        with skel2:
+            st.markdown(
+                '<div style="background:#1e1e2e;border-radius:12px;padding:20px;height:100px;">'
+                '<div style="background:#30363d;height:14px;width:60%;border-radius:4px;margin-bottom:12px;"></div>'
+                '<div style="background:#30363d;height:28px;width:80%;border-radius:4px;"></div></div>',
+                unsafe_allow_html=True)
+        with skel3:
+            st.markdown(
+                '<div style="background:#1e1e2e;border-radius:12px;padding:20px;height:100px;">'
+                '<div style="background:#30363d;height:14px;width:60%;border-radius:4px;margin-bottom:12px;"></div>'
+                '<div style="background:#30363d;height:28px;width:80%;border-radius:4px;"></div></div>',
+                unsafe_allow_html=True)
+        st.stop()
+
+    # ── Merge base stats + NAV stats ──
+    base_summary = load_dashboard_summary(data_version())
+    summary = {**base_summary, **nav_stats}
+
+    # ── Refresh button ──
+    c_refresh, _ = st.columns([1, 5])
+    with c_refresh:
+        if st.button("🔄 Refresh Data", width="stretch"):
+            get_enriched_folio_nav_df.clear()
+            get_folio_nav_summary_cached.clear()
+            get_all_folios_with_isin_and_nav.clear()
+            load_previous_nav_map_cached.clear()
+            get_or_fetch_nav_for_date_cached.clear()
+            _amfi.load(force=True)
+            download_and_save_nav_if_needed(force=True)
+            st.rerun()
+
+    # ── AUM Cards (muted) ──
+    nav_coverage = summary.get("nav_coverage_pct", 0)
+    with_nav = summary.get("with_nav", 0)
+    total = summary.get("total_folios", 0)
+
+    if nav_coverage == 0:
+        st.warning("⚠️ AMFI NAV not available. Showing file-based AUM as fallback.")
+    else:
+        st.caption(f"📡 AMFI NAV synced: **{with_nav}/{total}** folios ({nav_coverage}%) | AUM = Units × NAV")
+
+    aum_col1, aum_col2, aum_col3 = st.columns(3)
+
+    with aum_col1:
+        st.markdown(
+            f'<div class="metric-card primary"><div class="label">📦 Total AUM (All RTAs)</div>'
+            f'<div class="value">{format_aum(summary.get("total_aum", 0))}</div></div>',
+            unsafe_allow_html=True)
+    with aum_col2:
+        unmatched = summary.get("cams_unmatched_nav", 0)
+        sub = f'<div class="sub">{unmatched} unmatched NAV</div>' if unmatched else ''
+        st.markdown(
+            f'<div class="metric-card success"><div class="label">🟢 CAMS Current Value</div>'
+            f'<div class="value">{format_aum(summary.get("cams_aum", 0))}</div>{sub}</div>',
+            unsafe_allow_html=True)
+    with aum_col3:
+        unmatched = summary.get("kfin_unmatched_nav", 0)
+        sub = f'<div class="sub">{unmatched} unmatched NAV</div>' if unmatched else ''
+        st.markdown(
+            f'<div class="metric-card info"><div class="label">🔵 KFinTech Current Value</div>'
+            f'<div class="value">{format_aum(summary.get("kfin_aum", 0))}</div>{sub}</div>',
+            unsafe_allow_html=True)
+
+    st.divider()
+
+    # ── Top metrics row ──
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("👥 Clients", summary.get("total_clients", 0))
+    m2.metric("📋 BSE SIPs", summary.get("total_xsip", 0))
+    dedup_sips = load_dedup_sip_counts(data_version())
+    m3.metric("✅ Active SIPs", dedup_sips["active_sips_deduped"])
+    m4.metric("🏢 CAMS AMCs", summary.get("cams_amcs", 0))
+    m5.metric("🏢 KFinTech AMCs", summary.get("kfin_amcs", 0))
+
+    # ── Second metrics row ──
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("📂 CAMS Folios", summary.get("cams_folios", 0))
+    m2.metric("💱 CAMS Txns", summary.get("cams_txns", 0))
+    m3.metric("🔄 CAMS SIPs", summary.get("cams_sips", 0))
+    m4.metric("💰 CAMS Brokerage", format_brokerage(summary.get("cams_brokerage", 0)))
+    m5.metric("💰 KFin Brokerage", format_brokerage(summary.get("kfin_brokerage", 0)))
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("📂 KFin Folios", summary.get("kfin_folios", 0))
+    m2.metric("💱 KFin Txns", summary.get("kfin_txns", 0))
+    m3.metric("🔄 KFin SIPs", summary.get("kfin_sips", 0))
+    m4.metric("💰 Total Brokerage", format_brokerage(summary.get("total_brokerage", 0)))
+    m5.metric("📊 Total Records", sum(summary.get(k, 0) for k in [
+        "total_clients", "total_xsip", "cams_txns", "cams_sips",
+        "kfin_txns", "kfin_sips"
+    ]))
+
+
+        # ── 1-DAY & 1-WEEK DIFFERENCE SECTION ──
+    st.divider()
+    st.subheader("📊 Portfolio Movement — Day & Week Diff")
+
+    if nav_ready and not folio_nav_df.empty:
+        df_nav = folio_nav_df.copy()
+        df_nav["investor_name"] = df_nav["investor_name"].str.upper().str.strip()
+
+        # Debug toggle — body is evaluated later, once diff values exist
+        show_nav_debug = st.toggle(
+            "🐞 Debug: 1-Day Diff Diagnosis",
+            value=False,
+            key="nav_1d_debug_toggle",
+            help="Show diagnostics if 'Folios with NAV data' shows 0.",
+        )
+
+        # Load previous day and week NAV data
+        prev_nav_map = load_previous_nav_map_cached()
+        prev_nav_date = get_previous_nav_date()
+        
+        # ── Resolve the "previous NAV date" the same way the 1-week block does:
+        #    pick the date, then call get_or_fetch_nav_for_date() which handles
+        #    both local snapshots AND live AMFI fetches. This avoids the
+        #    _previous_snapshot_path() filename-vs-content sort bug entirely.
+        _current_date_str = (
+            df_nav["nav_date"].iloc[0]
+            if not df_nav.empty and "nav_date" in df_nav.columns
+            and not df_nav["nav_date"].empty
+            else None
+        )
+        if _current_date_str:
+            _current_date = pd.to_datetime(_current_date_str).date()
+        else:
+            _current_date = dt.now().date()
+
+        _prev_day = get_last_business_day(_current_date)
+        _prev_day_iso = _prev_day.strftime("%Y-%m-%d")
+
+        # ── Skip-back resolver: walks backward until a date covers our folios ──
+        _our_isins = set(
+            df_nav["isin"].dropna().astype(str).str.strip().str.upper().unique()
+        )
+        _baseline_iso, prev_nav_map, _skipback_diag = resolve_prev_nav_for_folios_cached(
+            _current_date.isoformat(),
+            tuple(sorted(_our_isins)),
+        )
+        prev_nav_date = _baseline_iso or "Unknown"
+
+        # Notify user if we had to skip past the immediate previous day
+        if _baseline_iso and _baseline_iso != _prev_day_iso:
+            st.info(
+                f"ℹ️ {_prev_day_iso} snapshot was incomplete for your folios — "
+                f"using **{_baseline_iso}** as the previous baseline "
+                f"({_skipback_diag['overlap']}/{len(_our_isins)} folio ISINs covered)."
+            )
+
+        if not prev_nav_map:
+            st.warning(
+                f"⚠️ Could not load previous business day NAV for {_prev_day_iso}. "
+                "Use Admin → Sync Previous Business Day NAV."
+            )
+        else:
+            # ── Coerce all numeric inputs first. SQLite returns TEXT for any
+            #    column that ever held a non-numeric value, which silently
+            #    turns these into object dtype and breaks nlargest/nsmallest.
+            df_nav["units"] = pd.to_numeric(df_nav["units"], errors="coerce")
+            df_nav["current_nav"] = pd.to_numeric(df_nav["current_nav"], errors="coerce")
+
+            # Calculate 1-day diff
+            df_nav["prev_nav_1d"] = pd.to_numeric(
+                df_nav["isin"].apply(
+                    lambda i: prev_nav_map.get(str(i).strip().upper()) if pd.notna(i) else None
+                ),
+                errors="coerce",
+            )
+            df_nav["diff_1d_value"] = (
+                (df_nav["current_nav"] - df_nav["prev_nav_1d"]) * df_nav["units"]
+            ).astype("float64").fillna(0.0)
+            df_nav["diff_1d_pct"] = (
+                (df_nav["current_nav"] - df_nav["prev_nav_1d"]) / df_nav["prev_nav_1d"] * 100
+            ).astype("float64").fillna(0.0)
+            
+            # Summary stats
+            df_nav["diff_1d_value"] = pd.to_numeric(
+                df_nav["diff_1d_value"], errors="coerce"
+            ).astype("float64").fillna(0.0)
+
+            total_1d_diff = df_nav["diff_1d_value"].sum()
+
+            # ═══════════════════════════════════════════════════════════════
+            # 🐞 DEBUG: 1-Day Diff Diagnosis
+            # ═══════════════════════════════════════════════════════════════
+            if show_nav_debug:
+                with st.expander("🐞 1-Day Diff Diagnostics", expanded=True):
+
+                    # ── Snapshot files on disk ──
+                    st.markdown("### 📁 Snapshot Files on Disk")
+                    _ensure_text_dir()
+                    _all_files = sorted(
+                        f for f in os.listdir(NAV_TEXT_DIR)
+                        if f.startswith("nav_") and f.endswith(".txt")
+                    )
+                    if not _all_files:
+                        st.error(f"❌ No snapshot files in `{NAV_TEXT_DIR}`. "
+                                 "Use Admin → Redownload NAV or "
+                                 "Admin → Sync Previous Business Day NAV.")
+                    else:
+                        _rows = []
+                        for _fn in _all_files:
+                            _fp = os.path.join(NAV_TEXT_DIR, _fn)
+                            _rows.append({
+                                "filename": _fn,
+                                "actual_nav_date": _get_file_nav_date(_fp),
+                                "size_kb": round(os.path.getsize(_fp) / 1024, 1),
+                            })
+                        st.dataframe(pd.DataFrame(_rows), hide_index=True)
+
+                    # ── Date resolution ──
+                    st.markdown("### 🎯 Date Resolution")
+                    st.write(f"**Current NAV date (from current file):** `{_current_date_str}`")
+                    st.write(f"**Previous business day computed:** `{_prev_day_iso}`")
+                    _p, _pd = _previous_snapshot_path()
+                    st.write(f"**`_previous_snapshot_path()` picked:** `{_p}`")
+                    st.write(f"**  → its actual NAV date:** `{_pd}`")
+
+                    # ── prev_nav_map contents ──
+                    st.markdown("### 📊 `prev_nav_map`")
+                    st.write(f"**Size:** {len(prev_nav_map)} ISINs")
+                    if prev_nav_map:
+                        st.write("**Sample:**", dict(list(prev_nav_map.items())[:5]))
+                    else:
+                        st.error("❌ `prev_nav_map` is EMPTY — this is why 1D diff = 0.")
+
+                    # ── Per-row lookup status ──
+                    st.markdown("### 🔍 Per-Row Lookup")
+                    _dbg = df_nav.copy()
+                    _dbg["isin_clean"] = _dbg["isin"].apply(
+                        lambda x: str(x).strip().upper() if pd.notna(x) else None
+                    )
+                    _dbg["lookup_status"] = _dbg["isin_clean"].apply(
+                        lambda i: "missing ISIN" if not i
+                        else ("not in prev_nav_map" if i not in prev_nav_map else "OK")
+                    )
+                    st.write("**Breakdown:**", _dbg["lookup_status"].value_counts().to_dict())
+
+                    _misses = _dbg[_dbg["lookup_status"] != "OK"]
+                    if not _misses.empty:
+                        st.write(f"**{len(_misses)} folio(s) failed:**")
+                        st.dataframe(
+                            _misses[["folio_id", "rta", "scheme_name",
+                                     "isin_clean", "lookup_status"]].head(30),
+                            hide_index=True,
+                        )
+
+                    # ── ISIN overlap analysis ──
+                    st.markdown("### 🎯 ISIN Overlap")
+                    _cur = set(_dbg["isin_clean"].dropna().unique())
+                    _prev = set(prev_nav_map.keys())
+                    _ov = _cur & _prev
+                    st.write(f"- Current unique ISINs: **{len(_cur)}**")
+                    st.write(f"- Previous map ISINs: **{len(_prev)}**")
+                    st.write(f"- **Overlap: {len(_ov)}**")
+
+                    if not _ov:
+                        st.error("❌ ZERO overlap between current ISINs and previous map.")
+                        st.write("**First 5 current ISINs:**", list(_cur)[:5])
+                        st.write("**First 5 previous ISINs:**", list(_prev)[:5])
+                        st.info(
+                            "Common causes:\n"
+                            "• Previous snapshot was fetched from the *history endpoint* "
+                            "and contains fewer schemes than the live file.\n"
+                            "• The prior-day file is only a partial AMFI file (check size — "
+                            "a full file is ~2-3 MB).\n"
+                            "• The stored `isin` in folio_nav_df comes from BSE scheme "
+                            "master but the previous AMFI file doesn't have that ISIN."
+                        )
+                    else:
+                        st.success(f"✅ {len(_ov)} ISINs matched — lookup is fine.")
+
+                    # ── Diff arithmetic check ──
+                    st.markdown("### 🧮 Diff Arithmetic")
+                    st.write(f"- Rows with `prev_nav_1d` populated: "
+                             f"**{df_nav['prev_nav_1d'].notna().sum()}**")
+                    st.write(f"- Rows with non-zero `diff_1d_value`: "
+                             f"**{(df_nav['diff_1d_value'].abs() > 0.01).sum()}**")
+                    st.write(f"- Sum of `diff_1d_value`: **{df_nav['diff_1d_value'].sum():.2f}**")
+
+                    # ── Today vs yesterday coverage (three-source diagnostic) ──
+                    st.markdown("### 📊 Today vs Yesterday File Coverage")
+                    try:
+                        _diag = diagnose_previous_day_coverage(
+                            _current_date_str, _prev_day_iso
+                        )
+                        st.dataframe(
+                            pd.DataFrame([
+                                {"Metric": "Today file exists",
+                                 "Value": str(_diag["today_file_exists"])},
+                                {"Metric": "Yesterday file exists",
+                                 "Value": str(_diag["prev_file_exists"])},
+                                {"Metric": "Today row count",
+                                 "Value": f"{_diag['today_count']:,}"},
+                                {"Metric": "Yesterday row count",
+                                 "Value": f"{_diag['prev_count']:,}"},
+                                {"Metric": "Coverage threshold",
+                                 "Value": f"{_diag['coverage_threshold']:,}"},
+                                {"Metric": "Yesterday is partial",
+                                 "Value": "⚠️ YES" if _diag["prev_is_partial"] else "✅ No"},
+                                {"Metric": "Today unique ISINs",
+                                 "Value": f"{_diag['today_isins']:,}"},
+                                {"Metric": "Yesterday unique ISINs",
+                                 "Value": f"{_diag['prev_isins']:,}"},
+                                {"Metric": "ISIN overlap",
+                                 "Value": f"{_diag['overlap']:,}"},
+                                {"Metric": "Missing from yesterday",
+                                 "Value": f"{_diag['missing_from_prev']:,}"},
+                                {"Metric": "DB fallback has data for yesterday",
+                                 "Value": "✅ Yes" if _diag["has_db_fallback"] else "❌ No"},
+                            ]),
+                            hide_index=True,
+                            width="stretch",
+                        )
+
+                        if _diag["prev_is_partial"]:
+                            st.error(
+                                f"⚠️ Yesterday's snapshot is PARTIAL "
+                                f"({_diag['prev_count']:,} rows vs today's "
+                                f"{_diag['today_count']:,}). This is the root "
+                                f"cause of the 0-diff issue."
+                            )
+                            st.info(
+                                "**Why this happens:** AMFI's history endpoint "
+                                "(`DownloadNAVHistoryReport_Po.aspx`) returns "
+                                "only ~900-1000 rows for any given date, while "
+                                "the live `NAVAll.txt` has ~18,000. When the "
+                                "cron job fetches yesterday's file from the "
+                                "history endpoint, it overwrites the full "
+                                "snapshot with a partial one.\n\n"
+                                "**How the fix handles it:**\n"
+                                "1. The `_save_nav_snapshot` guard now refuses "
+                                "to overwrite a richer existing file.\n"
+                                "2. `get_or_fetch_nav_for_date` checks coverage; "
+                                "if the disk file is partial, it tries AMFI "
+                                "history, then the DB.\n"
+                                "3. The DB fallback reads `nav_history` for "
+                                "the date directly — full coverage guaranteed "
+                                "if the date was ever ingested."
+                            )
+
+                            # Manual retry button
+                            if st.button(
+                                "🔁 Force refetch previous-day from DB fallback",
+                                key="force_refetch_prev_db",
+                                type="primary",
+                            ):
+                                get_or_fetch_nav_for_date_cached.clear()
+                                load_previous_nav_map_cached.clear()
+
+                                _fresh = nav_service.get_nav_for_date_from_db(_prev_day_iso)
+                                if _fresh:
+                                    st.success(
+                                        f"✅ Loaded {len(_fresh)} ISINs from DB for "
+                                        f"{_prev_day_iso}. Reloading dashboard…"
+                                    )
+                                    get_enriched_folio_nav_df.clear()
+                                    get_folio_nav_summary_cached.clear()
+                                    st.rerun()
+                                else:
+                                    st.error(
+                                        f"❌ No DB data for {_prev_day_iso} either. "
+                                        "The date may never have been ingested. "
+                                        "Check `sync_failures.log` or manually "
+                                        "run Admin → Sync Previous Business Day NAV."
+                                    )
+                    # ── Skip-back baseline candidates ──
+                    except Exception as _e:
+                        st.warning(f"Diagnostic failed: {_e}")
+
+                # ── Skip-back baseline candidates ──
+                st.markdown("### 🔄 Skip-Back Baseline Selection")
+                _sb = _skipback_diag if "_skipback_diag" in dir() else {}
+                _cands = _sb.get("candidates", [])
+                if _cands:
+                    st.dataframe(
+                        pd.DataFrame(_cands).rename(columns={
+                            "date": "Date",
+                            "rows": "Rows in Snapshot",
+                            "folio_overlap": "Folio ISINs Found",
+                            "needed": "Min Needed",
+                        }),
+                        hide_index=True,
+                        width="stretch",
+                    )
+                    if _sb.get("chosen"):
+                        st.success(
+                            f"✅ Baseline: **{_sb['chosen']}** "
+                            f"({_sb['overlap']}/{len(_our_isins)} folio ISINs)"
+                        )
+                    else:
+                        st.error(
+                            "❌ No date within lookback covered enough of your folios."
+                        )
+            # ═══════════════════════════════════════════════════════════════
+
+            top_gainers_1d = df_nav[df_nav["diff_1d_value"] > 0].nlargest(5, "diff_1d_value")[
+                ["folio_id", "scheme_name", "current_nav", "prev_nav_1d", "units", "diff_1d_value", "rta"]
+            ].copy()
+            top_losers_1d = df_nav[df_nav["diff_1d_value"] < 0].nsmallest(5, "diff_1d_value")[
+                ["folio_id", "scheme_name", "current_nav", "prev_nav_1d", "units", "diff_1d_value", "rta"]
+            ].copy()
+            
+            # Display metrics
+            m1d1, m1d2, m1d3 = st.columns(3)
+            m1d1.metric("📈 1-Day Portfolio Change", format_aum(total_1d_diff),
+                    delta=f"{(total_1d_diff / summary.get('total_aum', 1) * 100):.2f}%" if summary.get('total_aum', 0) > 0 else None)
+            m1d2.metric("📅 Comparison Date", prev_nav_date or "Unknown")
+            m1d3.metric("✅ Folios with NAV data", f"{(df_nav['prev_nav_1d'].notna()).sum()} / {len(df_nav)}")
+            
+            # Top movers
+            col1d_gainers, col1d_losers = st.columns(2)
+            
+            with col1d_gainers:
+                st.markdown("#### 🟢 Top Gainers (1D)")
+                if not top_gainers_1d.empty:
+                    display_gainers = top_gainers_1d.rename(columns={
+                        "folio_id": "Folio", "scheme_name": "Scheme", "current_nav": "Current NAV",
+                        "prev_nav_1d": "Prev NAV", "units": "Units", "diff_1d_value": "Gain (₹)", "rta": "RTA"
+                    })
+                    st.dataframe(
+                        display_gainers,
+                        width="stretch",
+                        hide_index=True,
+                        column_config={
+                            "Current NAV": st.column_config.NumberColumn(format="₹ %.4f"),
+                            "Prev NAV": st.column_config.NumberColumn(format="₹ %.4f"),
+                            "Units": st.column_config.NumberColumn(format="%.4f"),
+                            "Gain (₹)": st.column_config.NumberColumn(format="₹ %.2f"),
+                        }
+                    )
+                else:
+                    st.info("No gainers today")
+            
+            with col1d_losers:
+                st.markdown("#### 🔴 Top Losers (1D)")
+                if not top_losers_1d.empty:
+                    display_losers = top_losers_1d.rename(columns={
+                        "folio_id": "Folio", "scheme_name": "Scheme", "current_nav": "Current NAV",
+                        "prev_nav_1d": "Prev NAV", "units": "Units", "diff_1d_value": "Loss (₹)", "rta": "RTA"
+                    })
+                    st.dataframe(
+                        display_losers,
+                        width="stretch",
+                        hide_index=True,
+                        column_config={
+                            "Current NAV": st.column_config.NumberColumn(format="₹ %.4f"),
+                            "Prev NAV": st.column_config.NumberColumn(format="₹ %.4f"),
+                            "Units": st.column_config.NumberColumn(format="%.4f"),
+                            "Loss (₹)": st.column_config.NumberColumn(format="₹ %.2f"),
+                        }
+                    )
+                else:
+                    st.info("No losers today")
+            
+
+            # 1-week diff (if available)
+            st.divider()
+            st.markdown("### 📊 1-Week Movement")
+                  
+        
+            # Convert nav_date to datetime properly
+            if not df_nav["nav_date"].empty:
+                current_date_str = df_nav["nav_date"].iloc[0]
+                current_date = pd.to_datetime(current_date_str).to_pydatetime().date()
+            else:
+                current_date = dt.now().date()
+            
+            seven_days_ago = current_date - timedelta(days=7)
+            seven_days_ago_iso = seven_days_ago.strftime("%Y-%m-%d")
+            
+            # Use their existing function - it handles local cache + AMFI fetch
+            nav_1wk_map = get_or_fetch_nav_for_date_cached(seven_days_ago_iso)
+            
+            if nav_1wk_map:
+                df_nav["prev_nav_1w"] = pd.to_numeric(
+                    df_nav["isin"].apply(
+                        lambda i: nav_1wk_map.get(str(i).strip().upper()) if pd.notna(i) else None
+                    ),
+                    errors="coerce",
+                )
+                df_nav["diff_1w_value"] = (
+                    (df_nav["current_nav"] - df_nav["prev_nav_1w"]) * df_nav["units"]
+                ).astype("float64").fillna(0.0)
+                
+                total_1w_diff = df_nav["diff_1w_value"].sum()
+                top_gainers_1w = df_nav[df_nav["diff_1w_value"] > 0].nlargest(5, "diff_1w_value")[
+                    ["folio_id", "scheme_name", "current_nav", "prev_nav_1w", "units", "diff_1w_value", "rta"]
+                ].copy()
+                top_losers_1w = df_nav[df_nav["diff_1w_value"] < 0].nsmallest(5, "diff_1w_value")[
+                    ["folio_id", "scheme_name", "current_nav", "prev_nav_1w", "units", "diff_1w_value", "rta"]
+                ].copy()
+                
+                m1w1, m1w2, m1w3 = st.columns(3)
+                m1w1.metric("📈 1-Week Portfolio Change", format_aum(total_1w_diff))
+                m1w2.metric("📅 Comparison Date", seven_days_ago.strftime("%d %b %Y"))
+                m1w3.metric("✅ Schemes with data", f"{(df_nav['prev_nav_1w'].notna()).sum()} / {len(df_nav)}")
+                
+                col1w_gainers, col1w_losers = st.columns(2)
+                
+                with col1w_gainers:
+                    st.markdown("#### 🟢 Top Gainers (1W)")
+                    if not top_gainers_1w.empty:
+                        display_gainers_1w = top_gainers_1w.rename(columns={
+                            "folio_id": "Folio", "scheme_name": "Scheme", "current_nav": "Current NAV",
+                            "prev_nav_1w": "1W Ago", "units": "Units", "diff_1w_value": "Gain (₹)", "rta": "RTA"
+                        })
+                        st.dataframe(display_gainers_1w, width="stretch", hide_index=True,
+                            column_config={"Current NAV": st.column_config.NumberColumn(format="₹ %.4f"),
+                                        "1W Ago": st.column_config.NumberColumn(format="₹ %.4f"),
+                                        "Gain (₹)": st.column_config.NumberColumn(format="₹ %.2f")})
+                    else:
+                        st.info("No gainers this week")
+                
+                with col1w_losers:
+                    st.markdown("#### 🔴 Top Losers (1W)")
+                    if not top_losers_1w.empty:
+                        display_losers_1w = top_losers_1w.rename(columns={
+                            "folio_id": "Folio", "scheme_name": "Scheme", "current_nav": "Current NAV",
+                            "prev_nav_1w": "1W Ago", "units": "Units", "diff_1w_value": "Loss (₹)", "rta": "RTA"
+                        })
+                        st.dataframe(display_losers_1w, width="stretch", hide_index=True,
+                            column_config={"Current NAV": st.column_config.NumberColumn(format="₹ %.4f"),
+                                        "1W Ago": st.column_config.NumberColumn(format="₹ %.4f"),
+                                        "Loss (₹)": st.column_config.NumberColumn(format="₹ %.2f")})
+                    else:
+                        st.info("No losers this week")
+            else:
+                st.info(f"⚠️ No NAV data available for {seven_days_ago.strftime('%d %b %Y')}")
+
+        # ── CLIENT-WISE DRILLDOWN ──
+        st.divider()
+        st.markdown("### 👥 Client-wise Performance")
+
+        if "dw_selected_client" not in st.session_state:
+            st.session_state["dw_selected_client"] = None
+
+        # LEVEL 1: All clients with invested, current, 1D & 1W diffs
+        if st.session_state["dw_selected_client"] is None:
+            df_nav["investor_name"] = df_nav["investor_name"].str.upper().str.strip()
+
+            client_perf = (
+                df_nav.groupby("investor_name", dropna=False)  # ← Use investor_name (already normalized)
+                .agg(
+                    invested=("file_aum", "sum"),
+                    current=("nav_based_aum", "sum"),
+                    diff_1d=("diff_1d_value", "sum"),
+                    diff_1w=("diff_1w_value", "sum") if "diff_1w_value" in df_nav.columns else (lambda x: 0),
+                )
+                .reset_index()
+                .sort_values("current", ascending=False)
+            )
+            
+            client_perf = client_perf[client_perf["investor_name"].notna()]
+            
+            client_disp = client_perf.rename(columns={
+                "investor_name": "Client Name",
+                "invested": "Invested",
+                "current": "Current",
+                "diff_1d": "1D Diff",
+                "diff_1w": "1W Diff"
+            })
+            
+            sel_client = st.dataframe(
+                client_disp,
+                width="stretch",
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key="dw_client_table",
+                column_config={
+                    "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Current": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "1D Diff": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "1W Diff": st.column_config.NumberColumn(format="₹ %.2f"),
+                }
+            )
+            
+            if sel_client and len(sel_client["selection"]["rows"]) > 0:
+                idx = sel_client["selection"]["rows"][0]
+                st.session_state["dw_selected_client"] = client_disp.iloc[idx]["Client Name"]
+                st.rerun()
+
+        # LEVEL 2: Scheme-wise breakdown for selected client
+        else:
+            sel_client_name = st.session_state["dw_selected_client"]
+            
+            if st.button("⬅️ Back to Clients"):
+                st.session_state["dw_selected_client"] = None
+                st.rerun()
+            
+            st.divider()
+            st.markdown(f"### {sel_client_name} — Schemes")
+            
+
+            client_schemes = df_nav[df_nav["investor_name"] == st.session_state["dw_selected_client"]].copy()
+            
+            scheme_perf = (
+                client_schemes.groupby("scheme_name", dropna=False)
+                .agg(
+                    invested=("file_aum", "sum"),
+                    current=("nav_based_aum", "sum"),
+                    diff_1d=("diff_1d_value", "sum"),
+                    diff_1w=("diff_1w_value", "sum") if "diff_1w_value" in client_schemes.columns else (lambda x: 0),
+                )
+                .reset_index()
+                .sort_values("current", ascending=False)
+            )
+            
+            scheme_disp = scheme_perf.rename(columns={
+                "scheme_name": "Scheme",
+                "invested": "Invested",
+                "current": "Current",
+                "diff_1d": "1D Diff",
+                "diff_1w": "1W Diff"
+            })
+            
+            st.dataframe(
+                scheme_disp,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Current": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "1D Diff": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "1W Diff": st.column_config.NumberColumn(format="₹ %.2f"),
+                }
+            )
+
+        # ── AMC / Scheme Breakdown (drilldown) ──
+        st.divider()
+        st.subheader("🏢 Portfolio Breakdown")
+
+        if nav_ready and not folio_nav_df.empty:
+            bd_df = folio_nav_df.copy()
+            # Normalize investor names globally (handle case/whitespace differences)
+            bd_df["investor_name"] = bd_df["investor_name"].str.upper().str.strip()
+            bd_df["amc_name"] = bd_df["amc_name"].fillna("⚠️ Unresolved (no ISIN match)")
+            bd_df["scheme_name"] = bd_df["scheme_name"].fillna("⚠️ Unresolved")
+
+            breakdown_mode = st.radio(
+                "Breakdown by", ["AMC-wise", "RTA-wise", "Scheme-wise", "Client-wise"], horizontal=True, key="bd_mode"
+            )
+
+
+            if "bd_selected_rta" not in st.session_state:
+                st.session_state["bd_selected_rta"] = None
+            if "bd_selected_amc" not in st.session_state:
+                st.session_state["bd_selected_amc"] = None
+            if "bd_selected_scheme" not in st.session_state:
+                st.session_state["bd_selected_scheme"] = None
+            if "bd_selected_client" not in st.session_state:
+                st.session_state["bd_selected_client"] = None
+
+            if breakdown_mode != st.session_state.get("bd_last_mode"):
+                st.session_state["bd_selected_amc"] = None
+                st.session_state["bd_selected_scheme"] = None
+                st.session_state["bd_selected_client"] = None
+                st.session_state["bd_selected_rta"] = None
+                st.session_state["bd_last_mode"] = breakdown_mode
+
+            # ── LEVEL 1: AMC list (AMC-wise mode only) ──
+            if breakdown_mode == "AMC-wise" and st.session_state["bd_selected_amc"] is None:
+                amc_df = (
+                    bd_df.groupby(["amc_name", "rta"], dropna=False)
+                    .agg(folios=("folio_id", "nunique"), records=("folio_id", "count"), aum=("nav_based_aum", "sum"))
+                    .reset_index().sort_values("aum", ascending=False)
+                )
+                amc_df["aum_display"] = amc_df["aum"].apply(format_aum)
+                amc_disp = amc_df[["amc_name", "rta", "folios", "records", "aum_display"]].rename(
+                    columns={"amc_name": "AMC Name", "rta": "RTA", "folios": "Folios", "records": "Records",
+                            "aum_display": "AUM"}
+                )
+                sel = st.dataframe(amc_disp, width="stretch", hide_index=True,
+                                on_select="rerun", selection_mode="single-row", key="bd_amc_table")
+
+                fig = px.pie(amc_df, values="aum", names="amc_name", hole=0.4, title="AUM Distribution by AMC",
+                            color_discrete_sequence=px.colors.qualitative.Vivid)
+                fig = theme_plotly(fig, dark)
+                fig.update_traces(textposition='inside', textinfo='percent+label', pull=[0.02] * len(amc_df))
+                fig.update_layout(showlegend=False, margin=dict(t=40, b=20, l=20, r=20))
+                st.plotly_chart(fig, width="stretch")
+
+                if sel and len(sel["selection"]["rows"]) > 0:
+                    idx = sel["selection"]["rows"][0]
+                    st.session_state["bd_selected_amc"] = amc_disp.iloc[idx]["AMC Name"]
+                    st.rerun()
+
+            if breakdown_mode == "RTA-wise" and st.session_state["bd_selected_rta"] is None:
+                rta_df = (
+                    bd_df.groupby("rta", dropna=False)
+                    .agg(folios=("folio_id", "nunique"), records=("folio_id", "count"), aum=("nav_based_aum", "sum"))
+                    .reset_index().sort_values("aum", ascending=False)
+                )
+                rta_df["aum_display"] = rta_df["aum"].apply(format_aum)
+                rta_disp = rta_df[["rta", "folios", "records", "aum_display"]].rename(
+                    columns={"rta": "RTA", "folios": "Folios", "records": "Records", "aum_display": "AUM"}
+                )
+                sel_rta = st.dataframe(rta_disp, width="stretch", hide_index=True,
+                                        on_select="rerun", selection_mode="single-row", key="bd_rta_table")
+
+                fig_rta = px.pie(rta_df, values="aum", names="rta", hole=0.4, title="AUM Distribution by RTA",
+                                color_discrete_sequence=px.colors.qualitative.Bold)
+                fig_rta = theme_plotly(fig_rta, dark)
+                fig_rta.update_traces(textposition='inside', textinfo='percent+label')
+                fig_rta.update_layout(showlegend=False, margin=dict(t=40, b=20, l=20, r=20))
+                st.plotly_chart(fig_rta, width="stretch")
+
+                if sel_rta and len(sel_rta["selection"]["rows"]) > 0:
+                    idx = sel_rta["selection"]["rows"][0]
+                    st.session_state["bd_selected_rta"] = rta_disp.iloc[idx]["RTA"]
+                    st.rerun()
+
+            # ── LEVEL 2: Scheme list ──  (back to top level, sibling of the ifs above)
+            elif st.session_state["bd_selected_scheme"] is None and (
+                    (breakdown_mode == "AMC-wise" and st.session_state["bd_selected_amc"] is not None)
+                    or (breakdown_mode == "RTA-wise" and st.session_state["bd_selected_rta"] is not None)
+                    or breakdown_mode == "Scheme-wise"
+            ):
+
+                if breakdown_mode == "AMC-wise":
+                    sel_amc = st.session_state["bd_selected_amc"]
+                    if st.button("⬅️ Back to AMCs"):
+                        st.session_state["bd_selected_amc"] = None
+                        st.rerun()
+                    st.markdown(f"### {sel_amc} — Schemes")
+                    scheme_src = bd_df[bd_df["amc_name"] == sel_amc]
+                elif breakdown_mode == "RTA-wise":
+                    sel_rta_val = st.session_state["bd_selected_rta"]
+                    if st.button("⬅️ Back to RTAs"):
+                        st.session_state["bd_selected_rta"] = None
+                        st.rerun()
+                    st.markdown(f"### {sel_rta_val} — Schemes")
+                    scheme_src = bd_df[bd_df["rta"] == sel_rta_val]
+                else:
+                    scheme_src = bd_df
+
+                scheme_df = (
+                    scheme_src.groupby(["scheme_name", "amc_name", "rta"], dropna=False)
+                    .agg(folios=("folio_id", "nunique"), records=("folio_id", "count"), aum=("nav_based_aum", "sum"))
+                    .reset_index().sort_values("aum", ascending=False)
+                )
+                scheme_df["aum_display"] = scheme_df["aum"].apply(format_aum)
+                cols = ["scheme_name", "rta", "folios", "records", "aum_display"] if breakdown_mode in ("AMC-wise", "RTA-wise") \
+                    else ["scheme_name", "amc_name", "rta", "folios", "records", "aum_display"]
+                rename_map = {"scheme_name": "Scheme Name", "amc_name": "AMC Name", "rta": "RTA",
+                            "folios": "Folios", "records": "Records", "aum_display": "AUM"}
+                scheme_disp = scheme_df[cols].rename(columns=rename_map)
+
+                sel2 = st.dataframe(scheme_disp, width="stretch", hide_index=True,
+                                    on_select="rerun", selection_mode="single-row", key="bd_scheme_table")
+
+                if sel2 and len(sel2["selection"]["rows"]) > 0:
+                    idx = sel2["selection"]["rows"][0]
+                    st.session_state["bd_selected_scheme"] = scheme_disp.iloc[idx]["Scheme Name"]
+                    st.rerun()
+
+            # ── LEVEL 3: Client list for selected scheme ──
+            if st.session_state["bd_selected_scheme"] is not None:
+                sel_scheme = st.session_state["bd_selected_scheme"]
+                if st.button("⬅️ Back to Schemes"):
+                    st.session_state["bd_selected_scheme"] = None
+                    st.rerun()
+
+                st.divider()
+                st.subheader(f"👥 Client-wise Investment — {sel_scheme}")
+
+                scheme_clients = bd_df[bd_df["scheme_name"] == sel_scheme].copy()
+                client_summary = (
+                    scheme_clients.groupby("investor_name", dropna=False)
+                    .agg(folios=("folio_id", "nunique"), units=("units", "sum"),
+                        invested=("file_aum", "sum"), current_value=("nav_based_aum", "sum"))
+                    .reset_index()
+                )
+                client_summary["gain_loss"] = client_summary["current_value"] - client_summary["invested"]
+                client_summary = client_summary.sort_values("current_value", ascending=False)
+
+                cc1, cc2, cc3 = st.columns(3)
+                cc1.metric("👤 Clients", client_summary["investor_name"].nunique())
+                cc2.metric("💰 Total Invested", format_aum(client_summary["invested"].sum()))
+                cc3.metric("📈 Current Value", format_aum(client_summary["current_value"].sum()))
+
+                client_disp = client_summary.rename(
+                    columns={"investor_name": "Client", "folios": "Folios", "current_value": "Current Value"})
+                st.dataframe(client_disp, width="stretch", hide_index=True,
+                            column_config={"Current Value": st.column_config.NumberColumn(format="₹ %.2f")})
+
+                csv = client_disp.to_csv(index=False).encode("utf-8")
+                st.download_button(f"⬇️ Download {sel_scheme} Client Breakdown (CSV)",
+                                csv, f"scheme_{sel_scheme.replace(' ', '_')[:50]}_clients.csv", "text/csv",
+                                key="bd_client_download")
+
+            # ── CLIENT-WISE BREAKDOWN: LEVEL 1 (All Clients) ──
+            elif breakdown_mode == "Client-wise" and st.session_state["bd_selected_client"] is None:
+                client_df = (
+                    bd_df.groupby("investor_name", dropna=False)
+                    .agg(
+                        folios=("folio_id", "nunique"),
+                        schemes=("scheme_name", "nunique"),
+                        rtas=("rta", lambda x: ", ".join(sorted(set(x)))),
+                        aum=("nav_based_aum", "sum"),
+                        invested=("file_aum", "sum"),
+                    )
+                    .reset_index()
+                    .sort_values("aum", ascending=False)
+                )
+                client_df["gain_loss"] = client_df["aum"] - client_df["invested"]
+                client_df["aum_display"] = client_df["aum"].apply(format_aum)
+                
+                client_disp = client_df[["investor_name", "rtas", "folios", "schemes", "invested", "aum_display", "gain_loss"]].rename(
+                    columns={
+                        "investor_name": "Client Name",
+                        "rtas": "RTAs",
+                        "folios": "Folios",
+                        "schemes": "Schemes",
+                        "invested": "Invested",
+                        "aum_display": "Current Value",
+                        "gain_loss": "Gain/Loss"
+                    }
+                )
+                
+                sel_client = st.dataframe(
+                    client_disp,
+                    width="stretch",
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    key="bd_client_table",
+                    column_config={
+                        "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+                    }
+                )
+
+                # Pie chart by client
+                if not client_df.empty:
+                    fig_client = px.pie(
+                        client_df,
+                        values="aum",
+                        names="investor_name",
+                        hole=0.4,
+                        title="AUM Distribution by Client",
+                        color_discrete_sequence=px.colors.qualitative.Set3
+                    )
+                    fig_client = theme_plotly(fig_client, dark)
+                    fig_client.update_traces(textposition='inside', textinfo='percent+label', pull=[0.02] * len(client_df))
+                    fig_client.update_layout(showlegend=True, margin=dict(t=40, b=20, l=20, r=20))
+                    st.plotly_chart(fig_client, width="stretch")
+
+                if sel_client and len(sel_client["selection"]["rows"]) > 0:
+                    idx = sel_client["selection"]["rows"][0]
+                    st.session_state["bd_selected_client"] = client_disp.iloc[idx]["Client Name"]
+                    st.rerun()
+
+            # ── CLIENT-WISE BREAKDOWN: LEVEL 2 (Individual Client Holdings) ──
+            elif breakdown_mode == "Client-wise" and st.session_state["bd_selected_client"] is not None:
+                sel_client_name = st.session_state["bd_selected_client"]
+                
+                if st.button("⬅️ Back to Clients"):
+                    st.session_state["bd_selected_client"] = None
+                    st.rerun()
+                
+                st.divider()
+                st.markdown(f"### 👤 {sel_client_name} — Holdings")
+                
+                client_holdings = bd_df[bd_df["investor_name"] == sel_client_name].copy()
+                
+                # Summary metrics
+                client_total_invested = client_holdings["file_aum"].sum()
+                client_total_value = client_holdings["nav_based_aum"].sum()
+                client_total_gain = client_total_value - client_total_invested
+                
+                cc1, cc2, cc3, cc4 = st.columns(4)
+                cc1.metric("💰 Invested", format_aum(client_total_invested))
+                cc2.metric("📈 Current Value", format_aum(client_total_value))
+                cc3.metric("💹 Gain/Loss", format_aum(client_total_gain))
+                cc4.metric("📊 Return %",
+                        f"{(client_total_gain / client_total_invested * 100):.2f}%" if client_total_invested > 0 else "N/A")
+                
+                # Scheme-level breakdown
+                scheme_breakdown = (
+                    client_holdings.groupby(["scheme_name", "amc_name", "rta"], dropna=False)
+                    .agg(
+                        folios=("folio_id", "nunique"),
+                        units=("units", "sum"),
+                        invested=("file_aum", "sum"),
+                        aum=("nav_based_aum", "sum"),
+                    )
+                    .reset_index()
+                    .sort_values("aum", ascending=False)
+                )
+                scheme_breakdown["gain_loss"] = scheme_breakdown["aum"] - scheme_breakdown["invested"]
+                
+                display_scheme = scheme_breakdown.rename(columns={
+                    "scheme_name": "Scheme",
+                    "amc_name": "AMC",
+                    "rta": "RTA",
+                    "folios": "Folios",
+                    "units": "Units",
+                    "invested": "Invested",
+                    "aum": "Current Value",
+                    "gain_loss": "Gain/Loss"
+                })
+                
+                st.markdown("#### 📋 Scheme-wise Breakdown")
+                st.dataframe(
+                    display_scheme,
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "Units": st.column_config.NumberColumn(format="%.4f"),
+                        "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "Current Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+                    }
+                )
+                
+                # Pie chart of schemes for this client
+                if not scheme_breakdown.empty and scheme_breakdown["aum"].sum() > 0:
+                    fig_scheme = px.pie(
+                        scheme_breakdown,
+                        values="aum",
+                        names="scheme_name",
+                        hole=0.4,
+                        title=f"Scheme Distribution — {sel_client_name}",
+                        color_discrete_sequence=px.colors.qualitative.Pastel
+                    )
+                    fig_scheme = theme_plotly(fig_scheme, dark)
+                    fig_scheme.update_traces(textposition='inside', textinfo='percent+label')
+                    fig_scheme.update_layout(showlegend=True, margin=dict(t=40, b=20, l=20, r=20))
+                    st.plotly_chart(fig_scheme, width="stretch")
+                
+                # RTA breakdown for this client
+                st.markdown("#### 🏢 RTA-wise Summary")
+                rta_breakdown = (
+                    client_holdings.groupby("rta")
+                    .agg(
+                        folios=("folio_id", "nunique"),
+                        schemes=("scheme_name", "nunique"),
+                        invested=("file_aum", "sum"),
+                        aum=("nav_based_aum", "sum"),
+                    )
+                    .reset_index()
+                )
+                rta_breakdown["gain_loss"] = rta_breakdown["aum"] - rta_breakdown["invested"]
+                
+                display_rta = rta_breakdown.rename(columns={
+                    "rta": "RTA",
+                    "folios": "Folios",
+                    "schemes": "Schemes",
+                    "invested": "Invested",
+                    "aum": "Current Value",
+                    "gain_loss": "Gain/Loss"
+                })
+                
+                st.dataframe(
+                    display_rta,
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "Current Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+                    }
+                )
+
+
+
+
+        # ── ISIN + Current NAV Section ──
+        st.divider()
+        st.subheader("📈 Folio-Level ISIN & Current NAV")
+
+        if nav_ready and not folio_nav_df.empty:
+            df = folio_nav_df
+
+            f1, f2, f3 = st.columns([2, 2, 2])
+            with f1:
+                rta_filter = st.multiselect(
+                    "RTA", df["rta"].unique(), default=df["rta"].unique(), key="nav_rta_filter"
+                )
+            with f2:
+                show_only = st.radio(
+                    "Show", ["All", "With ISIN only", "With NAV only", "Missing ISIN", "Missing NAV"],
+                    horizontal=True, key="nav_show_filter"
+                )
+            with f3:
+                search_folio = st.text_input("🔍 Search Folio / Investor", "", key="nav_search")
+
+            view = df[df["rta"].isin(rta_filter)]
+
+            if show_only == "With ISIN only":
+                view = view[view["has_isin"]]
+            elif show_only == "With NAV only":
+                view = view[view["has_nav"]]
+            elif show_only == "Missing ISIN":
+                view = view[~view["has_isin"]]
+            elif show_only == "Missing NAV":
+                view = view[view["has_isin"] & ~view["has_nav"]]
+
+            if search_folio.strip():
+                mask = (
+                        view["folio_id"].astype(str).str.contains(search_folio, case=False, na=False) |
+                        view["investor_name"].astype(str).str.contains(search_folio, case=False, na=False)
+                )
+                view = view[mask]
+
+            display_cols = [
+                "rta", "folio_id", "investor_name", "product_code",
+                "scheme_name", "isin", "current_nav", "nav_date",
+                "units", "file_aum", "nav_based_aum"
+            ]
+            display_cols = [c for c in display_cols if c in view.columns]
+
+            st.dataframe(
+                view[display_cols],
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "current_nav": st.column_config.NumberColumn("Current NAV", format="₹ %.4f"),
+                    "nav_based_aum": st.column_config.NumberColumn("NAV-based AUM", format="₹ %.2f"),
+                    "file_aum": st.column_config.NumberColumn("File AUM", format="₹ %.2f"),
+                    "units": st.column_config.NumberColumn("Units", format="%.4f"),
+                }
+            )
+
+            st.caption(f"Showing {len(view):,} of {len(df):,} folios")
+
+            if not view.empty:
+                csv = view.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇️ Download NAV Report (CSV)",
+                    csv,
+                    "folio_nav_report.csv",
+                    "text/csv",
+                )
+
+
+        # ── Recent Uploads ──
+        st.divider()
+        st.subheader("📤 Recent Uploads")
+        uploads_df = load_recent_uploads(data_version())
+        if not uploads_df.empty:
+            st.dataframe(uploads_df, width="stretch", hide_index=True)
+        else:
+            st.info("No uploads yet. Go to Admin Panel to upload data.")
+
+
+
+
+# ==================== 👥 CLIENTS ====================
+elif mode == "👥 Clients":
+    st.header("👤 Client Portfolio & Analytics")
+
+    selected_display, selected_client = render_client_selector("clients_tab")
+    
+    if not selected_display or selected_client is None:
+        st.stop()
+    
+    client_code = selected_client['client_code']
+    pan = selected_client['pan']
+    name = selected_client['name']
+
+    is_minor = pd.isna(pan) or str(pan).strip() == ""
+    match_pan = selected_client['guardian_pan'] if is_minor else pan
+
+    # ── Compact Header ──
+    st.divider()
+    hc1, hc2, hc3, hc4, hc5 = st.columns([3, 1, 1, 1, 1])
+    with hc1:
+        st.markdown(f"### {name}")
+    with hc2:
+        st.markdown(f"**PAN:** `{pan if not is_minor else 'Minor'}`")
+    with hc3:
+        st.markdown(f"**Code:** `{client_code}`")
+    with hc4:
+        st.markdown(f"📱 {selected_client.get('mobile') or 'N/A'}")
+    with hc5:
+        st.markdown(f"📍 {selected_client.get('city') or 'N/A'}")
+    if selected_client.get('email'):
+        st.markdown(f"✉️ {selected_client['email']}")
+    if is_minor:
+        st.warning(
+            f"🧒 Minor account — Guardian: {selected_client.get('guardian_name', 'N/A')} ({selected_client.get('guardian_relationship', '')}) | Guardian PAN: {selected_client.get('guardian_pan', 'N/A')}")
+    st.divider()
+
+    # ── NAV Data ──
+    folio_nav_df = get_enriched_folio_nav_df(data_version())
+
+    # ── FAMILY PORTFOLIO ──
+    family = get_family_for_client(client_code)
+
+    if family is None:
+        st.subheader("👨‍👩‍👧‍👦 Family Portfolio")
+        with st.expander("➕ Create a Family", expanded=False):
+            fam_name_input = st.text_input(
+                "Family Name", value=f"{name}'s Family", key="new_family_name"
+            )
+            if st.button("Create Family (you as Head)", key="create_family_btn"):
+                create_family(client_code, fam_name_input.strip() or f"{name}'s Family")
+                st.success("Family created.")
+                st.rerun()
+        st.divider()
+
+    # ── Folio lookup (used by Portfolio & AUM and Active SIPs) ──
+    name_clean = name.strip().upper() if name else ""
+
+    with get_conn() as conn:
+        if is_minor:
+            cams_f = pd.read_sql(
+                "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                conn, params=(name_clean,))
+            kfin_f = pd.read_sql(
+                "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                conn, params=(name_clean,))
+        else:
+            cams_f = pd.read_sql(
+                "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+                conn, params=(match_pan, name))
+            kfin_f = pd.read_sql(
+                "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
+                conn, params=(match_pan, name))
+
+    all_folios = set(cams_f['foliochk'].tolist() + kfin_f['folio'].tolist())
+
+    # Stop only if no folios AND no family (preserve original UX for non-family clients)
+    if not all_folios and family is None:
+        with get_conn() as conn:
+            pending_sip = pd.read_sql(
+                "SELECT scheme_name, installments_amt, frequency_type, status, start_date "
+                "FROM bse_sip WHERE client_code = ? AND UPPER(TRIM(status)) = 'ACTIVE'",
+                conn, params=(client_code,)
+            )
+        if not pending_sip.empty:
+            st.warning("⏳ No portfolio yet — SIP registered, first installment pending.")
+            st.dataframe(
+                pending_sip.rename(columns={
+                    "scheme_name": "Scheme", "installments_amt": "Amount",
+                    "frequency_type": "Frequency", "status": "Status", "start_date": "Start Date"
+                }),
+                width="stretch", hide_index=True
+            )
+        else:
+            st.info("No folios found.")
+        st.stop()
+
+    # ── Tabs ──
+    if family is None:
+        tab_portfolio, tab_sips, tab_transactions, tab_brokerage = st.tabs(
+            ["📈 Portfolio & AUM", "🔄 Active SIPs", "📜 Transactions", "💰 Brokerage"]
+        )
+    else:
+        tab_family, tab_portfolio, tab_sips, tab_transactions, tab_brokerage = st.tabs(
+            ["👨‍👩‍👧‍👦 Family Portfolio", "📈 Portfolio & AUM", "🔄 Active SIPs","📜 Transactions", "💰 Brokerage"]
+        )
+
+    # ═══════════════════════════════════════════════════════════
+    # TAB FAMILY — Family Portfolio (only when family exists)
+    # ═══════════════════════════════════════════════════════════
+    if family is not None:
+        with tab_family:
+            family_id = family["family_id"]
+            members_df = get_family_members(family_id)
+            member_codes = members_df["client_code"].tolist()
+
+            fam_holdings_list = []
+            member_rows = []
+            _nav_version = str(folio_nav_df["nav_date"].max()) if not folio_nav_df.empty else "none"
+            for mc in member_codes:
+                h = compute_client_holdings(
+                    mc,
+                    _nav_version,
+                    _folio_nav_df=folio_nav_df,
+                    _v=data_version(),
+                )
+                if h is None:
+                    h = pd.DataFrame()
+                mname_arr = members_df.loc[members_df['client_code'] == mc, 'name'].values
+                mname = mname_arr[0] if len(mname_arr) else mc
+                inv = h['file_aum'].sum() if not h.empty else 0.0
+                cur = h['nav_based_aum'].sum() if not h.empty else 0.0
+                member_rows.append({
+                    "Client": mname, "Code": mc,
+                    "Invested": inv, "Current Value": cur, "Gain/Loss": cur - inv,
+                    "Head": "👑" if mc == family["head_client_code"] else ""
+                })
+                if not h.empty:
+                    fam_holdings_list.append(h)
+
+            fam_holdings = pd.concat(fam_holdings_list, ignore_index=True) if fam_holdings_list else pd.DataFrame()
+            fam_invested = fam_holdings['file_aum'].sum() if not fam_holdings.empty else 0.0
+            fam_current = fam_holdings['nav_based_aum'].sum() if not fam_holdings.empty else 0.0
+            fam_gain = fam_current - fam_invested
+
+            st.caption(f"**{family['family_name']}**")
+            fc1, fc2, fc3, fc4 = st.columns(4)
+            fc1.metric("💰 Family Invested", format_aum(fam_invested))
+            fc2.metric("📈 Family Current Value", format_aum(fam_current))
+            fc3.metric("💹 Family Gain/Loss", format_aum(fam_gain))
+            fc4.metric("👥 Members", len(member_codes))
+
+            fam_left, fam_right = st.columns([1, 1])
+
+            with fam_left:
+                st.markdown("**Member Breakdown**")
+                member_summary_df = pd.DataFrame(member_rows).sort_values("Current Value", ascending=False)
+                st.dataframe(
+                    member_summary_df,
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "Current Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+                    },
+                )
+
+            with fam_right:
+                st.markdown("**Individual Member Portfolio**")
+                member_options = {
+                    f"{r['Client']} ({r['Code']})": r["Code"]
+                    for _, r in member_summary_df.iterrows()
+                }
+                default_label = next(
+                    (lbl for lbl, code in member_options.items() if code == client_code),
+                    list(member_options.keys())[0],
+                )
+                selected_member_label = st.selectbox(
+                    "Select member",
+                    list(member_options.keys()),
+                    index=list(member_options.keys()).index(default_label),
+                    key="fam_member_select",
+                )
+                selected_member_code = member_options[selected_member_label]
+
+                member_holdings = compute_client_holdings(
+                    selected_member_code,
+                    _nav_version,
+                    _folio_nav_df=folio_nav_df,
+                    _v=data_version(),
+                )
+                if not member_holdings.empty:
+                    mem_inv = member_holdings["file_aum"].sum()
+                    mem_cur = member_holdings["nav_based_aum"].sum()
+                    mem_gain = mem_cur - mem_inv
+
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Invested", format_aum(mem_inv))
+                    m2.metric("Current Value", format_aum(mem_cur))
+                    m3.metric("Gain/Loss", format_aum(mem_gain))
+
+                    mem_schemes = (
+                        member_holdings.groupby(["amc_name", "scheme_name"], dropna=False)
+                        .agg(
+                            units=("units", "sum"),
+                            invested=("file_aum", "sum"),
+                            current=("nav_based_aum", "sum"),
+                        )
+                        .reset_index()
+                    )
+                    mem_schemes["gain"] = mem_schemes["current"] - mem_schemes["invested"]
+                    mem_schemes = mem_schemes.sort_values("current", ascending=False)
+
+                    st.dataframe(
+                        mem_schemes.rename(
+                            columns={
+                                "amc_name": "AMC",
+                                "scheme_name": "Scheme",
+                                "units": "Units",
+                                "invested": "Invested",
+                                "current": "Current Value",
+                                "gain": "Gain/Loss",
+                            }
+                        ),
+                        width="stretch",
+                        hide_index=True,
+                        column_config={
+                            "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
+                            "Current Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                            "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+                            "Units": st.column_config.NumberColumn(format="%.4f"),
+                        },
+                    )
+                else:
+                    st.info("No holdings found for this member.")
+
+            with st.expander("⚙️ Manage Family Members"):
+                all_clients_df = load_all_clients_with_display(data_version())
+                all_clients_df["display"] = all_clients_df.apply(
+                    lambda r: f"{r['name']} | PAN: {r['pan'] or 'Minor'} | {r['client_code']}",
+                    axis=1,
+                )
+                existing_codes = set(member_codes)
+                addable = all_clients_df[~all_clients_df["client_code"].isin(existing_codes)]
+
+                if not addable.empty:
+                    add_choice = st.selectbox(
+                        "Add member",
+                        addable["display"].tolist(),
+                        index=None,
+                        placeholder="Search client...",
+                        key="fam_add_select",
+                    )
+                    if add_choice and st.button("➕ Add to Family", key="fam_add_btn"):
+                        add_code = addable[addable["display"] == add_choice].iloc[0]["client_code"]
+                        add_family_member(family_id, add_code)
+                        st.success("Added.")
+                        st.rerun()
+                else:
+                    st.caption("All clients already in this family.")
+
+                removable = members_df[members_df["client_code"] != family["head_client_code"]]
+                if not removable.empty:
+                    rem_choice = st.selectbox(
+                        "Remove member",
+                        removable["client_code"].tolist(),
+                        key="fam_remove_select",
+                    )
+                    if st.button("🗑️ Remove Member", key="fam_remove_btn"):
+                        remove_family_member(family_id, rem_choice)
+                        st.success("Removed.")
+                        st.rerun()
+
+                st.divider()
+                if st.button("🗑️ Delete Family (removes for all members)", key="fam_delete_btn"):
+                    delete_family(family_id)
+                    st.success("Family deleted.")
+                    st.rerun()
+
+    # ═══════════════════════════════════════════════════════════
+    # TAB 1 — Portfolio & AUM
+    # ═══════════════════════════════════════════════════════════
+    with tab_portfolio:
+        if not all_folios:
+            with get_conn() as conn:
+                pending_sip = pd.read_sql(
+                    "SELECT scheme_name, installments_amt, frequency_type, status, start_date "
+                    "FROM bse_sip WHERE client_code = ? AND UPPER(TRIM(status)) = 'ACTIVE'",
+                    conn, params=(client_code,)
+                )
+            if not pending_sip.empty:
+                st.warning("⏳ No portfolio yet — SIP registered, first installment pending.")
+                st.dataframe(
+                    pending_sip.rename(columns={
+                        "scheme_name": "Scheme", "installments_amt": "Amount",
+                        "frequency_type": "Frequency", "status": "Status", "start_date": "Start Date"
+                    }),
+                    width="stretch", hide_index=True
+                )
+            else:
+                st.info("No holdings found.")
+        else:
+            show_debug = st.toggle("🐞 Show debug logs", value=False, key="cams_debug_toggle")
+
+            holdings = folio_nav_df[folio_nav_df['folio_id'].isin(all_folios)].copy()
+
+            if not holdings.empty:
+                # ── Clean up any leftover merge columns from Dashboard init ──
+                drop_leftover = [c for c in holdings.columns
+                                 if c.endswith('_kfin') or c.endswith('_cams')
+                                 or c in ('product_code_norm', 'invested_amount', 'total_units')]
+                holdings = holdings.drop(columns=drop_leftover, errors='ignore')
+
+                holdings['product_code_norm'] = holdings['product_code'].astype(str).str.strip().str.upper()
+
+                # ── KFinTech: replace file_aum with transaction-summed invested amount ──
+                if 'KFinTech' in holdings['rta'].values:
+                    kfin_invested_df = get_kfin_invested_per_scheme(kfin_f['folio'].tolist(), data_version())
+                    if not kfin_invested_df.empty:
+                        kfin_invested_df['product_code_norm'] = kfin_invested_df['product_code'].astype(
+                            str).str.strip().str.upper()
+                        holdings = holdings.merge(
+                            kfin_invested_df,
+                            on=['folio_id', 'product_code_norm'],
+                            how='left',
+                            suffixes=('', '_kfin_client')
+                        )
+                        kfin_mask = holdings['rta'] == 'KFinTech'
+                        has_txn = kfin_mask & holdings['invested_amount'].notna()
+                        holdings.loc[has_txn, 'file_aum'] = holdings.loc[has_txn, 'invested_amount']
+                        holdings.loc[has_txn, 'nav_based_aum'] = (
+                                holdings.loc[has_txn, 'units'] * holdings.loc[has_txn, 'current_nav']
+                        )
+                        holdings = holdings.drop(
+                            columns=['invested_amount', 'product_code_norm_kfin_client'], errors='ignore')
+
+                # ── CAMS: replace file_aum AND units with transaction-summed values ──
+                if 'CAMS' in holdings['rta'].values:
+                    cams_invested_df = get_cams_invested_per_scheme(cams_f['foliochk'].tolist(), data_version())
+                    if not cams_invested_df.empty:
+                        cams_invested_df['product_code_norm'] = cams_invested_df['product_code'].astype(
+                            str).str.strip().str.upper()
+                        holdings = holdings.merge(
+                            cams_invested_df,
+                            on=['folio_id', 'product_code_norm'],
+                            how='left',
+                            suffixes=('', '_cams_client')
+                        )
+                        cams_mask = holdings['rta'] == 'CAMS'
+                        has_txn = cams_mask & holdings['invested_amount'].notna()
+                        holdings.loc[has_txn, 'file_aum'] = holdings.loc[has_txn, 'invested_amount']
+                        holdings.loc[has_txn, 'units'] = holdings.loc[has_txn, 'total_units']
+                        holdings.loc[has_txn, 'nav_based_aum'] = (
+                                holdings.loc[has_txn, 'units'] * holdings.loc[has_txn, 'current_nav']
+                        )
+                        holdings = holdings.drop(
+                            columns=['invested_amount', 'total_units', 'product_code_norm_cams_client'],
+                            errors='ignore')
+
+                # Clean up temp column
+                holdings = holdings.drop(columns=['product_code_norm'], errors='ignore')
+
+                # ═══════════════════════════════════════════════════════════
+                # 1-DAY DIFF — same skip-back + fallback logic as Dashboard
+                # ═══════════════════════════════════════════════════════════
+
+                # ── Coerce numerics FIRST so nothing downstream sees TEXT ──
+                holdings["units"]       = pd.to_numeric(holdings["units"],       errors="coerce")
+                holdings["current_nav"] = pd.to_numeric(holdings["current_nav"], errors="coerce")
+
+                # ── Resolve the "previous" baseline the same way Dashboard does ──
+                _current_date_str = (
+                    holdings["nav_date"].iloc[0]
+                    if not holdings.empty and "nav_date" in holdings.columns
+                    and not holdings["nav_date"].empty
+                    else None
+                )
+                _current_date = (
+                    pd.to_datetime(_current_date_str).date()
+                    if _current_date_str else dt.now().date()
+                )
+                _prev_day_iso = get_last_business_day(_current_date).strftime("%Y-%m-%d")
+
+                _client_isins = set(
+                    holdings["isin"].dropna().astype(str).str.strip().str.upper().unique()
+                )
+                _baseline_iso, prev_nav_map, _skipback_diag = resolve_prev_nav_for_folios_cached(
+                    _current_date.isoformat(),
+                    tuple(sorted(_client_isins)),
+                )
+                prev_nav_date = _baseline_iso or "Unknown"
+
+                if _baseline_iso and _baseline_iso != _prev_day_iso:
+                    st.info(
+                        f"ℹ️ {_prev_day_iso} snapshot was incomplete for this client's folios — "
+                        f"using **{_baseline_iso}** as the previous baseline "
+                        f"({_skipback_diag['overlap']}/{len(_client_isins)} folio ISINs covered)."
+                    )
+                elif not _baseline_iso:
+                    st.warning(
+                        "⚠️ Could not resolve a previous-day baseline for this client's "
+                        "folios. 1-Day Diff will show 0. Use Admin → Sync Previous "
+                        "Business Day NAV."
+                    )
+
+                # ── Compute prev_nav per row ──
+                holdings["prev_nav"] = pd.to_numeric(
+                    holdings["isin"].apply(
+                        lambda i: prev_nav_map.get(str(i).strip().upper())
+                        if pd.notna(i) else None
+                    ),
+                    errors="coerce",
+                )
+                holdings["one_day_diff"] = (
+                    (holdings["current_nav"] - holdings["prev_nav"]) * holdings["units"]
+                ).astype("float64").fillna(0.0)
+
+                # ── Debug: same diagnostic layers as Dashboard ──
+                if show_debug:
+                    with st.expander("🐞 DEBUG: 1-Day Diff", expanded=False):
+
+                        # Layer 1: per-row lookup status
+                        holdings["_prev_reason"] = holdings.apply(
+                            lambda r:
+                                "missing ISIN" if pd.isna(r["isin"])
+                                else ("not in prev_nav_map"
+                                      if str(r["isin"]).strip().upper() not in prev_nav_map
+                                      else "OK"),
+                            axis=1,
+                        )
+                        st.write("**Lookup breakdown:**",
+                                 holdings["_prev_reason"].value_counts().to_dict())
+                        _misses = holdings[holdings["_prev_reason"] != "OK"]
+                        if not _misses.empty:
+                            st.dataframe(
+                                _misses[["folio_id", "rta", "scheme_name",
+                                         "isin", "current_nav", "_prev_reason"]].head(20),
+                                hide_index=True,
+                            )
+
+                        # Layer 2: ISIN overlap
+                        _cur = set(holdings["isin"].dropna().astype(str)
+                                                .str.strip().str.upper())
+                        _prev = set(prev_nav_map.keys())
+                        _ov = _cur & _prev
+                        st.write(f"- Client ISINs: **{len(_cur)}** | "
+                                 f"prev map ISINs: **{len(_prev)}** | "
+                                 f"**Overlap: {len(_ov)}**")
+
+                        # Layer 3: skip-back candidates
+                        st.markdown("**Skip-back candidates tried:**")
+                        st.dataframe(
+                            pd.DataFrame(_skipback_diag.get("candidates", []))
+                              .rename(columns={"date": "Date", "rows": "Rows",
+                                               "folio_overlap": "Client ISINs Found",
+                                               "needed": "Min Needed"}),
+                            hide_index=True,
+                        )
+
+                        # Layer 4: diff arithmetic
+                        st.write(f"- Rows with `prev_nav` populated: "
+                                 f"**{holdings['prev_nav'].notna().sum()}**")
+                        st.write(f"- Rows with non-zero `one_day_diff`: "
+                                 f"**{(holdings['one_day_diff'].abs() > 0.01).sum()}**")
+                        st.write(f"- Sum of `one_day_diff`: "
+                                 f"**{holdings['one_day_diff'].sum():.2f}**")
+
+                        holdings = holdings.drop(columns=["_prev_reason"], errors="ignore")
+
+
+
+                total_invested = holdings['file_aum'].sum()
+                total_current = holdings['nav_based_aum'].sum() or 0
+                total_gain_loss = total_current - total_invested
+                total_one_day_diff = holdings["one_day_diff"].sum()
+
+                h1, h2, h3 = st.columns(3)
+                h1.metric("Total Invested", format_aum(total_invested))
+                h2.metric("Current Value", format_aum(total_current))
+                h3.metric("Gain / Loss", format_aum(total_gain_loss),
+                        delta=f"{(total_gain_loss / total_invested * 100):.2f}%" if total_invested > 0 else "0%")
+                h4, h5 = st.columns(2)
+                h4.metric("Total Folios", len(all_folios))
+                h5.metric("1-Day Diff", format_aum(total_one_day_diff))
+                if prev_nav_date and prev_nav_date != "Unknown":
+                    h5.caption(f"vs {prev_nav_date}")
+
+                holdings["gain_loss"] = holdings["nav_based_aum"] - holdings["file_aum"]
+
+                # ═══════════════════════════════════════════════════════════
+                # COMPUTE XIRR PER FOLIO (cached batch — shared across sessions)
+                # ═══════════════════════════════════════════════════════════
+                _xirr_key_rows = []
+                for _, _r in holdings[["folio_id", "rta", "product_code", "nav_based_aum"]] \
+                        .drop_duplicates("folio_id").iterrows():
+                    _cv = _r["nav_based_aum"]
+                    if pd.isna(_cv) or _cv <= 0:
+                        continue
+                    _xirr_key_rows.append((
+                        str(_r["folio_id"]),
+                        str(_r["rta"]),
+                        str(_r["product_code"]),
+                        round(float(_cv), 2),
+                    ))
+                folio_key = tuple(sorted(_xirr_key_rows))
+
+                folio_xirr_map = get_client_xirr_batch(data_version(), folio_key)
+
+                if show_debug:
+                    st.caption(f"XIRR computed for {len(folio_xirr_map)} / {len(folio_key)} folios")
+
+                # ── Club rows by scheme (across folios) for display ──
+                grouped_holdings = (
+                    holdings.groupby(["amc_name", "scheme_name"], dropna=False)
+                    .agg(
+                        units=("units", "sum"),
+                        file_aum=("file_aum", "sum"),
+                        nav_based_aum=("nav_based_aum", "sum"),
+                        one_day_diff=("one_day_diff", "sum"),
+                        folios=("folio_id", "nunique"),
+                        rta=("rta", lambda s: ", ".join(sorted(set(s.dropna())))),
+                        folio_ids=("folio_id", lambda s: list(s.unique())),
+                        current_nav=("current_nav", "first"),  # ← add
+                        prev_nav=("prev_nav", "first"),  # ← add
+                    )
+                    .reset_index()
+                )
+                grouped_holdings["gain_loss"] = grouped_holdings["nav_based_aum"] - grouped_holdings["file_aum"]
+                grouped_holdings["portfolio_pct"] = (
+                        grouped_holdings["nav_based_aum"] / total_current * 100
+                ).fillna(0) if total_current > 0 else 0
+
+                # ── Average XIRR across folios for each scheme ──
+                def _avg_xirr_for_scheme(folio_ids):
+                    vals = [folio_xirr_map.get(fid) for fid in folio_ids if fid in folio_xirr_map]
+                    return sum(vals) / len(vals) if vals else None
+
+                grouped_holdings["xirr"] = grouped_holdings["folio_ids"].apply(_avg_xirr_for_scheme)
+                grouped_holdings["abs_return"] = grouped_holdings.apply(
+                    lambda r: (r["gain_loss"] / r["file_aum"] * 100) if r["file_aum"] else None, axis=1
+                    )
+
+                display_holdings = grouped_holdings[[
+    'rta', 'amc_name', 'scheme_name', 'folios', 'units', 'file_aum',
+    'nav_based_aum', 'gain_loss', 'one_day_diff', 'xirr', 'abs_return',
+    'portfolio_pct', 'current_nav', 'prev_nav'
+]].rename(columns={
+    'rta': 'RTA', 'amc_name': 'AMC', 'scheme_name': 'Scheme', 'folios': 'Folios',
+    'file_aum': 'Invested', 'nav_based_aum': 'Current Value',
+    'gain_loss': 'Gain/Loss', 'one_day_diff': '1D Diff',
+    'xirr': 'XIRR', 'abs_return': 'Abs Return', 'portfolio_pct': '% Portfolio',
+    'current_nav': 'Today NAV', 'prev_nav': 'Prev NAV'
+})
+
+                display_holdings_sorted = display_holdings.sort_values("Current Value", ascending=False).reset_index(
+                    drop=True)
+
+                selected = st.dataframe(
+                    display_holdings_sorted,
+                    width="stretch", hide_index=True, on_select="rerun", selection_mode="single-row",
+                    column_config={
+                        "Units": st.column_config.NumberColumn(format="%.4f"),
+                        "Invested": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "Current Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "1D Diff": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "XIRR": st.column_config.NumberColumn(format="%.2f%%"),
+                        "Abs Return": st.column_config.NumberColumn(format="%.2f%%"),
+                        "% Portfolio": st.column_config.NumberColumn(format="%.2f%%"),
+                    }
+                )
+
+                # Transaction View
+                if selected and len(selected["selection"]["rows"]) > 0:
+                    idx = selected["selection"]["rows"][0]
+                    row = display_holdings_sorted.iloc[idx]
+                    scheme_sel = row['Scheme']
+                    amc_sel = row['AMC']
+
+                    # Underlying folios for this scheme
+                    scheme_folios = holdings[
+                        (holdings['scheme_name'] == scheme_sel) & (holdings['amc_name'] == amc_sel)
+                        ][['folio_id', 'rta']].drop_duplicates().reset_index(drop=True)
+
+                    st.divider()
+                    st.subheader(f"📜 Transactions — {scheme_sel}")
+
+                    if len(scheme_folios) > 1:
+                        folio_options = ["All Folios"] + [
+                            f"{r['folio_id']} ({r['rta']})" for _, r in scheme_folios.iterrows()
+                        ]
+                        folio_choice = st.radio(
+                            "Filter by Folio", folio_options, horizontal=True, key="txn_folio_filter"
+                        )
+                    else:
+                        folio_choice = "All Folios"
+
+                    if folio_choice == "All Folios":
+                        folios_to_fetch = scheme_folios
+                    else:
+                        sel_folio_id = folio_choice.split(" (")[0]
+                        folios_to_fetch = scheme_folios[scheme_folios['folio_id'] == sel_folio_id]
+
+                    txn_frames = []
+
+                    folio_ids_selected = folios_to_fetch['folio_id'].tolist()
+                    sel_holdings = holdings[
+                        (holdings['scheme_name'] == scheme_sel) &
+                        (holdings['amc_name'] == amc_sel) &
+                        (holdings['folio_id'].isin(folio_ids_selected))
+                        ]
+
+                    sel_invested = sel_holdings['file_aum'].sum()
+                    sel_current = sel_holdings['nav_based_aum'].sum()
+                    sel_gain = sel_current - sel_invested
+
+                    tm1, tm2, tm3 = st.columns(3)
+                    tm1.metric("Invested (selected folio(s))", format_aum(sel_invested))
+                    tm2.metric("Current Value (selected folio(s))", format_aum(sel_current))
+                    tm3.metric("Gain/Loss (selected folio(s))", format_aum(sel_gain))
+
+                    # ── Per-folio breakdown: show invested + current per folio
+                    # so multi-folio schemes are transparent
+                    if len(scheme_folios) > 1:
+                        per_folio_breakdown = (
+                            holdings[
+                                (holdings['scheme_name'] == scheme_sel) &
+                                (holdings['amc_name'] == amc_sel)
+                                ]
+                            .groupby('folio_id', dropna=False)
+                            .agg(
+                                rta=('rta', 'first'),
+                                units=('units', 'sum'),
+                                invested=('file_aum', 'sum'),
+                                current_value=('nav_based_aum', 'sum'),
+                            )
+                            .reset_index()
+                        )
+                        per_folio_breakdown['gain_loss'] = (
+                                per_folio_breakdown['current_value'] - per_folio_breakdown['invested']
+                        )
+
+                        with st.expander("📊 Per-folio breakdown for this scheme", expanded=False):
+                            st.dataframe(
+                                per_folio_breakdown.rename(columns={
+                                    'folio_id': 'Folio', 'rta': 'RTA', 'units': 'Units',
+                                    'invested': 'Invested', 'current_value': 'Current Value',
+                                    'gain_loss': 'Gain/Loss'
+                                }),
+                                width="stretch", hide_index=True,
+                                column_config={
+                                    'Units': st.column_config.NumberColumn(format="%.4f"),
+                                    'Invested': st.column_config.NumberColumn(format="₹ %.2f"),
+                                    'Current Value': st.column_config.NumberColumn(format="₹ %.2f"),
+                                    'Gain/Loss': st.column_config.NumberColumn(format="₹ %.2f"),
+                                }
+                            )
+                            breakdown_sum_invested = per_folio_breakdown['invested'].sum()
+                            breakdown_sum_current = per_folio_breakdown['current_value'].sum()
+                            st.caption(
+                                f"Sum of folios above → Invested: {format_aum(breakdown_sum_invested)}, "
+                                f"Current: {format_aum(breakdown_sum_current)}. Compare this to the "
+                                f"scheme row in the main table above — if they differ, the scheme-level "
+                                f"groupby and this per-folio sum are reading different data somewhere."
+                            )
+                    with get_conn() as conn:
+                        for _, fr in folios_to_fetch.iterrows():
+                            fid, frta = fr['folio_id'], fr['rta']
+                            if frta == 'CAMS':
+                                df_t = pd.read_sql("""
+                                    SELECT trxnno,
+                                        COALESCE(txn_date_iso, traddate) AS txn_display_date,
+                                        trxntype, trxnmode, trxnstat,
+                                        purprice, units, amount, brokcode, subbrok, remarks
+                                    FROM v_cams_txn_active
+                                    WHERE folio_no = ?
+                                    ORDER BY COALESCE(txn_date_iso, traddate) DESC
+                                """, conn, params=(fid,))
+                            else:
+                                df_t = pd.read_sql("""
+                                    SELECT td_trno   AS trxnno,
+                                        COALESCE(txn_date_iso, td_trdt) AS txn_display_date,
+                                        td_purred AS trxntype,
+                                        trnmode   AS trxnmode,
+                                        trnstat   AS trxnstat,
+                                        td_pop    AS purprice,
+                                        td_units  AS units,
+                                        td_amt    AS amount,
+                                        td_broker AS brokcode,
+                                        ''        AS subbrok,
+                                        trdesc    AS remarks
+                                    FROM v_kfin_txn_active
+                                    WHERE td_acno = ?
+                                    ORDER BY COALESCE(txn_date_iso, td_trdt) DESC
+                                """, conn, params=(fid,))
+                            if not df_t.empty:
+                                df_t.insert(0, 'folio_id', fid)
+                                df_t.insert(1, 'rta', frta)
+                            txn_frames.append(df_t)
+                    
+                    txn_df = pd.concat(txn_frames, ignore_index=True) if txn_frames else pd.DataFrame()
+
+                    if not txn_df.empty:
+                        # SQL already returned the unified date as `txn_display_date`.
+                        # Just normalize the display format to DD-MM-YYYY.
+                        txn_df['txn_display_date'] = pd.to_datetime(
+                            txn_df['txn_display_date'],
+                            errors='coerce',
+                            format='mixed',
+                        ).dt.strftime('%d-%m-%Y').fillna('—')
+
+                    if not txn_df.empty:
+                        try:
+                            from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+                            gb = GridOptionsBuilder.from_dataframe(txn_df)
+                            gb.configure_default_column(filter=True, sortable=True, resizable=True, flex=1)
+                            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=15)
+                            gb.configure_grid_options(domLayout='normal')
+                            grid_opts = gb.build()
+                            AgGrid(
+                                txn_df,
+                                gridOptions=grid_opts,
+                                height=350,
+                                update_mode=GridUpdateMode.NO_UPDATE,
+                                fit_columns_on_grid_load=True,
+                                allow_unsafe_jscode=True,
+                                theme="alpine-dark" if dark else "alpine",
+                                key=f"txn_grid_{scheme_sel}_{folio_choice}"
+                            )
+                        except ImportError:
+                            st.dataframe(
+                                txn_df,
+                                width="stretch",
+                                hide_index=True,
+                                column_config={
+                                    "units": st.column_config.NumberColumn(format="%.4f"),
+                                    "amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                                    "purprice": st.column_config.NumberColumn(format="₹ %.4f"),
+                                }
+                            )
+                    else:
+                        st.info("No transactions found for this folio.")
+            else:
+                st.info("No holdings found.")
+
+    # ═══════════════════════════════════════════════════════════
+    # TAB 2 — Active SIPs
+    # ═══════════════════════════════════════════════════════════
+    with tab_sips:
+        st.subheader("🔄 All SIPs (Deduplicated)")
+
+        with get_conn() as conn:
+            # ── Probe BSE SIP columns ──
+            bse_cols = [row[1] for row in conn.execute("PRAGMA table_info(bse_sip)").fetchall()]
+
+            bse_select = ["amc_name", "scheme_name", "installments_amt", "status", "frequency_type",
+                          "'BSE' as source", "client_code", "xsip_regn_no as sip_regn_no"]
+            bse_sql = f"SELECT {', '.join(bse_select)} FROM bse_sip WHERE client_code = ?"
+            bse_sip = pd.read_sql(bse_sql, conn, params=(client_code,))
+
+            # ── CAMS SIP ──
+            cams_select = ["scheme as scheme_name", "auto_amount as installments_amt",
+                           "periodicity as frequency_type",
+                           "CASE WHEN cease_date IS NULL OR cease_date = '' THEN 'Active' ELSE 'Ceased' END as status",
+                           "folio_no", "'CAMS' as source", "request_ref_no as sip_regn_no"]
+            if is_minor:
+                cams_sql = f"SELECT {', '.join(cams_select)} FROM cams_wbr49_sip WHERE folio_no IN (SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) = ?)"
+                cams_wbr49_sip = pd.read_sql(cams_sql, conn, params=(name,))
+            else:
+                cams_sql = f"SELECT {', '.join(cams_select)} FROM cams_wbr49_sip WHERE folio_no IN (SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no)) = ?)"
+                cams_wbr49_sip = pd.read_sql(cams_sql, conn, params=(match_pan,))
+
+            # ── KFin SIP ──
+            kfin_select = ["scheme_name", "amount as installments_amt", "frequency as frequency_type",
+                           "status", "folio", "'KFin' as source", "reg_slno as sip_regn_no"]
+
+            kfin_folio_list = kfin_f['folio'].tolist()
+            if kfin_folio_list:
+                placeholders = ','.join(['?'] * len(kfin_folio_list))
+                kfin_sql = f"SELECT {', '.join(kfin_select)} FROM kfin_mfsd243_sip WHERE folio IN ({placeholders})"
+                kfin_mfsd243_sip = pd.read_sql(kfin_sql, conn, params=tuple(kfin_folio_list))
+            else:
+                kfin_mfsd243_sip = pd.DataFrame()
+
+            active_statuses = ["ACTIVE", "LIVE SIP", "REGISTERED"]
+
+            if not bse_sip.empty:
+                bse_sip = bse_sip[bse_sip["status"].astype(str).str.strip().str.upper().isin(active_statuses)]
+
+            if not cams_wbr49_sip.empty:
+                cams_wbr49_sip = cams_wbr49_sip[
+                    cams_wbr49_sip["status"].astype(str).str.strip().str.upper().isin(active_statuses)]
+
+            if not kfin_mfsd243_sip.empty:
+                kfin_mfsd243_sip = kfin_mfsd243_sip[
+                    kfin_mfsd243_sip["status"].astype(str).str.strip().str.upper().isin(active_statuses)]
+
+
+        # ── DEDUP BY SIP REGISTRATION NUMBER (exact, cross-RTA) ──
+        def _clean_regn(val):
+            if pd.isna(val):
+                return ""
+            s = str(val).strip().upper()
+            s = s.replace(".0", "") if s.endswith(".0") else s
+            s = re.sub(r'[^A-Z0-9]', '', s)
+            return s
+
+
+        def _make_match_key(df):
+            return df["sip_regn_no"].apply(_clean_regn)
+
+
+        # BSE SIPs are the primary source
+        all_sips = []
+        bse_keys = set()
+
+        if not bse_sip.empty:
+            bse_sip["_match_key"] = _make_match_key(bse_sip)
+            bse_keys = set(bse_sip["_match_key"])
+            all_sips.append(bse_sip)
+
+        # Add CAMS SIPs only if they DON'T match a BSE SIP
+        if not cams_wbr49_sip.empty:
+            cams_wbr49_sip["_match_key"] = _make_match_key(cams_wbr49_sip)
+            cams_direct = cams_wbr49_sip[~cams_wbr49_sip["_match_key"].isin(bse_keys)].copy()
+            if not cams_direct.empty:
+                cams_direct["source"] = "CAMS (Direct)"
+                all_sips.append(cams_direct)
+
+        # Add KFin SIPs only if they DON'T match a BSE SIP
+        if not kfin_mfsd243_sip.empty:
+            kfin_mfsd243_sip["_match_key"] = _make_match_key(kfin_mfsd243_sip)
+            kfin_direct = kfin_mfsd243_sip[~kfin_mfsd243_sip["_match_key"].isin(bse_keys)].copy()
+            if not kfin_direct.empty:
+                kfin_direct["source"] = "KFin (Direct)"
+                all_sips.append(kfin_direct)
+
+        if st.toggle("🐞 Show raw regn numbers", key="sip_regn_debug"):
+            st.write("BSE:", bse_sip[["scheme_name", "sip_regn_no"]] if not bse_sip.empty else "empty")
+            st.write("CAMS:", cams_wbr49_sip[["scheme_name", "sip_regn_no"]] if not cams_wbr49_sip.empty else "empty")
+            st.write("KFin:",
+                     kfin_mfsd243_sip[["scheme_name", "sip_regn_no"]] if not kfin_mfsd243_sip.empty else "empty")
+
+        if all_sips:
+            final_sips = pd.concat(all_sips, ignore_index=True)
+            final_sips = final_sips.drop(columns=["_match_key"], errors='ignore')
+
+            active = len(final_sips[final_sips['status'].str.contains('Active|Live', na=False, case=False)])
+            total_monthly = final_sips['installments_amt'].sum()
+
+            s1, s2, s3 = st.columns(3)
+            s1.metric("Total SIPs", len(final_sips))
+            s2.metric("Active SIPs", active)
+            s3.metric("Monthly Commitment", format_currency(total_monthly))
+
+            # Show breakdown by source
+            source_breakdown = final_sips['source'].value_counts().to_dict()
+            st.caption("Sources: " + " | ".join([f"{k}: {v}" for k, v in source_breakdown.items()]))
+
+            # ── FIX: Define display_cols OUTSIDE try block so it's available in both branches ──
+            display_cols = ['source', 'scheme_name', 'installments_amt', 'frequency_type', 'status']
+            display_cols = [c for c in display_cols if c in final_sips.columns]
+
+            try:
+                from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+                gb = GridOptionsBuilder.from_dataframe(final_sips[display_cols])
+                gb.configure_default_column(filter=True, sortable=True, resizable=True, flex=1)
+                gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=10)
+                grid_opts = gb.build()
+                AgGrid(
+                    final_sips[display_cols],
+                    gridOptions=grid_opts,
+                    height=300,
+                    update_mode=GridUpdateMode.NO_UPDATE,
+                    fit_columns_on_grid_load=True,
+                    allow_unsafe_jscode=True,
+                    theme="alpine-dark" if dark else "alpine",
+                    key="sip_grid"
+                )
+            except ImportError:
+                st.dataframe(
+                    final_sips[display_cols].sort_values('source'),
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "installments_amt": st.column_config.NumberColumn("Amount", format="₹ %.2f"),
+                        "source": st.column_config.TextColumn("Source")
+                    }
+                )
+        else:
+            st.info("No SIP records found.")
+
+    # ═══════════════════════════════════════════════════════════
+    # TAB TRANSACTIONS — All recent transactions with folio filter
+    # ═══════════════════════════════════════════════════════════
+    with tab_transactions:
+        st.subheader("📜 All Transactions")
+
+        if not all_folios:
+            st.info("No folios found for this client.")
+        else:
+            # ── Build folio → RTA map ──
+            folio_rta_map = {}
+            for f in cams_f['foliochk'].tolist():
+                folio_rta_map[f] = 'CAMS'
+            for f in kfin_f['folio'].tolist():
+                folio_rta_map[f] = 'KFinTech'
+
+            # ── Filters ──
+            folio_scheme_map = {}
+            cams_sch = get_client_cams_schemes(cams_f['foliochk'].tolist(), data_version())
+            for _, r in cams_sch.iterrows():
+                folio_scheme_map.setdefault(r['folio_no'], r['scheme'])
+            kfin_sch = get_client_kfin_schemes(kfin_f['folio'].tolist(), data_version())
+            for _, r in kfin_sch.iterrows():
+                folio_scheme_map.setdefault(r['folio_no'], r['scheme'])
+
+            fc1, fc2 = st.columns([1, 1])
+            with fc1:
+                sorted_folios = sorted(all_folios)
+                folio_options = ["All Folios"] + [
+                    f"{folio_scheme_map.get(f, '?')} ({f})" for f in sorted_folios
+                ]
+                folio_choice = st.selectbox(
+                    "Select Folio", folio_options, index=0,
+                    key="txn_tab_folio_select"
+                )
+            with fc2:
+                date_filter = st.selectbox(
+                    "Time Period",
+                    ["All Time", "Last 7 Days", "Last 30 Days", "Last 90 Days",
+                     "Last 6 Months", "Last 1 Year", "Custom Range"],
+                    key="txn_tab_date_filter"
+                )
+
+            custom_from = custom_to = None
+            if date_filter == "Custom Range":
+                cr1, cr2 = st.columns(2)
+                with cr1:
+                    custom_from = st.date_input(
+                        "From Date",
+                        value=date_cls.today() - timedelta(days=30),
+                        key="txn_tab_from_date"
+                    )
+                with cr2:
+                    custom_to = st.date_input(
+                        "To Date",
+                        value=date_cls.today(),
+                        key="txn_tab_to_date"
+                    )
+
+            if folio_choice == "All Folios":
+                folios_to_fetch = sorted_folios
+            else:
+                sel_folio = folio_choice.rsplit("(", 1)[-1].rstrip(")")
+                folios_to_fetch = [sel_folio]
+
+            # ── Separate by RTA ──
+            cams_folios_list = [f for f in folios_to_fetch if folio_rta_map.get(f) == 'CAMS']
+            kfin_folios_list = [f for f in folios_to_fetch if folio_rta_map.get(f) == 'KFinTech']
+
+            txn_frames = []
+
+            with get_conn() as conn:
+                # ── CAMS transactions ──
+                if cams_folios_list:
+                    ph = ','.join(['?'] * len(cams_folios_list))
+                    cams_txn = pd.read_sql(f"""
+                        SELECT folio_no   AS folio_id,
+                               'CAMS'      AS rta,
+                               trxnno,
+                               traddate,
+                               txn_date_iso,
+                               trxntype,
+                               trxnmode,
+                               trxnstat,
+                               purprice,
+                               units,
+                               amount,
+                               brokcode,
+                               subbrok,
+                               remarks,
+                               prodcode    AS product_code
+                        FROM v_cams_txn_active
+                        WHERE folio_no IN ({ph})
+                    """, conn, params=tuple(cams_folios_list))
+                    if not cams_txn.empty:
+                        txn_frames.append(cams_txn)
+
+                # ── KFinTech transactions ──
+                if kfin_folios_list:
+                    ph = ','.join(['?'] * len(kfin_folios_list))
+                    kfin_txn = pd.read_sql(f"""
+                        SELECT td_acno    AS folio_id,
+                               'KFinTech' AS rta,
+                               td_trno    AS trxnno,
+                               td_trdt    AS traddate,
+                               txn_date_iso, 
+                               td_purred  AS trxntype,
+                               trnmode    AS trxnmode,
+                               trnstat    AS trxnstat,
+                               td_pop     AS purprice,
+                               td_units   AS units,
+                               td_amt     AS amount,
+                               td_broker  AS brokcode,
+                               ''         AS subbrok,
+                               trdesc     AS remarks,
+                               UPPER(TRIM(fmcode)) AS product_code
+                        FROM v_kfin_txn_active
+                        WHERE td_acno IN ({ph})
+                    """, conn, params=tuple(kfin_folios_list))
+                    if not kfin_txn.empty:
+                        txn_frames.append(kfin_txn)
+
+            if txn_frames:
+                txn_df = pd.concat(txn_frames, ignore_index=True)
+
+                # ══════════════════════════════════════════════════════════════
+                # UNIFY DATE FORMAT — prefer txn_date_iso (both RTAs populate it),
+                # fall back to raw traddate. Output: DD-MM-YYYY.
+                # ══════════════════════════════════════════════════════════════
+                txn_df['txn_display_date'] = pd.to_datetime(
+                    txn_df['txn_date_iso'].fillna(txn_df['traddate']),
+                    errors='coerce',
+                    format='mixed',
+                ).dt.strftime('%d-%m-%Y')
+                # Rows where both were unparseable — show the raw value so nothing vanishes
+                txn_df['txn_display_date'] = txn_df['txn_display_date'].fillna(
+                    txn_df['traddate'].astype(str)
+                )
+
+                # ── Resolve scheme names via bse_scheme_master ──
+                if not txn_df['product_code'].dropna().empty:
+                    with get_conn() as conn:
+                        scheme_map_df = pd.read_sql("""
+                            SELECT UPPER(TRIM(Channel_Partner_Code)) AS product_code,
+                                   MAX(Scheme_Name) AS scheme_name
+                            FROM bse_scheme_master
+                            WHERE Channel_Partner_Code IS NOT NULL
+                              AND TRIM(Channel_Partner_Code) != ''
+                            GROUP BY UPPER(TRIM(Channel_Partner_Code))
+                        """, conn)
+                    scheme_map = dict(zip(
+                        scheme_map_df['product_code'],
+                        scheme_map_df['scheme_name']
+                    ))
+                    txn_df['scheme_name'] = (
+                        txn_df['product_code'].str.strip().str.upper().map(scheme_map)
+                    )
+                else:
+                    txn_df['scheme_name'] = None
+
+                # ── Apply date filter — prefer txn_date_iso, fall back to traddate ──
+                _date_src = txn_df['txn_date_iso'] if 'txn_date_iso' in txn_df.columns else txn_df['traddate']
+                txn_df['_sort_date'] = pd.to_datetime(
+                    _date_src.fillna(txn_df['traddate']), errors='coerce'
+                )
+
+                if date_filter == "Custom Range" and custom_from and custom_to:
+                    txn_df = txn_df[
+                        (txn_df['_sort_date'].dt.date >= custom_from) &
+                        (txn_df['_sort_date'].dt.date <= custom_to)
+                    ]
+                elif date_filter != "All Time":
+                    now = datetime.now()
+                    deltas = {
+                        "Last 7 Days": 7,
+                        "Last 30 Days": 30,
+                        "Last 90 Days": 90,
+                        "Last 6 Months": 180,
+                        "Last 1 Year": 365,
+                    }
+                    days = deltas.get(date_filter)
+                    if days:
+                        cutoff = now - timedelta(days=days)
+                        txn_df = txn_df[txn_df['_sort_date'].dt.date >= cutoff.date()]
+
+                txn_df = (
+                    txn_df
+                    .sort_values('_sort_date', ascending=False)
+                    .drop(columns=['_sort_date'])
+                    .reset_index(drop=True)
+                )
+
+                # ── Reorder & rename columns ──
+                col_order = [
+                    'txn_display_date',          # ← was 'traddate'
+                    'folio_id', 'rta', 'scheme_name', 'product_code',
+                    'trxntype', 'trxnmode', 'trxnstat', 'units', 'purprice', 'amount',
+                    'brokcode', 'subbrok', 'remarks', 'trxnno'
+                ]
+                col_order = [c for c in col_order if c in txn_df.columns]
+                txn_df = txn_df[col_order]
+
+                display_txn = txn_df.rename(columns={
+                    'txn_display_date': 'Date',  # ← was 'traddate'
+                    'folio_id': 'Folio', 'rta': 'RTA',
+                    'scheme_name': 'Scheme', 'product_code': 'Product Code',
+                    'trxntype': 'Type', 'trxnmode': 'Mode', 'trxnstat': 'Status',
+                    'units': 'Units', 'purprice': 'Price', 'amount': 'Amount',
+                    'brokcode': 'Broker', 'subbrok': 'Sub-Broker',
+                    'remarks': 'Remarks', 'trxnno': 'Txn No'
+                })
+
+                # ── Metrics ──
+                if not txn_df.empty:
+                    t1, t2 = st.columns(2)
+                    t1.metric("Transactions", len(txn_df))
+                    t2.metric("Total Amount", format_aum(txn_df['amount'].sum()))
+
+                    # ── AgGrid (preferred) or plain dataframe ──
+                    try:
+                        from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+                        gb = GridOptionsBuilder.from_dataframe(display_txn)
+                        gb.configure_default_column(
+                            filter=True, sortable=True, resizable=True, flex=1
+                        )
+                        gb.configure_pagination(
+                            paginationAutoPageSize=False, paginationPageSize=20
+                        )
+                        gb.configure_grid_options(domLayout='normal')
+                        grid_opts = gb.build()
+                        AgGrid(
+                            display_txn,
+                            gridOptions=grid_opts,
+                            height=450,
+                            update_mode=GridUpdateMode.NO_UPDATE,
+                            fit_columns_on_grid_load=True,
+                            allow_unsafe_jscode=True,
+                            theme="alpine-dark" if dark else "alpine",
+                            key=f"all_txn_grid_{folio_choice}_{date_filter}"
+                        )
+                    except ImportError:
+                        st.dataframe(
+                            display_txn,
+                            width="stretch",
+                            hide_index=True,
+                            column_config={
+                                "Units": st.column_config.NumberColumn(format="%.4f"),
+                                "Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                                "Price": st.column_config.NumberColumn(format="₹ %.4f"),
+                            }
+                        )
+                else:
+                    st.info("No transactions found for the selected filters.")
+            else:
+                st.info("No transactions found for this client.")
+
+    # ═══════════════════════════════════════════════════════════
+    # TAB BROKERAGE — Client-specific brokerage by month
+    # ═══════════════════════════════════════════════════════════
+
+    with tab_brokerage:
+        st.subheader("💰 Brokerage Generated")
+
+        if not all_folios:
+            st.info("No folios found for this client — cannot fetch brokerage.")
+        else:
+            folio_list = list(all_folios)
+            placeholders = ",".join(["?"] * len(folio_list))
+
+            with get_conn() as conn:
+                cams_brok = pd.read_sql(f"""
+                    SELECT proc_date, inv_name AS client, folio_no AS folio,
+                           scheme_code, trxn_no, plot_amount AS txn_amount,
+                           brkage_rate AS brokerage_pct, brkage_amt AS brokerage_amount,
+                           brkage_type AS brokerage_type
+                    FROM cams_wbr77_brokerage
+                    WHERE folio_no IN ({placeholders})
+                """, conn, params=folio_list)
+
+                kfin_brok = pd.read_sql(f"""
+                    SELECT process_date AS proc_date, investor_name AS client,
+                           account_number AS folio, scheme_code,
+                           transaction_number AS trxn_no, amount AS txn_amount,
+                           percentage AS brokerage_pct, brokerage AS brokerage_amount,
+                           brokerage_type
+                    FROM kfin_mfsd205_brokerage
+                    WHERE account_number IN ({placeholders})
+                """, conn, params=folio_list)
+
+            # ── Parse dates ──
+            if not cams_brok.empty:
+                cams_brok["proc_date"] = pd.to_datetime(
+                    cams_brok["proc_date"], errors="coerce", dayfirst=False
+                )
+                cams_brok["rta"] = "CAMS"
+            if not kfin_brok.empty:
+                kfin_brok["proc_date"] = pd.to_datetime(
+                    kfin_brok["proc_date"], errors="coerce", dayfirst=False
+                )
+                kfin_brok["rta"] = "KFinTech"
+
+            brok_df = pd.concat([cams_brok, kfin_brok], ignore_index=True)
+
+            if brok_df.empty:
+                st.info("No brokerage records found for this client's folios.")
+            else:
+                # ── FORCE datetime after concat (handles empty-side object dtype) ──
+                brok_df["proc_date"] = pd.to_datetime(brok_df["proc_date"], errors="coerce")
+                brok_df = brok_df.dropna(subset=["proc_date"])  # discard unparseable rows
+
+                # ── EXTRA GUARD: all rows may have had bad dates ──
+                if brok_df.empty:
+                    st.info("No brokerage records with valid dates found for this client.")
+                else:
+                    brok_df["month"] = brok_df["proc_date"].dt.strftime("%Y-%m")
+                    brok_df["brokerage_amount"] = pd.to_numeric(
+                        brok_df["brokerage_amount"], errors="coerce"
+                    ).fillna(0)
+
+                    # ── Monthly summary ──
+                    monthly = (
+                        brok_df.groupby("month")["brokerage_amount"]
+                        .sum()
+                        .reset_index()
+                        .sort_values("month")
+                    )
+
+                    # ── Top metrics ──
+                    total_brok = brok_df["brokerage_amount"].sum()
+                    avg_monthly = monthly["brokerage_amount"].mean() if not monthly.empty else 0
+                    if not monthly.empty:
+                        best_row = monthly.loc[monthly["brokerage_amount"].idxmax()]
+                        best_month, best_amount = best_row["month"], best_row["brokerage_amount"]
+                    else:
+                        best_month, best_amount = "-", 0
+
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Total Brokerage", format_brokerage_inr(total_brok))
+                    m2.metric("Avg Monthly", format_brokerage_inr(avg_monthly))
+                    m3.metric("Best Month", str(best_month))
+                    m4.metric("Best Month Amount", format_brokerage_inr(best_amount))
+
+                    st.divider()
+
+                    # ── Monthly bar chart ──
+                    if not monthly.empty:
+                        fig = px.bar(
+                            monthly,
+                            x="month",
+                            y="brokerage_amount",
+                            title="Monthly Brokerage Trend",
+                            labels={"brokerage_amount": "Brokerage (₹)", "month": "Month"},
+                            color_discrete_sequence=["#6366f1"],
+                        )
+                        fig = theme_plotly(fig, dark)
+                        st.plotly_chart(fig, width="stretch")
+                    else:
+                        st.info("No monthly brokerage data to display.")
+
+                    st.divider()
+
+                    # ── Month-wise table ──
+                    st.subheader("📅 Month-wise Summary")
+                    if not monthly.empty:
+                        st.dataframe(
+                            monthly.rename(
+                                columns={"month": "Month", "brokerage_amount": "Brokerage"}
+                            ),
+                            width="stretch",
+                            hide_index=True,
+                            column_config={
+                                "Brokerage": st.column_config.NumberColumn(format="₹ %.2f")
+                            },
+                        )
+                    else:
+                        st.info("No monthly data available.")
+
+                    st.divider()
+
+                    # ── Transaction-level detail ──
+                    st.subheader("📜 Transaction-level Detail")
+                    detail_cols = [
+                        "rta", "proc_date", "client", "folio", "scheme_code",
+                        "txn_amount", "brokerage_pct", "brokerage_amount", "brokerage_type",
+                    ]
+                    detail_cols = [c for c in detail_cols if c in brok_df.columns]
+                    detail_display = brok_df[detail_cols].sort_values(
+                        "proc_date", ascending=False
+                    ).copy()
+                    detail_display["proc_date"] = detail_display["proc_date"].dt.strftime(
+                        "%d-%m-%Y"
+                    )
+
+                    st.dataframe(
+                        detail_display.rename(
+                            columns={
+                                "rta": "RTA",
+                                "proc_date": "Date",
+                                "client": "Client",
+                                "folio": "Folio",
+                                "scheme_code": "Scheme",
+                                "txn_amount": "Txn Amount",
+                                "brokerage_pct": "Brokerage %",
+                                "brokerage_amount": "Brokerage",
+                                "brokerage_type": "Type",
+                            }
+                        ),
+                        width="stretch",
+                        hide_index=True,
+                        column_config={
+                            "Txn Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                            "Brokerage %": st.column_config.NumberColumn(format="%.4f"),
+                            "Brokerage": st.column_config.NumberColumn(format="₹ %.2f"),
+                        },
+                    )
+
+                    csv = brok_df.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        "⬇️ Download Client Brokerage (CSV)",
+                        csv,
+                        f"brokerage_{client_code}.csv",
+                        "text/csv",
+                        key=f"client_brok_dl_{client_code}",
+                    )
+
+# ==================== 📋 TRANSACTIONS ====================
+elif mode == "📋 Transactions":
+    st.header("📋 All Transactions Explorer")
+    st.caption("Track all mutual fund transactions across RTAs, AMCs, schemes, clients, and dates.")
+
+    # ── Load all transactions ──
+    @st.cache_data(show_spinner=False)
+    def load_all_transactions(_v: int) -> pd.DataFrame:
+        with get_conn() as conn:
+            # ── CAMS: select traddate AND txn_date_iso separately ──
+            cams_txn = pd.read_sql("""
+                SELECT 
+                    'CAMS' AS rta,
+                    folio_no AS folio,
+                    inv_name AS client_name,
+                    prodcode AS product_code,
+                    traddate,
+                    txn_date_iso,
+                    trxntype AS txn_type,
+                    trxnmode AS txn_mode,
+                    trxnstat AS txn_status,
+                    units,
+                    purprice AS price,
+                    amount,
+                    brokcode AS broker_code,
+                    subbrok AS sub_broker,
+                    remarks,
+                    trxnno AS txn_no
+                FROM v_cams_txn_active
+            """, conn)
+
+            # ── KFinTech: same — both date columns separately ──
+            kfin_txn = pd.read_sql("""
+                SELECT 
+                    'KFinTech' AS rta,
+                    kt.td_acno AS folio,
+                    kf.investor_name AS client_name,
+                    UPPER(TRIM(kt.fmcode)) AS product_code,
+                    kt.td_trdt AS traddate,
+                    kt.txn_date_iso,
+                    kt.td_purred AS txn_type,
+                    kt.trnmode AS txn_mode,
+                    kt.trnstat AS txn_status,
+                    kt.td_units AS units,
+                    kt.td_pop AS price,
+                    kt.td_amt AS amount,
+                    kt.td_broker AS broker_code,
+                    '' AS sub_broker,
+                    kt.trdesc AS remarks,
+                    kt.td_trno AS txn_no
+                FROM v_kfin_txn_active kt
+                LEFT JOIN kfin_mfsd211_folio kf ON kt.td_acno = kf.Folio
+            """, conn)
+
+        # Combine
+        all_txn = pd.concat([cams_txn, kfin_txn], ignore_index=True)
+
+        if all_txn.empty:
+            return pd.DataFrame()
+
+        # ══════════════════════════════════════════════════════════
+        # UNIFY DATE — exactly like the Client tab's Transactions view:
+        # prefer txn_date_iso, fall back to raw traddate, no format guessing.
+        # ══════════════════════════════════════════════════════════
+        all_txn["_sort_date"] = pd.to_datetime(
+            all_txn["txn_date_iso"].fillna(all_txn["traddate"]),
+            errors="coerce",
+        )
+        all_txn = all_txn.dropna(subset=["_sort_date"]).copy()
+        all_txn["txn_date"] = all_txn["_sort_date"]
+
+        # Display column: uniform DD-MM-YYYY
+        all_txn["txn_date_display"] = all_txn["txn_date"].dt.strftime("%d-%m-%Y")
+
+        # Normalize product code for lookup (same as Client tab)
+        all_txn["product_code_norm"] = (
+            all_txn["product_code"].astype(str).str.strip().str.upper()
+        )
+
+        # ══════════════════════════════════════════════════════════
+        # Resolve scheme name via the shared BSE lookup — use .map()
+        # (Client tab pattern) instead of merge-on-missing-key.
+        # ══════════════════════════════════════════════════════════
+        bse = _bse_scheme_lookup(_v)
+        if not bse.empty:
+            # bse already has product_code, scheme_name, isin — build dicts
+            scheme_map = dict(zip(bse["product_code"], bse["scheme_name"]))
+            isin_map   = dict(zip(bse["product_code"], bse["isin"]))
+            all_txn["scheme_name"] = all_txn["product_code_norm"].map(scheme_map)
+            all_txn["isin"]        = all_txn["product_code_norm"].map(isin_map)
+        else:
+            all_txn["scheme_name"] = None
+            all_txn["isin"] = None
+
+        all_txn["scheme_name"] = all_txn["scheme_name"].fillna(all_txn["product_code"])
+
+        # ══════════════════════════════════════════════════════════
+        # Resolve AMC name via the in-memory AMFI index
+        # ══════════════════════════════════════════════════════════
+        all_txn["amc_name"] = all_txn["isin"].apply(
+            lambda i: _amfi.get_amc(str(i).strip().upper())
+            if pd.notna(i) and str(i).strip() else None
+        )
+        all_txn["amc_name"] = all_txn["amc_name"].fillna("⚠️ Unresolved")
+
+        # ══════════════════════════════════════════════════════════
+        # Normalize client_name so CAMS (Title Case) and KFinTech
+        # (UPPER CASE) rows for the same person group together in
+        # the Client-wise breakdown. Matches Dashboard's convention.
+        # ══════════════════════════════════════════════════════════
+        all_txn["client_name"] = (
+            all_txn["client_name"].astype(str).str.upper().str.strip()
+        )
+
+        return all_txn
+        
+    all_txn_df = load_all_transactions(data_version())
+
+    if all_txn_df.empty:
+        st.info("No transactions found in database.")
+        st.stop()
+
+    # Single source of truth for Time Period presets
+    TIME_PERIOD_PRESETS = {
+        "Last 7 Days":  7,
+        "Last 30 Days": 30,
+        "Last 90 Days": 90,
+        "Last 6 Months": 180,
+        "Last 1 Year": 365,
+    }
+    TIME_PERIOD_OPTIONS = ["All Time"] + list(TIME_PERIOD_PRESETS.keys()) + ["Custom Range"]
+
+    # ═══════════════════════════════════════════════════════════
+    # SECTION 1: FILTER PANEL
+    # ═══════════════════════════════════════════════════════════
+    st.subheader("🔍 Filters")
+
+    # ═══════════════════════════════════════════════════════════
+    # ROW 1: RTA | AMC | Scheme | Txn Type | Time Period
+    # ═══════════════════════════════════════════════════════════
+    f1, f2, f3, f4, f5 = st.columns(5)
+
+    all_rtas = sorted(all_txn_df["rta"].dropna().unique())
+    all_amcs = sorted([a for a in all_txn_df["amc_name"].dropna().unique() if a])
+    all_schemes = sorted([s for s in all_txn_df["scheme_name"].dropna().unique() if s])
+    all_types = sorted([t for t in all_txn_df["txn_type"].dropna().unique() if t])
+
+    # ── Pre-seed session state so first render uses full option lists ──
+    for key, options in [
+        ("txn_rta_filter_v4", all_rtas),
+        ("txn_amc_filter_v4", all_amcs),
+        ("txn_type_filter_v4", all_types),
+    ]:
+        if key not in st.session_state or not st.session_state[key]:
+            st.session_state[key] = options
+
+    if "txn_scheme_filter_v4" not in st.session_state:
+        st.session_state["txn_scheme_filter_v4"] = []
+
+    if "txn_period_filter_v4" not in st.session_state:
+        st.session_state["txn_period_filter_v4"] = "All Time"
+
+    with f1:
+        rta_filter = st.multiselect(
+            "RTA",
+            options=all_rtas,
+            key="txn_rta_filter_v4",
+        )
+
+    with f2:
+        amc_filter = st.multiselect(
+            "AMC",
+            options=all_amcs,
+            key="txn_amc_filter_v4",
+        )
+
+    with f3:
+        scheme_filter = st.multiselect(
+            "Scheme",
+            options=all_schemes,
+            key="txn_scheme_filter_v4",
+        )
+
+    with f4:
+        txn_type_filter = st.multiselect(
+            "Txn Type",
+            options=all_types,
+            key="txn_type_filter_v4",
+        )
+
+        # ── Time Period: preset dropdown (same UX as Client tab) ──
+    with f5:
+        date_filter = st.selectbox(
+            "Time Period",
+            ["All Time", "Last 7 Days", "Last 30 Days", "Last 90 Days",
+             "Last 6 Months", "Last 1 Year", "Custom Range"],
+            key="txn_period_filter_v4",
+        )
+
+    # ═══════════════════════════════════════════════════════════
+    # ROW 2: Custom Range (only shown when selected) + Search
+    # ═══════════════════════════════════════════════════════════
+    custom_from = custom_to = None
+
+    if date_filter == "Custom Range":
+        cr1, cr2, _spacer = st.columns([1, 1, 3])
+        with cr1:
+            custom_from = st.date_input(
+                "From Date",
+                value=date_cls.today() - timedelta(days=30),
+                key="txn_custom_from_v4",
+            )
+        with cr2:
+            custom_to = st.date_input(
+                "To Date",
+                value=date_cls.today(),
+                key="txn_custom_to_v4",
+            )
+
+    search_col1, search_col2 = st.columns([3, 2])
+    with search_col1:
+        client_search = st.text_input(
+            "🔍 Search Client / Folio",
+            placeholder="Type client name or folio number...",
+            key="txn_client_search_v4",
+        )
+    with search_col2:
+        st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+        clear_filters = st.button(
+            "🔄 Clear Filters",
+            key="txn_clear_btn_v4",
+            use_container_width=True,
+        )
+
+    if clear_filters:
+        for k in [
+            "txn_rta_filter_v4",
+            "txn_amc_filter_v4",
+            "txn_scheme_filter_v4",
+            "txn_type_filter_v4",
+            "txn_period_filter_v4",
+            "txn_custom_from_v4",
+            "txn_custom_to_v4",
+            "txn_client_search_v4",
+        ]:
+            st.session_state.pop(k, None)
+        st.rerun()
+
+    # ═══════════════════════════════════════════════════════════
+    # APPLY FILTERS — same order + semantics as Client tab
+    # ═══════════════════════════════════════════════════════════
+    filtered_df = all_txn_df.copy()
+
+    if rta_filter:
+        filtered_df = filtered_df[filtered_df["rta"].isin(rta_filter)]
+
+    if amc_filter:
+        filtered_df = filtered_df[filtered_df["amc_name"].isin(amc_filter)]
+
+    if txn_type_filter:
+        filtered_df = filtered_df[filtered_df["txn_type"].isin(txn_type_filter)]
+
+    if scheme_filter:
+        filtered_df = filtered_df[filtered_df["scheme_name"].isin(scheme_filter)]
+
+    # ── Date filter — preset-based, anchors to today (no stale session bug) ──
+    if date_filter == "Custom Range" and custom_from and custom_to:
+        filtered_df = filtered_df[
+            (filtered_df["txn_date"].dt.date >= custom_from) &
+            (filtered_df["txn_date"].dt.date <= custom_to)
+        ]
+    elif date_filter != "All Time":
+        _now = datetime.now()
+        _deltas = {
+            "Last 7 Days": 7,
+            "Last 30 Days": 30,
+            "Last 90 Days": 90,
+            "Last 6 Months": 180,
+            "Last 1 Year": 365,
+        }
+        _days = _deltas.get(date_filter)
+        if _days:
+            _cutoff = _now - timedelta(days=_days)
+            filtered_df = filtered_df[
+                filtered_df["txn_date"].dt.date >= _cutoff.date()
+            ]
+
+    if client_search.strip():
+        mask = (
+            filtered_df["client_name"].astype(str).str.contains(client_search, case=False, na=False)
+            | filtered_df["folio"].astype(str).str.contains(client_search, case=False, na=False)
+        )
+        filtered_df = filtered_df[mask]
+
+    with st.expander("🐞 Debug: Filter Diagnostics", expanded=False):
+        rta_stage = all_txn_df[all_txn_df["rta"].isin(rta_filter)] if rta_filter else all_txn_df
+        amc_stage = rta_stage[rta_stage["amc_name"].isin(amc_filter)] if amc_filter else rta_stage
+        type_stage = amc_stage[amc_stage["txn_type"].isin(txn_type_filter)] if txn_type_filter else amc_stage
+        scheme_stage = type_stage[type_stage["scheme_name"].isin(scheme_filter)] if scheme_filter else type_stage
+
+        # Replicate the same date logic used in the main filter
+        date_stage = scheme_stage
+        if date_filter == "Custom Range" and custom_from and custom_to:
+            date_stage = scheme_stage[
+                (scheme_stage["txn_date"].dt.date >= custom_from)
+                & (scheme_stage["txn_date"].dt.date <= custom_to)
+            ]
+        elif date_filter != "All Time":
+            _deltas = {"Last 7 Days": 7, "Last 30 Days": 30, "Last 90 Days": 90,
+                       "Last 6 Months": 180, "Last 1 Year": 365}
+            _days = _deltas.get(date_filter)
+            if _days:
+                _cutoff = datetime.now() - timedelta(days=_days)
+                date_stage = scheme_stage[
+                    scheme_stage["txn_date"].dt.date >= _cutoff.date()
+                ]
+
+        search_stage = date_stage
+        if client_search.strip():
+            _m = (
+                date_stage["client_name"].astype(str).str.contains(client_search, case=False, na=False)
+                | date_stage["folio"].astype(str).str.contains(client_search, case=False, na=False)
+            )
+            search_stage = date_stage[_m]
+
+        st.write(
+            f"Start: **{len(all_txn_df):,}** → "
+            f"RTA: **{len(rta_stage):,}** → "
+            f"AMC: **{len(amc_stage):,}** → "
+            f"Type: **{len(type_stage):,}** → "
+            f"Scheme: **{len(scheme_stage):,}** → "
+            f"Date: **{len(date_stage):,}** → "
+            f"Search: **{len(search_stage):,}** → "
+            f"Final: **{len(filtered_df):,}**"
+        )
+        st.write(f"**Time Period:** `{date_filter}`")
+        if date_filter == "Custom Range":
+            st.write(f"**Custom range:** `{custom_from}` → `{custom_to}`")
+        st.write(f"**Data min/max:** `{all_txn_df['txn_date'].min()}` → `{all_txn_df['txn_date'].max()}`")
+        st.write(f"**Client search:** `{client_search!r}`")
+
+    # ═══════════════════════════════════════════════════════════
+    # SECTION 2: SUMMARY METRICS
+    # ═══════════════════════════════════════════════════════════
+    st.divider()
+    st.subheader("📊 Summary")
+
+    if filtered_df.empty:
+        st.info("No transactions match the selected filters.")
+        st.stop()
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Total Transactions", f"{len(filtered_df):,}")
+    m2.metric("Total Amount", format_aum(filtered_df["amount"].sum()))
+    m3.metric("Total Units", f"{filtered_df['units'].sum():.2f}")
+    m4.metric("Unique Clients", filtered_df["client_name"].nunique())
+    m5.metric("Unique Folios", filtered_df["folio"].nunique())
+
+    st.divider()
+
+    # ═══════════════════════════════════════════════════════════
+    # SECTION 3: BREAKDOWN TABS
+    # ═══════════════════════════════════════════════════════════
+    tab_detail, tab_amc, tab_scheme, tab_client, tab_rta = st.tabs(
+        ["📋 Detailed View", "🏢 AMC-wise", "📈 Scheme-wise", "👥 Client-wise", "🔵 RTA-wise"]
+    )
+
+    # ── TAB 1: Detailed View ──
+    with tab_detail:
+        st.subheader("📋 All Transactions")
+
+        display_cols = [
+            "txn_date", "rta", "client_name", "folio", "amc_name", "scheme_name",
+            "txn_type", "units", "price", "amount", "txn_status"
+        ]
+        display_cols = [c for c in display_cols if c in filtered_df.columns]
+
+        display_df = filtered_df[display_cols].rename(columns={
+            "txn_date": "Date",
+            "rta": "RTA",
+            "client_name": "Client",
+            "folio": "Folio",
+            "amc_name": "AMC",
+            "scheme_name": "Scheme",
+            "txn_type": "Type",
+            "units": "Units",
+            "price": "Price",
+            "amount": "Amount",
+            "txn_status": "Status"
+        })
+
+        display_df = display_df.sort_values("Date", ascending=False)
+
+        try:
+            from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+            gb = GridOptionsBuilder.from_dataframe(display_df)
+            gb.configure_default_column(filter=True, sortable=True, resizable=True, flex=1)
+            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=25)
+            grid_opts = gb.build()
+            AgGrid(
+                display_df,
+                gridOptions=grid_opts,
+                height=600,
+                update_mode=GridUpdateMode.NO_UPDATE,
+                fit_columns_on_grid_load=True,
+                theme="alpine-dark" if dark else "alpine",
+                key="txn_detail_grid"
+            )
+        except ImportError:
+            st.dataframe(
+                display_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Units": st.column_config.NumberColumn(format="%.4f"),
+                    "Price": st.column_config.NumberColumn(format="₹ %.4f"),
+                    "Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                }
+            )
+
+        csv = display_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "⬇️ Download Detailed Transactions (CSV)",
+            csv,
+            "transactions_detail.csv",
+            "text/csv",
+            key="txn_detail_download"
+        )
+
+    # ── TAB 2: AMC-wise ──
+    with tab_amc:
+        st.subheader("🏢 AMC-wise Breakdown")
+
+        amc_summary = (
+            filtered_df.groupby("amc_name")
+            .agg(
+                transactions=("txn_no", "count"),
+                total_units=("units", "sum"),
+                total_amount=("amount", "sum"),
+                avg_price=("price", "mean"),
+                unique_clients=("client_name", "nunique"),
+                unique_schemes=("scheme_name", "nunique"),
+            )
+            .reset_index()
+            .sort_values("total_amount", ascending=False)
+        )
+
+        amc_display = amc_summary.rename(columns={
+            "amc_name": "AMC",
+            "transactions": "Count",
+            "total_units": "Total Units",
+            "total_amount": "Total Amount",
+            "avg_price": "Avg Price",
+            "unique_clients": "Clients",
+            "unique_schemes": "Schemes",
+        })
+
+        st.dataframe(
+            amc_display,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Total Units": st.column_config.NumberColumn(format="%.2f"),
+                "Total Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Avg Price": st.column_config.NumberColumn(format="₹ %.4f"),
+            }
+        )
+
+        if not amc_summary.empty:
+            fig_amc = px.bar(
+                amc_summary,
+                x="amc_name",
+                y="total_amount",
+                title="Transaction Amount by AMC",
+                labels={"amc_name": "AMC", "total_amount": "Amount (₹)"},
+                color_discrete_sequence=["#6366f1"]
+            )
+            fig_amc = theme_plotly(fig_amc, dark)
+            fig_amc.update_xaxes(tickangle=-45)
+            st.plotly_chart(fig_amc, width="stretch")
+
+    # ── TAB 3: Scheme-wise ──
+    with tab_scheme:
+        st.subheader("📈 Scheme-wise Breakdown")
+
+        scheme_summary = (
+            filtered_df.groupby(["scheme_name", "amc_name"])
+            .agg(
+                transactions=("txn_no", "count"),
+                total_units=("units", "sum"),
+                total_amount=("amount", "sum"),
+                avg_price=("price", "mean"),
+            )
+            .reset_index()
+            .sort_values("total_amount", ascending=False)
+        )
+
+        scheme_display = scheme_summary.rename(columns={
+            "scheme_name": "Scheme",
+            "amc_name": "AMC",
+            "transactions": "Count",
+            "total_units": "Total Units",
+            "total_amount": "Total Amount",
+            "avg_price": "Avg Price",
+        })
+
+        st.dataframe(
+            scheme_display,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Total Units": st.column_config.NumberColumn(format="%.2f"),
+                "Total Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Avg Price": st.column_config.NumberColumn(format="₹ %.4f"),
+            }
+        )
+
+        if not scheme_summary.empty and len(scheme_summary) <= 15:
+            fig_scheme = px.bar(
+                scheme_summary,
+                x="scheme_name",
+                y="total_amount",
+                color="amc_name",
+                title="Transaction Amount by Scheme",
+                labels={"scheme_name": "Scheme", "total_amount": "Amount (₹)", "amc_name": "AMC"},
+            )
+            fig_scheme = theme_plotly(fig_scheme, dark)
+            fig_scheme.update_xaxes(tickangle=-45)
+            st.plotly_chart(fig_scheme, width="stretch")
+
+    # ── TAB 4: Client-wise ──
+    with tab_client:
+        st.subheader("👥 Client-wise Breakdown")
+
+        client_summary = (
+            filtered_df.groupby("client_name")
+            .agg(
+                transactions=("txn_no", "count"),
+                total_units=("units", "sum"),
+                total_amount=("amount", "sum"),
+                unique_folios=("folio", "nunique"),
+                unique_schemes=("scheme_name", "nunique"),
+                unique_amcs=("amc_name", "nunique"),
+            )
+            .reset_index()
+            .sort_values("total_amount", ascending=False)
+            .head(50)
+        )
+
+        client_display = client_summary.rename(columns={
+            "client_name": "Client",
+            "transactions": "Count",
+            "total_units": "Total Units",
+            "total_amount": "Total Amount",
+            "unique_folios": "Folios",
+            "unique_schemes": "Schemes",
+            "unique_amcs": "AMCs",
+        })
+
+        st.dataframe(
+            client_display,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Total Units": st.column_config.NumberColumn(format="%.2f"),
+                "Total Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+            }
+        )
+
+        if not client_summary.empty and len(client_summary) <= 15:
+            fig_client = px.bar(
+                client_summary,
+                x="client_name",
+                y="total_amount",
+                title="Top Clients by Transaction Amount (Top 50)",
+                labels={"client_name": "Client", "total_amount": "Amount (₹)"},
+                color_discrete_sequence=["#10b981"]
+            )
+            fig_client = theme_plotly(fig_client, dark)
+            fig_client.update_xaxes(tickangle=-45)
+            st.plotly_chart(fig_client, width="stretch")
+
+    # ── TAB 5: RTA-wise ──
+    with tab_rta:
+        st.subheader("🔵 RTA-wise Breakdown")
+
+        rta_summary = (
+            filtered_df.groupby("rta")
+            .agg(
+                transactions=("txn_no", "count"),
+                total_units=("units", "sum"),
+                total_amount=("amount", "sum"),
+                avg_price=("price", "mean"),
+                unique_clients=("client_name", "nunique"),
+                unique_folios=("folio", "nunique"),
+                unique_schemes=("scheme_name", "nunique"),
+                unique_amcs=("amc_name", "nunique"),
+            )
+            .reset_index()
+            .sort_values("total_amount", ascending=False)
+        )
+
+        rta_display = rta_summary.rename(columns={
+            "rta": "RTA",
+            "transactions": "Count",
+            "total_units": "Total Units",
+            "total_amount": "Total Amount",
+            "avg_price": "Avg Price",
+            "unique_clients": "Clients",
+            "unique_folios": "Folios",
+            "unique_schemes": "Schemes",
+            "unique_amcs": "AMCs",
+        })
+
+        st.dataframe(
+            rta_display,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Total Units": st.column_config.NumberColumn(format="%.2f"),
+                "Total Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Avg Price": st.column_config.NumberColumn(format="₹ %.4f"),
+            }
+        )
+
+        if not rta_summary.empty:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                fig_rta_amount = px.pie(
+                    rta_summary,
+                    values="total_amount",
+                    names="rta",
+                    title="Transaction Amount by RTA",
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.qualitative.Bold
+                )
+                fig_rta_amount = theme_plotly(fig_rta_amount, dark)
+                st.plotly_chart(fig_rta_amount, width="stretch")
+
+            with col2:
+                fig_rta_count = px.pie(
+                    rta_summary,
+                    values="transactions",
+                    names="rta",
+                    title="Transaction Count by RTA",
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.qualitative.Bold
+                )
+                fig_rta_count = theme_plotly(fig_rta_count, dark)
+                st.plotly_chart(fig_rta_count, width="stretch")
+
+    # # ═══════════════════════════════════════════════════════════
+    # # SECTION 4: DOWNLOAD ALL
+    # # ═══════════════════════════════════════════════════════════
+    # st.divider()
+    # st.subheader("📥 Download")
+
+    # csv_all = filtered_df.to_csv(index=False).encode("utf-8")
+    # st.download_button(
+    #     "⬇️ Download All Filtered Transactions (CSV)",
+    #     csv_all,
+    #     f"transactions_all_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+    #     "text/csv",
+    #     key="txn_all_download"
+    # )
+
+# ==================== 💰 BROKERAGES & SUB BROKERS REPORT ====================
+elif mode == "💰 Brokerages & Sub Brokers Report":
+    st.header("💰 Brokerages & Sub Brokers Report")
+
+    sub_options = ["📊 Brokerage Report", "👥 Sub Brokers", "💹 Sub-Broker Sharing"]
+    if "brok_sub_mode" not in st.session_state:
+        st.session_state["brok_sub_mode"] = sub_options[0]
+
+    sub_mode = st.radio(
+        "View", sub_options,
+        index=sub_options.index(st.session_state["brok_sub_mode"]),
+        horizontal=True, label_visibility="collapsed",
+    )
+    if sub_mode != st.session_state["brok_sub_mode"]:
+        st.session_state["brok_sub_mode"] = sub_mode
+        st.rerun()
+
+    st.divider()
+
+    if sub_mode == "👥 Sub Brokers":
+        render_sub_brokers_ui()
+        st.stop()
+    elif sub_mode == "💹 Sub-Broker Sharing":
+        render_sub_broker_sharing_report()
+        st.stop()
+
+    # ── Sub-view 1: existing Brokerage Report body continues below ──
+    st.caption(
+        "File-reported brokerage (CAMS + KFin), AMC names resolved the same way as your Dashboard (AMFI-canonical via "
+        "ISIN)."
+    )
+
+    data = load_brokerage_report(get_conn, data_version())
+    merged = data["merged"]
+    detail = data["detail"]
+
+    if merged.empty and detail.empty:
+        st.info("No brokerage data yet. Upload CAMS/KFin brokerage files and log manual entries first.")
+        st.stop()
+
+    # ── Top summary cards ──
+    total_file = merged["file_amount"].sum() if not merged.empty else 0.0
+    total_manual = merged["manual_amount"].sum() if not merged.empty else 0.0
+    total_variance = total_file - total_manual
+    pending_count = (merged["status"] == "⚠️ Not yet received").sum() if not merged.empty else 0
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("📄 Total File Brokerage", format_brokerage_inr(total_file))
+    c2.metric("🏦 Total Received (Manual)", format_brokerage_inr(total_manual))
+    c3.metric("📊 Variance", format_brokerage_inr(total_variance))
+    c4.metric("⚠️ Pending AMC-Months", int(pending_count))
+
+    st.divider()
+
+    # ════════════════════════════════════════════════════════════
+    # SECTION 1 — Record a manual brokerage receipt
+    # ════════════════════════════════════════════════════════════
+    st.subheader("✍️ Record Manual Brokerage Receipt")
+
+    # Investment-based AMCs (from folio holdings) so new AMCs auto-appear
+    # when investments are uploaded, not just when brokerage files arrive.
+    known_amcs = [a for a in load_active_amcs(data_version()) if a and not a.startswith("⚠️")]
+    amc_dropdown_options = known_amcs + ["➕ Add new AMC..."]
+
+    # Flash persists across the rerun that follows a successful insert.
+    if _flash := st.session_state.pop("brok_flash", None):
+        st.success(_flash)
+
+    _current_month_idx = date_cls.today().month - 1  # 0-based for Streamlit
+
+    with st.form("manual_brokerage_form", clear_on_submit=True):
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        with mc1:
+            m_amc_choice = st.selectbox("AMC Name", amc_dropdown_options)
+        with mc2:
+            # index= forces the CURRENT month to be pre-selected every time
+            # the form clears — previously it snapped back to "01", so every
+            # successive entry landed in January instead of October.
+            m_month = st.selectbox(
+                "Month",
+                [f"{i:02d}" for i in range(1, 13)],
+                index=_current_month_idx,
+            )
+        with mc3:
+            m_year = st.number_input("Year", min_value=2015, max_value=2100, value=pd.Timestamp.now().year)
+        with mc4:
+            m_amount = st.number_input("Amount (Rs)", min_value=0.0, step=100.0)
+
+        m_amc_new = ""
+        if m_amc_choice == "➕ Add new AMC...":
+            m_amc_new = st.text_input("New AMC Name")
+
+        m_notes = st.text_input("Notes (optional)")
+        submitted = st.form_submit_button("➕ Add Entry")
+
+        if submitted:
+            m_amc_final = m_amc_new.strip() if m_amc_choice == "➕ Add new AMC..." else m_amc_choice
+            if not m_amc_final:
+                st.error("AMC name is required.")
+            else:
+                try:
+                    with get_conn() as conn:
+                        conn.execute('''
+                                     INSERT INTO monthly_brokerage (amc, month, year, amount, notes)
+                                     VALUES (?, ?, ?, ?, ?) ON CONFLICT(amc, month, year) DO
+                                     UPDATE SET
+                                         amount = excluded.amount,
+                                         notes = excluded.notes,
+                                         timestamp = CURRENT_TIMESTAMP
+                                     ''', (m_amc_final, m_month, int(m_year), float(m_amount), m_notes.strip() or None))
+                    st.cache_data.clear()
+                    st.session_state["brok_flash"] = (
+                        f"✅ Logged {format_brokerage_inr(m_amount)} for "
+                        f"{m_amc_final} ({m_month}-{m_year})."
+                    )
+                    st.rerun()
+                except Exception as e:
+                    # Renders the actual DB error in-page instead of silently
+                    # bubbling up and getting killed by the rerun.
+                    st.error(f"❌ Insert failed for {m_amc_final} ({m_month}-{m_year}): {e}")
+                    log.exception("monthly_brokerage insert failed")
+
+    # ── Existing manual log ──
+    with st.expander("📜 View / Delete Manual Entry Log", expanded=False):
+        with get_conn() as conn:
+            log_df = pd.read_sql(
+                "SELECT amc, month, year, amount, notes, timestamp FROM monthly_brokerage ORDER BY year DESC, month DESC",
+                conn
+            )
+
+        if log_df.empty:
+            st.info("No manual entries logged yet.")
+        else:
+            st.dataframe(
+                log_df, width="stretch", hide_index=True,
+                column_config={"amount": st.column_config.NumberColumn(format="₹ %.2f")}
+            )
+
+            st.divider()
+            st.caption("Delete an entry")
+            del1, del2, del3 = st.columns([3, 2, 2])
+
+            log_df["_label"] = (
+                    log_df["amc"] + " — " + log_df["month"].astype(str) + "/" + log_df["year"].astype(str)
+                    + " (" + log_df["amount"].apply(format_brokerage_inr) + ")"
+            )
+            with del1:
+                entry_to_delete = st.selectbox(
+                    "Select entry to delete", log_df["_label"].tolist(), key="brok_delete_select"
+                )
+            with del2:
+                confirm_delete = st.checkbox("Confirm", key="brok_delete_confirm")
+            with del3:
+                if st.button("🗑️ Delete Entry", key="brok_delete_btn", disabled=not confirm_delete):
+                    row = log_df[log_df["_label"] == entry_to_delete].iloc[0]
+                    with get_conn() as conn:
+                        conn.execute(
+                            "DELETE FROM monthly_brokerage WHERE amc = ? AND month = ? AND year = ?",
+                            (row["amc"], row["month"], int(row["year"]))
+                        )
+                    st.cache_data.clear()
+                    st.success(f"Deleted entry: {entry_to_delete}")
+                    st.rerun()
+
+    # ════════════════════════════════════════════════════════════
+    # SECTION 2 — AMC-wise bifurcation
+    # ════════════════════════════════════════════════════════════
+    st.subheader("🏢 AMC-wise Bifurcation")
+
+    if not merged.empty:
+        available_months = sorted(merged["month"].dropna().unique(), reverse=True)
+        bif_month_filter = st.multiselect(
+            "📅 Month(s)", available_months, default=available_months,
+            key="brok_bif_month_filter"
+        )
+
+        merged_view = merged[merged["month"].isin(bif_month_filter)]
+
+        amc_grouped = (
+            merged_view.groupby("amc")[["file_amount", "manual_amount", "variance"]]
+            .sum()
+            .reset_index()
+        )
+
+        active_amcs = load_active_amcs(data_version())
+        amc_summary = pd.DataFrame({"amc": active_amcs}).merge(amc_grouped, on="amc", how="left")
+        amc_summary[["file_amount", "manual_amount", "variance"]] = amc_summary[
+            ["file_amount", "manual_amount", "variance"]
+        ].fillna(0.0)
+        amc_summary = amc_summary.sort_values("file_amount", ascending=False)
+
+        amc_summary["status"] = amc_summary.apply(
+            lambda r: "⚠️ Pending" if r["manual_amount"] == 0 and r["file_amount"] > 0
+            else ("✅ Matched" if abs(r["variance"]) < 1 else "🔶 Mismatch"),
+            axis=1
+        )
+
+        display_amc = amc_summary.rename(columns={
+            "amc": "AMC", "file_amount": "File Brokerage",
+            "manual_amount": "Received (Manual)", "variance": "Variance", "status": "Status"
+        })
+
+        # ── Append a TOTAL row so the selected month(s) can be read at a glance ──
+        _tot_file = float(amc_summary["file_amount"].sum()) if not amc_summary.empty else 0.0
+        _tot_manual = float(amc_summary["manual_amount"].sum()) if not amc_summary.empty else 0.0
+        _tot_variance = _tot_file - _tot_manual
+        _tot_status = (
+            "⚠️ Pending"  if _tot_manual == 0 and _tot_file > 0
+            else ("✅ Matched" if abs(_tot_variance) < 1 else "🔶 Mismatch")
+        )
+        _n_amcs = len(amc_summary)
+        total_row = pd.DataFrame([{
+            "AMC": f"TOTAL ({_n_amcs} AMC{'s' if _n_amcs != 1 else ''})",
+            "File Brokerage": _tot_file,
+            "Received (Manual)": _tot_manual,
+            "Variance": _tot_variance,
+            "Status": _tot_status,
+        }])
+        display_amc = pd.concat([display_amc, total_row], ignore_index=True)
+
+        st.dataframe(
+            display_amc, width="stretch", hide_index=True,
+            column_config={
+                "File Brokerage": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Received (Manual)": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Variance": st.column_config.NumberColumn(format="₹ %.2f"),
+            }
+        )
+
+        if not amc_summary.empty:
+            chart_df = amc_summary.copy()
+            chart_df["file_amount"] = pd.to_numeric(chart_df["file_amount"], errors="coerce").fillna(0.0)
+            chart_df["manual_amount"] = pd.to_numeric(chart_df["manual_amount"], errors="coerce").fillna(0.0)
+
+            chart_long = chart_df.melt(
+                id_vars="amc",
+                value_vars=["file_amount", "manual_amount"],
+                var_name="type",
+                value_name="amount"
+            )
+            chart_long["type"] = chart_long["type"].map({
+                "file_amount": "File Brokerage",
+                "manual_amount": "Received (Manual)"
+            })
+
+            fig = px.bar(
+                chart_long, x="amc", y="amount", color="type",
+                barmode="group", title="File vs Received, by AMC",
+                labels={"amount": "Amount (₹)", "amc": "AMC", "type": "Type"},
+                color_discrete_sequence=px.colors.qualitative.Bold
+            )
+            fig = theme_plotly(fig, dark)
+            fig.update_layout(
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                xaxis_tickangle=-45
+            )
+            st.plotly_chart(fig, width="stretch")
+        else:
+            st.info("No data for the selected month(s).")
+    else:
+        st.info("No file brokerage data parsed yet.")
+
+    st.divider()
+
+    # ════════════════════════════════════════════════════════════
+    # SECTION 3 — AMC Drilldown: client-level detail
+    # ════════════════════════════════════════════════════════════
+    st.subheader("🔍 AMC Drilldown — Client-level Detail")
+
+    # ── NORMALIZE COLUMN NAMES ──
+    detail_norm = detail.copy()
+    col_map = {}
+    if "BRKAGE_AMT" in detail_norm.columns:
+        col_map["BRKAGE_AMT"] = "brokerage_amount"
+    if "BROKERAGE" in detail_norm.columns:
+        col_map["BROKERAGE"] = "brokerage_amount"
+    if "BRKAGE_RATE" in detail_norm.columns:
+        col_map["BRKAGE_RATE"] = "brokerage_pct"
+    if "PERCENTAGE" in detail_norm.columns:
+        col_map["PERCENTAGE"] = "brokerage_pct"
+    if "BRKAGE_TYPE" in detail_norm.columns:
+        col_map["BRKAGE_TYPE"] = "brokerage_type"
+    if "BROKERAGE_TYPE" in detail_norm.columns:
+        col_map["BROKERAGE_TYPE"] = "brokerage_type"
+    if "INV_NAME" in detail_norm.columns:
+        col_map["INV_NAME"] = "client"
+    if "INVESTOR_NAME" in detail_norm.columns:
+        col_map["INVESTOR_NAME"] = "client"
+    if "FOLIO_NO" in detail_norm.columns:
+        col_map["FOLIO_NO"] = "folio"
+    if "ACCOUNT_NUMBER" in detail_norm.columns:
+        col_map["ACCOUNT_NUMBER"] = "folio"
+    if "PLOT_AMOUNT" in detail_norm.columns:
+        col_map["PLOT_AMOUNT"] = "txn_amount"
+    if "AMOUNT" in detail_norm.columns:
+        col_map["AMOUNT"] = "txn_amount"
+    if "TRADE_DATE_TIME" in detail_norm.columns:
+        col_map["TRADE_DATE_TIME"] = "txn_date"
+    if "TRANSACTION_DATE" in detail_norm.columns:
+        col_map["TRANSACTION_DATE"] = "txn_date"
+    if "SCHEME_CODE" in detail_norm.columns:
+        col_map["SCHEME_CODE"] = "scheme_code"
+    if col_map:
+        detail_norm = detail_norm.rename(columns=col_map)
+
+    # ── DRILLDOWN ──
+    all_amcs = sorted(detail_norm["amc"].dropna().unique()) if not detail_norm.empty else []
+    if not all_amcs:
+        st.info("No detail rows available.")
+    else:
+        amc_options = ["All"] + all_amcs
+        selected_amc = st.selectbox("Select AMC", amc_options, key="brok_drilldown_amc")
+
+        if selected_amc == "All":
+            amc_detail = detail_norm.copy()
+        else:
+            amc_detail = detail_norm[detail_norm["amc"] == selected_amc].copy()
+
+        dc1, dc2 = st.columns([2, 2])
+        with dc1:
+            available_drilldown_months = sorted(amc_detail["month"].dropna().unique(), reverse=True)
+            month_f = st.multiselect(
+                "📅 Month(s)", available_drilldown_months, default=available_drilldown_months,
+                key="brok_drilldown_month"
+            )
+        with dc2:
+            client_search = st.text_input("🔍 Search Client / Folio", "", key="brok_drilldown_search")
+
+        amc_detail = amc_detail[amc_detail["month"].isin(month_f)]
+        if client_search.strip():
+            mask = (
+                    amc_detail["client"].astype(str).str.contains(client_search, case=False, na=False)
+                    | amc_detail["folio"].astype(str).str.contains(client_search, case=False, na=False)
+            )
+            amc_detail = amc_detail[mask]
+
+        amc_total = amc_detail["brokerage_amount"].sum()
+        label = "All AMCs" if selected_amc == "All" else selected_amc
+        st.metric(f"💰 Total Brokerage — {label}", format_brokerage_inr(amc_total))
+
+        detail_cols = [
+            "rta", "client", "folio", "scheme_code", "txn_date",
+            "txn_amount", "brokerage_pct", "brokerage_amount", "brokerage_type"
+        ]
+        detail_cols = [c for c in detail_cols if c in amc_detail.columns]
+        display_detail = amc_detail[detail_cols].rename(columns={
+            "rta": "RTA", "client": "Client", "folio": "Folio", "scheme_code": "Scheme Code",
+            "txn_date": "Date", "txn_amount": "Txn Amount", "brokerage_pct": "Brokerage %",
+            "brokerage_amount": "Brokerage Amount", "brokerage_type": "Type",
+        })
+
+        # ── AgGrid for Brokerage Drilldown ──
+        try:
+            from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+            gb = GridOptionsBuilder.from_dataframe(display_detail)
+            gb.configure_default_column(filter=True, sortable=True, resizable=True, flex=1, minWidth=120)
+            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=25)
+            gb.configure_grid_options(domLayout='normal')
+            grid_opts = gb.build()
+            AgGrid(
+                display_detail,
+                gridOptions=grid_opts,
+                height=500,
+                update_mode=GridUpdateMode.NO_UPDATE,
+                fit_columns_on_grid_load=True,
+                allow_unsafe_jscode=True,
+                theme="alpine-dark" if dark else "alpine",
+                key="brokerage_drilldown_grid"
+            )
+        except ImportError:
+            st.dataframe(
+                display_detail.sort_values("Date",
+                                           ascending=False) if "Date" in display_detail.columns else display_detail,
+                width="stretch", hide_index=True,
+                column_config={
+                    "Txn Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Brokerage %": st.column_config.NumberColumn(format="%.4f"),
+                    "Brokerage Amount": st.column_config.NumberColumn(format="₹ %.2f"),
+                }
+            )
+        st.caption(f"Showing {len(amc_detail):,} brokerage records for {label}")
+
+        if not amc_detail.empty:
+            csv = display_detail.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                f"⬇️ Download {label} Brokerage Detail (CSV)",
+                csv, f"brokerage_{label.replace(' ', '_')}.csv", "text/csv",
+                key="brok_drilldown_download"
+            )
+
+    st.divider()
+
+
+elif mode == "📊 Reports":
+    st.header("📊 Reports")
+
+    report_options = ["📈 Portfolio Valuation Report", "🧮 Capital Gain Report"]
+    if "reports_sub_mode" not in st.session_state:
+        st.session_state["reports_sub_mode"] = report_options[0]
+
+    sub_mode = st.radio(
+        "Report Type", report_options,
+        index=report_options.index(st.session_state["reports_sub_mode"]),
+        horizontal=True, key="reports_sub_nav"
+    )
+    if sub_mode != st.session_state["reports_sub_mode"]:
+        st.session_state["reports_sub_mode"] = sub_mode
+        st.rerun()
+
+    st.divider()
+
+    # ═══════════════════════════════════════════════════════════
+    # SUB-REPORT 1 — Portfolio Valuation Report
+    # ═══════════════════════════════════════════════════════════
+
+    if sub_mode == "📈 Portfolio Valuation Report":
+        selected_display, selected_client = render_client_selector("val_report")
+        
+        if not selected_display or selected_client is None:
+            st.info("Select a client to generate the report.")
+            st.stop()
+        
+        client_code = selected_client['client_code']
+        client_name = selected_client['name']
+        pan = selected_client['pan']
+        mobile = selected_client.get('mobile')
+
+        # ── Family scope option ──
+        family = get_family_for_client(client_code)
+        report_scope = "individual"
+        if family is not None:
+            scope_choice = st.radio(
+                "Report Scope",
+                [f"👤 Individual — {client_name}", f"👨‍👩‍👧‍👦 Family — {family['family_name']}"],
+                horizontal=True,
+                key="val_report_scope"
+            )
+            report_scope = "family" if scope_choice.startswith("👨‍👩‍👧‍👦") else "individual"
+
+        # ── FY Year selector ──
+        today = date_cls.today()
+        if today.month >= 4:
+            current_fy_start = today.year
+        else:
+            current_fy_start = today.year - 1
+
+        fy_options = [f"{y}-{str(y + 1)[-2:]}" for y in range(current_fy_start, current_fy_start - 8, -1)]
+        selected_fy = st.selectbox("Financial Year", fy_options, key="val_fy_select")
+        
+        # ── Derive dates from FY ──
+                # ── Derive dates from FY ──
+        fy_start_year = int(selected_fy.split("-")[0])
+        period_from = date_cls(fy_start_year, 4, 1)
+        fy_end = date_cls(fy_start_year + 1, 3, 31)
+        today = date_cls.today()
+
+        # Default to FY-end, or today if the FY is still in progress
+        default_val_date = min(fy_end, today)
+        max_pickable = min(fy_end, today)  # never let user pick a future date
+
+        val_date = st.date_input(
+            "Valuation As-Of Date",
+            value=default_val_date,
+            min_value=period_from,
+            max_value=max_pickable,
+            key=f"val_asof_date_{selected_fy}",
+            help="Defaults to FY-end, or today if this FY hasn't ended yet. "
+                 "Pick any earlier date within the FY for a point-in-time valuation."
+        )
+
+        val_iso  = val_date.strftime("%Y-%m-%d")
+        from_iso = period_from.strftime("%Y-%m-%d")
+        val_ts   = pd.Timestamp(val_date)
+        from_ts  = pd.Timestamp(period_from)
+
+        if report_scope == "family":
+            cams_folio_list, kfin_folio_list = get_family_folios_by_rta(family["family_id"])
+            cams_f = pd.DataFrame({"foliochk": cams_folio_list})
+            kfin_f = pd.DataFrame({"folio": kfin_folio_list})
+            report_display_name = family["family_name"]
+            report_pan = None
+            report_mobile = None
+            report_email_lookup_code = family["head_client_code"]
+            member_count = len(get_family_members(family["family_id"]))
+            st.caption(f"Family report — {member_count} member(s), "
+                       f"{len(cams_folio_list)} CAMS + {len(kfin_folio_list)} KFinTech folios")
+        else:
+            is_minor = pd.isna(pan) or str(pan).strip() == ""
+            match_pan = selected_client.get('guardian_pan') if is_minor else pan
+            name_clean = client_name.strip().upper() if client_name else ""
+
+            with get_conn() as conn:
+                if is_minor:
+                    cams_f = pd.read_sql(
+                        "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                        conn, params=(name_clean,))
+                    kfin_f = pd.read_sql(
+                        "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                        conn, params=(name_clean,))
+                else:
+                    cams_f = pd.read_sql(
+                        "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+                        conn, params=(match_pan, client_name))
+                    kfin_f = pd.read_sql(
+                        "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
+                        conn, params=(match_pan, client_name))
+
+            report_display_name = client_name
+            report_pan = pan
+            report_mobile = mobile
+            report_email_lookup_code = client_code
+
+        all_folios = set(cams_f['foliochk'].tolist() + kfin_f['folio'].tolist())
+        investor_map = get_investor_names_for_folios(
+        cams_f['foliochk'].tolist(), kfin_f['folio'].tolist()
+        )
+
+        if not all_folios:
+            st.info("No folios found for this scope.")
+            st.stop()
+
+        # ── Folio → RTA map ──
+        folio_rta_map = {}
+        for f in cams_f['foliochk'].tolist():
+            folio_rta_map[f] = 'CAMS'
+        for f in kfin_f['folio'].tolist():
+            folio_rta_map[f] = 'KFinTech'
+
+        # ── Product code → ISIN + scheme name ──
+        with get_conn() as conn:
+            pc_info = pd.read_sql("""
+                SELECT UPPER(TRIM(Channel_Partner_Code)) AS pc,
+                       MAX(ISIN)        AS isin,
+                       MAX(Scheme_Name) AS scheme_name
+                FROM bse_scheme_master
+                WHERE Channel_Partner_Code IS NOT NULL
+                  AND TRIM(Channel_Partner_Code) != ''
+                GROUP BY UPPER(TRIM(Channel_Partner_Code))
+            """, conn)
+        isin_lk = dict(zip(pc_info['pc'], pc_info['isin']))
+        name_lk = dict(zip(pc_info['pc'], pc_info['scheme_name']))
+
+    
+        # ── NAV: use today's live NAV if valuing as of today, else historical ──
+        with st.spinner(f"Loading NAV for {val_iso}…"):
+            if val_date >= date_cls.today():
+                download_and_save_nav_if_needed()
+                raw_nav_map = _amfi.load()
+                nav_map = {k: v[0] for k, v in raw_nav_map.items() if v[0] > 0}
+            else:
+                nav_map = get_or_fetch_nav_for_date_cached(val_iso)
+
+        if not nav_map:
+            st.warning(
+                f"⚠️ Could not load NAV for {val_iso}. "
+                "Values will show as N/A."
+            )
+
+        # ── Process all folios ──
+        all_scheme_rows = []
+        rta_scheme_txns = {'CAMS': [], 'KFinTech': []}
+
+        sorted_folios_list = sorted(all_folios)
+        prog = st.progress(0, text="Processing folios…")
+
+        for idx, folio_no in enumerate(sorted_folios_list):
+            prog.progress(
+                (idx + 1) / len(sorted_folios_list),
+                text=f"Folio {folio_no}…"
+            )
+            rta = folio_rta_map.get(folio_no)
+            if not rta:
+                continue
+
+            all_txn = fetch_all_folio_transactions(folio_no, rta)
+            if all_txn.empty:
+                continue
+
+            if 'trxntype' not in all_txn.columns:
+                all_txn['trxntype'] = ''
+
+            for pc in all_txn['product_code'].unique():
+                opening  = calc_units_before(all_txn, pc, from_ts)
+                closing  = calc_units_upto(all_txn, pc, val_ts)
+                invested = calc_invested_upto(all_txn, pc, val_ts)
+
+                if closing <= 0 and opening <= 0:
+                    continue
+
+                isin  = isin_lk.get(pc)
+                nav   = nav_map.get(str(isin).strip().upper()) if isin else None
+                value = closing * nav if nav else None
+                gain  = (value - invested) if value is not None else None
+                sname = name_lk.get(pc, pc)
+
+                investor_name = investor_map.get(folio_no, '')
+
+                all_scheme_rows.append({
+                    'Scheme':    sname,
+                    'Folio':     folio_no,
+                    'RTA':       rta,
+                    'Investor':  investor_name,
+                    'Invested':  invested,
+                    'Value':     value,
+                    'Gain/Loss': gain,
+                })
+
+                mask = (
+                    (all_txn['product_code'] == pc)
+                    & (all_txn['_date'] >= from_ts)
+                    & (all_txn['_date'] <= val_ts)
+                )
+                pt = all_txn[mask].copy()
+                if not pt.empty:
+                    pt['Balance'] = opening + pt['signed_units'].cumsum()
+
+                rta_key = rta if rta in rta_scheme_txns else 'CAMS'
+                label = f"{investor_name} — {sname} ({folio_no})" if report_scope == "family" else f"{sname} ({folio_no})"
+                rta_scheme_txns[rta_key].append({
+                    'label':   label,
+                    'opening': opening,
+                    'df':      pt,
+                })
+
+        prog.empty()
+
+        # ═══════════════════════════════════════════════
+        #  REPORT HEADER
+        # ═══════════════════════════════════════════════
+        st.divider()
+        hc1, hc2, hc3 = st.columns(3)
+        with hc1:
+            st.markdown(f"**{report_display_name}**")
+            if report_scope == "family":
+                st.caption("Family Portfolio")
+            else:
+                st.caption(f"PAN: `{report_pan or 'Minor'}`  |  Code: `{client_code}`")
+        with hc2:
+            st.markdown(f"**FY {selected_fy}**")
+            st.caption(f"{from_iso} → {val_iso}")
+        with hc3:
+            if report_mobile:
+                st.caption(f"📱 {report_mobile}")
+        st.divider()
+
+        if not all_scheme_rows:
+            st.info("No holdings found for the selected period.")
+            st.stop()
+
+        # ═══════════════════════════════════════════════
+        #  SCHEME SUMMARY
+        # ═══════════════════════════════════════════════
+        sm_df = pd.DataFrame(all_scheme_rows)
+        sm_df = sm_df.sort_values('Invested', ascending=False, na_position='last').reset_index(drop=True)
+
+        # Count rows where NAV lookup failed — Value is NaN
+        missing_mask = sm_df["Value"].isna()
+        n_missing    = int(missing_mask.sum())
+
+        t_inv  = sm_df['Invested'].sum()
+        t_val  = sm_df['Value'].sum(skipna=True)
+        t_gain = t_val - t_inv if t_val is not None else None
+
+        if n_missing:
+            st.error(
+                f"⚠️ **{n_missing} of {len(sm_df)} scheme(s)** have no NAV "
+                f"available for **{val_iso}**. Total Value is **understated** "
+                f"by the value of these holdings. Affected schemes:"
+            )
+            st.dataframe(
+                sm_df.loc[missing_mask, ["Scheme", "Folio", "RTA", "Invested"]]
+                       .rename(columns={"Invested": "Invested (₹)"}),
+                width="stretch", hide_index=True,
+            )
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Invested", format_aum(t_inv))
+        m2.metric("Total Value", format_aum(t_val))
+        m3.metric(
+            "Gain/Loss",
+            format_aum(t_gain) if t_gain is not None else "N/A",
+            delta=(
+                f"{(t_gain / t_inv * 100):.2f}%"
+                if t_gain is not None and t_inv > 0 else None
+            ),
+        )
+
+        sm_df['Return %'] = sm_df.apply(
+            lambda r: (
+                f"{(r['Gain/Loss'] / r['Invested'] * 100):.2f}%"
+                if r['Gain/Loss'] is not None and r['Invested'] > 0
+                else "N/A"
+            ),
+            axis=1,
+        )
+
+        summary_cols = []
+        if report_scope == "family":
+            summary_cols.append('Investor')
+        summary_cols += ['Scheme', 'Folio', 'Invested', 'Value', 'Gain/Loss', 'Return %']
+
+        display_sm = sm_df[summary_cols].copy()
+
+        total_row_dict = {
+            'Scheme':    'TOTAL',
+            'Folio':     f"{sm_df['Folio'].nunique()} folios",
+            'Invested':  t_inv,
+            'Value':     t_val,
+            'Gain/Loss': t_gain,
+            'Return %': (
+                f"{(t_gain / t_inv * 100):.2f}%"
+                if t_gain is not None and t_inv > 0 else "N/A"
+            ),
+        }
+        if report_scope == "family":
+            total_row_dict['Investor'] = f"{len(get_family_members(family['family_id']))} members"
+        total_row = pd.DataFrame([total_row_dict])[summary_cols]
+        display_sm = pd.concat([display_sm, total_row], ignore_index=True)
+
+        st.dataframe(
+            display_sm,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Invested":  st.column_config.NumberColumn(format="₹ %.2f"),
+                "Value":     st.column_config.NumberColumn(format="₹ %.2f"),
+                "Gain/Loss": st.column_config.NumberColumn(format="₹ %.2f"),
+            },
+        )
+
+        st.divider()
+
+        # ═══════════════════════════════════════════════
+        #  TRANSACTIONS (RTA-grouped)
+        # ═══════════════════════════════════════════════
+        st.markdown("### 📑 Transactions")
+        st.caption(f"Period: {from_iso} → {val_iso}  |  Opening balance as on {from_iso}")
+
+        all_entries = rta_scheme_txns.get('CAMS', []) + rta_scheme_txns.get('KFinTech', [])
+        all_entries.sort(key=lambda e: e['label'])
+
+        if all_entries:
+            with st.expander(
+                f"▶ All Schemes ({len(all_entries)} scheme"
+                f"{'s' if len(all_entries) != 1 else ''})",
+                expanded=True,
+            ):
+                for entry in all_entries:
+                    label   = entry['label']
+                    opening = entry['opening']
+                    tdf     = entry['df']
+
+                    st.markdown(
+                        f"**{label}** — Opening: **{opening:.4f}** units"
+                    )
+
+                    if tdf.empty:
+                        st.caption("_(no transactions during this period)_")
+                    else:
+                        show_tdf = tdf[[
+                            '_date', 'trxntype', 'signed_units', 'amount', 'Balance'
+                        ]].copy()
+                        show_tdf['Date'] = show_tdf['_date'].dt.strftime('%d-%m-%Y')
+                        show_tdf = show_tdf[[
+                            'Date', 'trxntype', 'signed_units', 'amount', 'Balance'
+                        ]].rename(columns={
+                            'trxntype':     'Type',
+                            'signed_units': 'Units',
+                            'amount':       'Amount',
+                            'Balance':      'Balance',
+                        })
+
+                        st.dataframe(
+                            show_tdf,
+                            width="stretch",
+                            hide_index=True,
+                            column_config={
+                                "Units":   st.column_config.NumberColumn(format="%.4f"),
+                                "Amount":  st.column_config.NumberColumn(format="₹ %.2f"),
+                                "Balance": st.column_config.NumberColumn(format="%.4f"),
+                            },
+                        )
+
+                    st.caption("")
+
+        # ═══════════════════════════════════════════════
+        #  DOWNLOAD BUTTONS
+        # ═══════════════════════════════════════════════
+        st.divider()
+        st.markdown("### 📥 Download Report")
+
+        html_content = generate_valuation_html(
+            report_display_name, report_pan, client_code, report_mobile,
+            val_iso, from_iso,
+            all_scheme_rows, rta_scheme_txns,
+            t_inv, t_val, t_gain if t_gain is not None else 0,
+            show_investor=(report_scope == "family"),
+        )
+        pdf_bytes = generate_valuation_pdf(
+            report_display_name, report_pan, client_code, report_mobile,
+            val_iso, from_iso,
+            all_scheme_rows, rta_scheme_txns,
+            t_inv, t_val, t_gain if t_gain is not None else 0,
+            show_investor=(report_scope == "family"),
+        )
+
+        dl_col1, dl_col2 = st.columns(2)
+
+        with dl_col1:
+            if pdf_bytes:
+                st.download_button(
+                    label="📑 Download PDF",
+                    data=pdf_bytes,
+                    file_name=f"Valuation_{report_display_name.replace(' ', '_')}_{selected_fy}.pdf",
+                    mime="application/pdf",
+                    width="stretch",
+                )
+            else:
+                st.warning("PDF generation unavailable (fpdf2/font missing).")
+
+        with dl_col2:
+            csv_bytes = sm_df[summary_cols].to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📊 Download CSV",
+                data=csv_bytes,
+                file_name=f"Valuation_{report_display_name.replace(' ', '_')}_{val_iso}.csv",
+                mime="text/csv",
+                width="stretch",
+            )
+
+        st.caption(
+            "ℹ️ Portfolio valuations are based on AMFI NAVs as of the valuation date "
+            "(or latest available) and are for information only. Past performance is "
+            "not indicative of future results. Consult your financial advisor before "
+            "making investment decisions."
+        )
+
+        render_email_report_button(
+            client_code=report_email_lookup_code,
+            client_name=report_display_name,
+            report_type="Valuation",
+            period_str=f"{from_iso} to {val_iso}",
+            html_content=html_content,
+            pdf_content=pdf_bytes,
+            key_prefix="val_email",
+        )
+
+
+    # ═══════════════════════════════════════════════════════════
+    # SUB-REPORT 2 — Capital Gain Report
+    # ═══════════════════════════════════════════════════════════
+
+    elif sub_mode == "🧮 Capital Gain Report":
+        st.subheader("🧮 Capital Gain Report")
+        st.caption("Realized gains (CAMS, FIFO). KFinTech redemption tracking isn't available yet.")
+
+        # ── Client selector (same pattern as Valuation Report) ──
+        selected_display, selected_client = render_client_selector("cg_report", exclude_minors=False)
+
+        if not selected_display or selected_client is None:
+            st.info("Select a client to generate the capital gain report.")
+            st.stop()
+
+        client_code = selected_client['client_code']
+        client_name = selected_client['name']
+        pan = selected_client['pan']
+        mobile = selected_client.get('mobile')
+
+        is_minor = pd.isna(pan) or str(pan).strip() == ""
+        match_pan = selected_client.get('guardian_pan') if is_minor else pan
+        name_clean = client_name.strip().upper() if client_name else ""
+
+        # ── FY selector ──
+        today = date_cls.today()
+        current_fy_start = today.year if today.month >= 4 else today.year - 1
+        fy_options = ["All Time"] + [f"{y}-{str(y+1)[-2:]}" for y in range(current_fy_start, current_fy_start - 8, -1)]
+        cgr_fy = st.selectbox("FY (by sale date)", fy_options, key="cgr_fy_select")
+
+        if cgr_fy != "All Time":
+            fy_start_year = int(cgr_fy.split("-")[0])
+            cgr_from, cgr_to = date_cls(fy_start_year, 4, 1), date_cls(fy_start_year + 1, 3, 31)
+        else:
+            cgr_from = cgr_to = None
+
+                # ── KFinTech coverage warning ──
+        with get_conn() as conn:
+            if is_minor:
+                kfin_count = conn.execute(
+                    "SELECT COUNT(*) FROM kfin_mfsd211_folio "
+                    "WHERE TRIM(UPPER(investor_name)) LIKE ? || '%'",
+                    (name_clean,)
+                ).fetchone()[0]
+            else:
+                kfin_count = conn.execute(
+                    "SELECT COUNT(*) FROM kfin_mfsd211_folio "
+                    "WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
+                    (str(match_pan).upper(), name_clean)
+                ).fetchone()[0]
+
+        if kfin_count:
+            st.warning(
+                f"⚠️ This client has **{kfin_count} KFinTech folio(s)** which are "
+                f"**not included** in this Capital Gain Report. Figures below are "
+                f"**CAMS-only**. KFinTech redemption tracking is not yet implemented."
+            )
+
+        def _extract_match_dates(m):
+            """
+            Pull whatever date-like fields exist on the match object, regardless
+            of what cg.py names them. Sorted chronologically: earliest = buy date,
+            latest = sale date.
+            """
+            candidates = []
+            for attr in dir(m):
+                if attr.startswith('_'):
+                    continue
+                try:
+                    val = getattr(m, attr)
+                except Exception:
+                    continue
+                if isinstance(val, (datetime, pd.Timestamp, date_cls)):
+                    candidates.append(pd.Timestamp(val))
+            candidates = sorted(candidates)
+            if len(candidates) >= 2:
+                return candidates[0], candidates[-1]
+            elif len(candidates) == 1:
+                return candidates[0], candidates[0]
+            return None, None
+
+        # ── Generate button ──
+        gen_clicked = st.button("🔄 Generate Report", type="primary")
+
+        if not gen_clicked:
+            st.info("Click **Generate Report** after selecting the client and FY.")
+            st.stop()
+
+        with st.spinner(f"Computing realized gains for {client_name}…"):
+            # Fetch folios
+            with get_conn() as conn:
+                if is_minor:
+                    cams_folios = pd.read_sql(
+                        "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(inv_name)) LIKE ? || '%'",
+                        conn, params=(name_clean,)
+                    )["foliochk"].tolist()
+                else:
+                    cams_folios = pd.read_sql(
+                        "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+                        conn, params=(str(match_pan).upper(), name_clean)
+                    )["foliochk"].tolist()
+
+            if not cams_folios:
+                st.info("No CAMS folios found for this client.")
+                st.stop()
+
+            schemes_df = get_client_cams_schemes(cams_folios, data_version())
+            if schemes_df.empty:
+                st.info("No schemes with transactions found for this client.")
+                st.stop()
+
+            detail_rows = []
+            for _, srow in schemes_df.iterrows():
+                folio_no, prodcode, scheme_name = srow["folio_no"], srow["prodcode"], srow["scheme"]
+                txns = get_cams_txns_raw(folio_no, prodcode)
+                if txns.empty:
+                    continue
+
+                lots, matches = cg.replay_folio_scheme(txns)
+                if not matches:
+                    continue
+
+                for m in matches:
+                    buy_date = m.buy_date
+                    sale_date = m.sell_date
+                    sd = sale_date if isinstance(sale_date, date_cls) else None
+
+                    if cgr_from and sd and not (cgr_from <= sd <= cgr_to):
+                        continue
+
+                    detail_rows.append({
+                        "Scheme":           scheme_name,
+                        "Folio":            folio_no,
+                        "Purchase Date":    buy_date,
+                        "Purchase Units":   m.units,
+                        "Purchase NAV":     (m.cost / m.units) if m.units else 0,
+                        "Purchase Value":   m.cost,
+                        "Redemption Date":  sale_date,
+                        "Redemption Units": m.units,
+                        "Redemption NAV":   (m.proceeds / m.units) if m.units else 0,
+                        "Redemption Value": m.proceeds,
+                        "Holding Days":     m.holding_days,
+                        "Type":             "LTCG" if m.is_ltcg else "STCG",
+                        "Gain/Loss":        m.gain,
+                    })
+
+        if not detail_rows:
+            st.info("No realized capital gains found for the selected period.")
+            st.stop()
+
+        detail_df = pd.DataFrame(detail_rows)
+        d_buy  = detail_df["Purchase Value"].sum()
+        d_sale = detail_df["Redemption Value"].sum()
+        d_gain = d_sale - d_buy
+
+        # ── Tax summary: STCG / LTCG split ──
+        stcg_rows = [r for r in detail_rows if (r.get("Holding Days") or 0) < 365]
+        ltcg_rows = [r for r in detail_rows if (r.get("Holding Days") or 0) >= 365]
+        stcg_gain = sum(r["Gain/Loss"] for r in stcg_rows)
+        ltcg_gain = sum(r["Gain/Loss"] for r in ltcg_rows)
+
+        LTCG_EXEMPTION = 125000
+        ltcg_exempt_used = min(max(ltcg_gain, 0), LTCG_EXEMPTION)
+        ltcg_taxable     = max(ltcg_gain - LTCG_EXEMPTION, 0)
+
+        # ═══════════════════════════════════════════════
+        #  REPORT HEADER
+        # ═══════════════════════════════════════════════
+        st.divider()
+        hc1, hc2, hc3 = st.columns(3)
+        with hc1:
+            st.markdown(f"**{client_name}**")
+            st.caption(f"PAN: `{pan or 'Minor'}`  |  Code: `{client_code}`")
+        with hc2:
+            st.markdown(f"**FY {cgr_fy}**")
+        with hc3:
+            if mobile:
+                st.caption(f"📱 {mobile}")
+        st.divider()
+
+        # ═══════════════════════════════════════════════
+        #  METRICS
+        # ═══════════════════════════════════════════════
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Purchase", format_currency(d_buy))
+        m2.metric("Total Redemption", format_currency(d_sale))
+        m3.metric("Total Gain/Loss", format_currency(d_gain))
+
+        st.markdown("#### 🧾 Tax Summary (Equity assumption)")
+        st.caption(
+            "Assumes equity taxation (STCG 20%, LTCG 12.5% above ₹1.25L exemption). "
+            "Debt / hybrid funds are taxed at slab rate — use the Capital Gains tab for those. "
+            "This is indicative only; confirm with your CA."
+        )
+        ts1, ts2, ts3, ts4 = st.columns(4)
+        ts1.metric("STCG (held < 12m)",       format_currency(stcg_gain))
+        ts2.metric("LTCG (held ≥ 12m)",       format_currency(ltcg_gain))
+        ts3.metric("LTCG Exemption Used",     format_currency(ltcg_exempt_used))
+        ts4.metric("Taxable LTCG",            format_currency(ltcg_taxable))
+
+        # ── Grandfathering warning (pre-31-Jan-2018 purchases) ──
+        GRANDFATHER_CUTOFF = date_cls(2018, 1, 31)
+        pre_2018 = [r for r in detail_rows
+                    if r.get("Purchase Date") and r["Purchase Date"] < GRANDFATHER_CUTOFF]
+        if pre_2018:
+            st.warning(
+                f"⚠️ **{len(pre_2018)} purchase(s) predate 31-Jan-2018.** "
+                f"Grandfathering rules (FMV as of 31-Jan-2018) are **not** applied — "
+                f"LTCG cost basis may be **understated** for those rows. "
+                f"Verify before filing."
+            )
+
+        # ═══════════════════════════════════════════════
+        #  DETAIL TABLE
+        # ═══════════════════════════════════════════════
+        cols = ["Scheme", "Folio",
+                "Purchase Date", "Purchase Units", "Purchase NAV", "Purchase Value",
+                "Redemption Date", "Redemption Units", "Redemption NAV", "Redemption Value",
+                "Holding Days", "Type", "Gain/Loss"]
+
+        st.dataframe(
+            detail_df[cols].sort_values("Redemption Date", ascending=True, na_position="last"),
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Purchase Units":   st.column_config.NumberColumn(format="%.4f"),
+                "Purchase NAV":     st.column_config.NumberColumn(format="₹ %.4f"),
+                "Purchase Value":   st.column_config.NumberColumn(format="₹ %.2f"),
+                "Redemption Units": st.column_config.NumberColumn(format="%.4f"),
+                "Redemption NAV":   st.column_config.NumberColumn(format="₹ %.4f"),
+                "Redemption Value": st.column_config.NumberColumn(format="₹ %.2f"),
+                "Holding Days":     st.column_config.NumberColumn(format="%d"),
+                "Gain/Loss":        st.column_config.NumberColumn(format="₹ %.2f"),
+            }
+        )
+
+        # ═══════════════════════════════════════════════
+        #  DOWNLOADS
+        # ═══════════════════════════════════════════════
+        st.divider()
+        st.markdown("### 📥 Download Report")
+
+        dl1, dl2 = st.columns(2)
+
+        with dl1:
+            csv = detail_df[cols].to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📊 Download Excel (CSV)",
+                data=csv,
+                file_name=f"CapitalGain_{client_name.replace(' ', '_')}_{cgr_fy}.csv",
+                mime="text/csv",
+                width="stretch",
+            )
+
+        html_content = generate_capital_gain_html(
+            client_name, pan, client_code, cgr_fy,
+            detail_rows, d_buy, d_sale, d_gain
+        )
+        pdf_bytes = generate_capital_gain_pdf(
+            client_name, pan, client_code, cgr_fy,
+            detail_rows, d_buy, d_sale, d_gain
+        )
+
+        with dl2:
+            if pdf_bytes:
+                st.download_button(
+                    label="📑 Download PDF",
+                    data=pdf_bytes,
+                    file_name=f"CapitalGain_{client_name.replace(' ', '_')}_{cgr_fy}.pdf",
+                    mime="application/pdf",
+                    width="stretch",
+                )
+            else:
+                st.warning("PDF generation unavailable (fpdf2/font missing).")
+
+        render_email_report_button(
+            client_code=client_code,
+            client_name=client_name,
+            report_type="Capital Gain",
+            fy_str=cgr_fy,
+            period_str=f"FY {cgr_fy}" if cgr_fy != "All Time" else "All Time",
+            html_content=html_content,
+            pdf_content=pdf_bytes,
+            key_prefix="cg_email",
+        )
+
+
+# ==================== 🧮 CAPITAL GAINS ====================
+elif mode == "🧮 Capital Gains":
+    st.header("🧮 Capital Gains (CAMS, FIFO)")
+    st.caption(
+        "FIFO cost basis, tax classification (equity / debt), and realized / "
+        "unrealized gain analysis per folio-scheme. KFinTech realizations require "
+        "redemption history to be present."
+    )
+    
+    selected_display, selected_client = render_client_selector("cg_tab", exclude_minors=True)
+    
+    if not selected_display or selected_client is None:
+        st.info("Select a client with valid PAN.")
+        st.stop()
+    
+    cg_pan = selected_client['pan']
+    cg_name = selected_client['name']
+    
+    with get_conn() as conn:
+        cg_cams_folios = pd.read_sql(
+            "SELECT foliochk FROM cams_wbr9_folio WHERE TRIM(UPPER(pan_no))=? OR TRIM(UPPER(inv_name))=?",
+            conn, params=(str(cg_pan).upper(), cg_name.upper())
+        )
+        cg_kfin_folios = pd.read_sql(
+            "SELECT folio FROM kfin_mfsd211_folio WHERE TRIM(UPPER(pan_number))=? OR TRIM(UPPER(investor_name))=?",
+            conn, params=(str(cg_pan).upper(), cg_name.upper())
+        )
+
+    cams_folio_ids = cg_cams_folios["foliochk"].tolist()
+    kfin_folio_ids = cg_kfin_folios["folio"].tolist()
+
+    if not cams_folio_ids and not kfin_folio_ids:
+        st.info("No folios for this client.")
+        st.stop()
+
+    cams_schemes = get_client_cams_schemes(cams_folio_ids, data_version())
+    cams_schemes["rta"] = "CAMS"
+
+    kfin_schemes = get_client_kfin_schemes(kfin_folio_ids, data_version())
+    kfin_schemes["rta"] = "KFinTech"
+
+    schemes_df = pd.concat([cams_schemes, kfin_schemes], ignore_index=True)
+    if schemes_df.empty:
+        st.info("No transactions for this client.")
+        st.stop()
+
+    schemes_df["label"] = schemes_df["folio_no"] + " — " + schemes_df["scheme"] + " (" + schemes_df["rta"] + ")"
+    sel_scheme = st.selectbox("Folio / Scheme", schemes_df["label"].tolist())
+    srow = schemes_df[schemes_df["label"] == sel_scheme].iloc[0]
+    folio_no, prodcode, scheme_name, rta_sel = srow["folio_no"], srow["prodcode"], srow["scheme"], srow["rta"]
+    is_kfin = rta_sel == "KFinTech"
+
+    if is_kfin:
+        st.info("⚠️ KFinTech: no redemption history yet, so only What-if Redemption is shown. "
+                "Realized Gains unlocks once redemption transactions exist and the redemption code is confirmed.")
+
+    txns = get_kfin_txns_raw(folio_no, prodcode) if is_kfin else get_cams_txns_raw(folio_no, prodcode)
+    if txns.empty:
+        st.info("No transactions found.")
+        st.stop()
+
+    lots, matches = cg.replay_folio_scheme(txns)
+    default_cat = cg.classify_tax_category(scheme_name=scheme_name)
+
+    tc1, tc2 = st.columns(2)
+    with tc1:
+        tax_cat = st.radio(
+            "Tax category", ["equity", "debt"],
+            index=0 if default_cat == "equity" else 1, horizontal=True, key="cg_cat",
+            help="Equity = ≥65% equity allocation. Debt = everything else (debt funds, FoFs, "
+                 "gold/silver ETFs, international funds — 'specified mutual funds')."
+        )
+    with tc2:
+        if tax_cat == "debt":
+            slab = st.number_input(
+                "Income slab rate (%) — applied to debt gains",
+                0.0, 42.0, 30.0, key="cg_slab"
+            ) / 100
+            st.caption(f"Slab rate applied: {slab * 100:.1f}%")
+        else:
+            slab = 0.30  # unused for equity
+
+    if is_kfin:
+        tab2, tab3 = st.tabs(["🔮 What-if Redemption", "❓ What if Not Redeemed"])
+        tab1 = None
+    else:
+        tab1, tab2, tab3 = st.tabs(["✅ Realized Gains", "🔮 What-if Redemption", "❓ What if Not Redeemed"])
+
+    # ── TAB 1: already-placed redemptions (CAMS only) ──
+    if tab1 is not None:
+        with tab1:
+            if not matches:
+                st.info("No redemptions found for this folio/scheme yet.")
+            else:
+                tax = cg.tax_for_matches(matches, tax_cat, slab)
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Total Gain", format_currency(tax["total_gain"]))
+                c2.metric("STCG", format_currency(tax["stcg_gain"]))
+                c2.caption(f"Tax: {format_currency(tax['stcg_tax'])}")
+                c3.metric("LTCG", format_currency(tax["ltcg_gain"]))
+                c3.caption(f"Tax: {format_currency(tax['ltcg_tax'])}")
+                c4.metric("Estimated Tax", format_currency(tax["total_tax"]))
+
+                if tax_cat == "equity":
+                    used, limit = tax["exemption_used"], tax["exemption_limit"]
+                    st.progress(min(used / limit, 1.0) if limit else 0.0,
+                                text=f"LTCG exemption used: {format_currency(used)} / {format_currency(limit)}")
+                    st.caption(f"Taxable LTCG: {format_currency(tax['ltcg_taxable'])} "
+                            f"— exemption assumed available in full; reduce if you have other equity LTCG this FY.")
+                else:
+                    st.caption(f"Slab rate applied: {slab * 100:.1f}%")
+
+                st.dataframe(cg.matches_to_df(matches), width="stretch", hide_index=True)
+
+    # ── TAB 2: hypothetical future redemption ──
+    with tab2:
+        remaining_units = sum(l.remaining_units for l in lots)
+        st.metric("Units Currently Held (per transaction history)", f"{remaining_units:.4f}")
+
+        if remaining_units <= 0:
+            st.info("No remaining units to redeem.")
+        else:
+            # ── Reliable NAV: reuse same canonical AMFI source as Dashboard/Client ──
+            cg_nav_df = get_enriched_folio_nav_df(data_version())
+
+            nav_match = cg_nav_df[
+                (cg_nav_df["folio_id"] == folio_no) &
+                (cg_nav_df["product_code"].astype(str).str.strip().str.upper() == prodcode.strip().upper())
+                ]
+            auto_nav = float(nav_match["current_nav"].iloc[0]) if not nav_match.empty and pd.notna(
+                nav_match["current_nav"].iloc[0]) else 0.0
+            auto_nav_date = nav_match["nav_date"].iloc[0] if not nav_match.empty and pd.notna(
+                nav_match["nav_date"].iloc[0]) else None
+
+            invested_value = sum(l.remaining_units * l.rate for l in lots)
+            current_value_est = remaining_units * auto_nav
+            unrealized_gain = current_value_est - invested_value
+
+            s1, s2, s3 = st.columns(3)
+            s1.metric("Invested", format_currency(invested_value))
+            s2.metric("Current Value", format_currency(current_value_est))
+            s3.metric("Unrealized Gain", format_currency(unrealized_gain))
+
+            n1, n2 = st.columns(2)
+            with n1:
+                nav_key = f"cg_hyp_nav_{folio_no}_{prodcode}"
+                if nav_key not in st.session_state:
+                    st.session_state[nav_key] = auto_nav
+                nav_input = st.number_input(
+                    "Redemption NAV (₹)", min_value=0.0, key=nav_key,
+                    help="Auto-filled from latest AMFI NAV (folio + scheme matched). Edit to project a different price."
+                )
+                if auto_nav_date:
+                    st.caption(f"📅 NAV as of {auto_nav_date}")
+                else:
+                    st.caption("⚠️ No NAV date found — enter manually")
+            with n2:
+                units_key = f"cg_hyp_units_{folio_no}_{prodcode}"
+                if units_key not in st.session_state:
+                    st.session_state[units_key] = float(remaining_units)
+                redeem_units = st.number_input(
+                    "Units to redeem", min_value=0.0, max_value=float(remaining_units),
+                    key=units_key
+                )
+
+            if nav_input <= 0:
+                st.warning("Enter a redemption NAV to calculate.")
+            else:
+                hyp_matches = cg.hypothetical_redemption(txns, redeem_units, nav_input)
+                hyp_tax = cg.tax_for_matches(hyp_matches, tax_cat, slab)
+
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Projected Gain", format_currency(hyp_tax["total_gain"]))
+                c2.metric("STCG", format_currency(hyp_tax["stcg_gain"]))
+                c2.caption(f"Tax: {format_currency(hyp_tax['stcg_tax'])}")
+                c3.metric("LTCG", format_currency(hyp_tax["ltcg_gain"]))
+                c3.caption(f"Tax: {format_currency(hyp_tax['ltcg_tax'])}")
+                c4.metric("Estimated Tax", format_currency(hyp_tax["total_tax"]))
+
+                if tax_cat == "equity":
+                    used, limit = hyp_tax["exemption_used"], hyp_tax["exemption_limit"]
+                    st.progress(min(used / limit, 1.0) if limit else 0.0,
+                                text=f"LTCG exemption used: {format_currency(used)} / {format_currency(limit)}")
+                    st.caption(f"Taxable LTCG: {format_currency(hyp_tax['ltcg_taxable'])} "
+                            f"— exemption assumed available in full; reduce if you have other equity LTCG this FY.")
+
+                st.dataframe(cg.matches_to_df(hyp_matches), width="stretch", hide_index=True)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # TAB 3: What if NOT Redeemed — Current Value Scenario
+    # ═══════════════════════════════════════════════════════════════════════════
+    with tab3:
+        st.subheader("📊 Scenario: Units Were NOT Redeemed")
+        st.caption("Shows current value if redemptions had NOT happened — compare to actual realized gains above.")
+
+        if not matches and not is_kfin:
+            st.info("No redemptions found — all units already held as-is.")
+        else:
+            # Get current NAV
+            cg_nav_df = get_enriched_folio_nav_df(data_version())
+
+            nav_match = cg_nav_df[
+                (cg_nav_df["folio_id"] == folio_no) &
+                (cg_nav_df["product_code"].astype(str).str.strip().str.upper() == prodcode.strip().upper())
+                ]
+            current_nav = float(nav_match["current_nav"].iloc[0]) if not nav_match.empty and pd.notna(
+                nav_match["current_nav"].iloc[0]) else 0.0
+            nav_date = nav_match["nav_date"].iloc[0] if not nav_match.empty and pd.notna(
+                nav_match["nav_date"].iloc[0]) else "Unknown"
+
+            if current_nav <= 0:
+                st.warning("⚠️ Current NAV not available. Cannot calculate current value scenario.")
+            else:
+                # Calculate what was redeemed
+                total_redeemed_units = sum(m.units for m in matches)
+                total_redeemed_cost = sum(m.cost for m in matches)
+                total_redeemed_proceeds = sum(m.proceeds for m in matches)
+                total_redeemed_gain = total_redeemed_proceeds - total_redeemed_cost
+
+                # Current value of those redeemed units (if NOT redeemed)
+                unredeemed_units_current_value = total_redeemed_units * current_nav
+
+                # Total folio current value = current holdings + unredeemed units
+                total_current_units = sum(l.remaining_units for l in lots) + total_redeemed_units
+                total_folio_current_value = total_current_units * current_nav
+
+                # Total invested across all units (both held and redeemed)
+                all_invested = sum(l.remaining_units * l.rate for l in lots) + total_redeemed_cost
+
+                # Unrealized gain if nothing was redeemed
+                total_unrealized_if_not_redeemed = total_folio_current_value - all_invested
+
+                st.markdown("### 1️⃣ Redeemed Units — Current Value (if NOT redeemed)")
+                st.markdown(
+                    f"**Units redeemed:** {total_redeemed_units:.4f} | **Current NAV:** ₹{current_nav:.4f} (as of {nav_date})")
+
+                nr1, nr2, nr3, nr4 = st.columns(4)
+                nr1.metric("Total Cost (Invested)", format_currency(total_redeemed_cost))
+                nr2.metric("Actual Proceeds", format_currency(total_redeemed_proceeds))
+                nr3.metric("Realized Gain", format_currency(total_redeemed_gain))
+                nr4.metric("Current Value If Not Redeemed", format_currency(unredeemed_units_current_value))
+
+                # Show comparison
+                st.divider()
+                st.markdown("### 2️⃣ Total Folio — Current Value Scenario")
+                st.markdown(
+                    f"**Total units if NOT redeemed:** {total_current_units:.4f} | **Current NAV:** ₹{current_nav:.4f}")
+
+                tf1, tf2, tf3 = st.columns(3)
+                tf1.metric("Total Invested (All Units)", format_currency(all_invested))
+                tf2.metric("Total Current Value", format_currency(total_folio_current_value))
+                tf3.metric("Total Unrealized Gain (If NOT Redeemed)",
+                        format_currency(total_unrealized_if_not_redeemed))
+
+                # Impact analysis
+                st.divider()
+                st.markdown("### 📈 Impact Analysis")
+
+                impact_col1, impact_col2, impact_col3 = st.columns(3)
+
+                with impact_col1:
+                    st.markdown("**Redemption Impact**")
+                    st.metric(
+                        "Value Lost by Redeeming",
+                        format_currency(unredeemed_units_current_value - total_redeemed_proceeds),
+                        delta=format_currency(unredeemed_units_current_value - total_redeemed_proceeds)
+                    )
+                    st.caption(
+                        f"= Current value of redeemed units ({format_currency(unredeemed_units_current_value)}) − What you received ({format_currency(total_redeemed_proceeds)})")
+
+                with impact_col2:
+                    st.markdown("**Folio Comparison**")
+                    current_holdings = sum(l.remaining_units * current_nav for l in lots)
+                    holdings_invested = sum(l.remaining_units * l.rate for l in lots)
+                    holdings_gain = current_holdings - holdings_invested
+
+                    st.metric("Current Holdings Gain", format_currency(holdings_gain))
+                    st.caption("What you have today (excluding redeemed units)")
+
+                with impact_col3:
+                    st.markdown("**Tax Consideration**")
+                    st.metric(
+                        "Tax Paid on Redemption",
+                        format_currency(sum(m.proceeds - m.cost for m in matches) * slab if tax_cat == "debt" else
+                                        sum(m.gain for m in matches if m.is_ltcg) * cg.LTCG_EQUITY_RATE +
+                                        sum(m.gain for m in matches if not m.is_ltcg) * cg.STCG_EQUITY_RATE)
+                    )
+                    st.caption("Tax impact of selling vs holding")
+
+                # Summary table
+                st.divider()
+                st.markdown("### 📋 Scenario Comparison")
+
+                comparison_data = {
+                    "Metric": [
+                        "Units Held",
+                        "Current Value",
+                        "Total Invested",
+                        "Unrealized Gain",
+                        "Tax Paid (if redeemed)",
+                    ],
+                    "Actual (Redeemed)": [
+                        f"{sum(l.remaining_units for l in lots):.4f}",
+                        format_currency(sum(l.remaining_units * current_nav for l in lots)),
+                        format_currency(sum(l.remaining_units * l.rate for l in lots)),
+                        format_currency(sum(l.remaining_units * current_nav for l in lots) - sum(
+                            l.remaining_units * l.rate for l in lots)),
+                        format_currency(sum(m.gain for m in matches) * slab if tax_cat == "debt" else
+                                        sum(m.gain for m in matches if m.is_ltcg) * cg.LTCG_EQUITY_RATE +
+                                        sum(m.gain for m in matches if not m.is_ltcg) * cg.STCG_EQUITY_RATE),
+                    ],
+                    "If NOT Redeemed": [
+                        f"{total_current_units:.4f}",
+                        format_currency(total_folio_current_value),
+                        format_currency(all_invested),
+                        format_currency(total_unrealized_if_not_redeemed),
+                        format_currency(0.0),
+                    ]
+                }
+
+                comparison_df = pd.DataFrame(comparison_data)
+                st.dataframe(comparison_df, width="stretch", hide_index=True)
+
+                st.divider()
+                st.caption(
+                    "💡 **Insight:** This shows the opportunity cost of redemption. "
+                    "If the redeemed units have appreciated since redemption, holding them would have been more valuable. "
+                    "However, you've locked in your gains and avoided further market risk."
+                )
+
+
+# ==================== ⚙️ ADMIN PANEL ====================
+elif mode == "🔍 AUM Reconciliation":
+    aum_recon.render_aum_recon_tab()
+
+elif mode == "⚙️ Admin Panel":
+    st.header("⚙️ Admin Panel")
+
+    
+
+    # ── Manual NAV redownload ──
+    nav_status = get_snapshot_status()
+    nc1, nc2 = st.columns([3, 1])
+    with nc1:
+        if nav_status["latest_date"]:
+            st.caption(f"📡 Latest saved NAV snapshot: **{nav_status['latest_date']}** "
+                       f"({nav_status['latest_bytes']:,} bytes)")
+        else:
+            st.caption("📡 No NAV snapshot saved yet.")
+    with nc2:
+        if st.button("🔄 Redownload NAV", width="stretch",
+                     help="Force-fetch latest NAV from AMFI, ignoring cycle cache"):
+            with st.spinner("Fetching latest NAV from AMFI..."):
+                result = download_and_save_nav_if_needed(force=True)
+            if result["ok"]:
+                get_enriched_folio_nav_df.clear()
+                get_folio_nav_summary_cached.clear()
+                load_previous_nav_map_cached.clear()
+                _amfi.load(force=True)
+                st.success(f"✅ {result['reason']}")
+                st.rerun()
+            else:
+                st.error(f"❌ {result['reason']}")
+    nc3 = st.columns(1)[0]
+    with nc3:
+          prev_status = st.session_state.get("prev_nav_done_for")
+          if prev_status:
+              st.caption(f"✅ Previous business day NAV synced ({prev_status})")
+          else:
+              st.caption("⚠️ Previous business day NAV not yet synced")
+          if st.button("🔄 Sync Previous Business Day NAV", width="stretch",
+                       help="Force-retry fetching the prior working day's NAV history — "
+                            "use this if the 1-day-diff column looks empty/zero."):
+              with st.spinner("Fetching previous business day NAV from AMFI..."):
+                  result = sync_previous_business_day_nav_if_needed(force=True)
+              if result["ok"]:
+                  get_enriched_folio_nav_df.clear()
+                  load_previous_nav_map_cached.clear()
+                  get_or_fetch_nav_for_date_cached.clear()
+
+                  st.success(f"✅ {result['reason']}")
+                  st.rerun()
+              else:
+                  st.error(f"❌ {result['reason']}")
+
+    # ══════════════════════════════════════════════════════════════
+    # ▶️ RUN BACKGROUND WORKER NOW  +  WATCHDOG STATUS
+    # ══════════════════════════════════════════════════════════════
+    st.divider()
+    st.subheader("▶️ Background Worker")
+
+    # ── Watchdog status panel ────────────────────────────────────
+    # Shows when the worker last succeeded, whether that's within the
+    # freshness threshold, and lets you force a catch-up run that
+    # bypasses the 15-min debounce.
+    try:
+        from worker_watchdog import get_staleness, CRON_HOURS, GRACE_MINUTES, DEBOUNCE_MINUTES
+        _st = get_staleness()
+
+        _cols = st.columns([3, 1, 1, 1])
+
+        with _cols[0]:
+            if _st.get("last_run"):
+                st.markdown(
+                    f"🕒 **Last successful run:** `{_st['last_run']}`  "
+                    f"({_st['age_hours']:.1f}h ago, "
+                    f"trigger=`{_st.get('last_trigger') or '?'}`, "
+                    f"pid=`{_st.get('last_pid') or '?'}`)"
+                )
+            else:
+                st.markdown("🕒 **Last successful run:** _never — worker has not "
+                            "produced a stamp yet_")
+
+        with _cols[1]:
+            if _st.get("stale"):
+                st.error("⚠️ STALE")
+            else:
+                st.success("✅ Fresh")
+
+        with _cols[2]:
+            _sched = ", ".join(f"{h:02d}:00" for h in CRON_HOURS)
+            st.caption(f"Schedule: **{_sched}**")
+            st.caption(f"Grace: **{GRACE_MINUTES}m**  ·  Debounce: **{DEBOUNCE_MINUTES:.0f}m**")
+
+        with _cols[3]:
+            if st.button(
+                "🔄 Force catch-up",
+                key="wd_force_catchup",
+                width="stretch",
+                help=(
+                    "Launches the worker now, ignoring the staleness check "
+                    "and the debounce window. Useful for testing or after "
+                    "you know a cron slot was missed."
+                ),
+            ):
+                from worker_launcher import launch_worker
+                with st.spinner("Launching worker..."):
+                    _r = launch_worker(timeout_seconds=300)
+                if _r["ok"]:
+                    st.success(_r["msg"])
+                else:
+                    st.error(_r["msg"])
+                # Same cache invalidation as the normal button
+                get_enriched_folio_nav_df.clear()
+                get_folio_nav_summary_cached.clear()
+                load_previous_nav_map_cached.clear()
+                get_or_fetch_nav_for_date_cached.clear()
+                get_all_folios_with_isin_and_nav.clear()
+                _amfi.load(force=True)
+                st.rerun()
+
+        # Surface the reason string always — green tick for fresh,
+        # warning colour for stale. Mirrors the badge above.
+        if _st.get("reason"):
+            if _st.get("stale"):
+                st.caption(f"⚠️ {_st['reason']}")
+            else:
+                st.caption(f"✅ {_st['reason']}")
+
+    except Exception as _wd_err:
+        st.caption(f"⚠️ Watchdog status unavailable: {_wd_err}")
+
+    st.divider()
+
+    # ── Manual run button (unchanged behaviour) ─────────────────
+    wc1, wc2 = st.columns([1, 4])
+
+    with wc1:
+        worker_busy = worker_launcher.is_worker_running()
+        run_now = st.button(
+            "▶️ Run Worker Now",
+            type="primary",
+            width="stretch",
+            disabled=worker_busy,
+            key="run_worker_now_btn",
+            help=(
+                "Spawns background_worker.py as a subprocess. Runs all tasks: "
+                "mailback poll, live NAV fetch, previous-day NAV sync. "
+                "If cron is already mid-run, this exits cleanly."
+            ),
+        )
+
+    with wc2:
+        if worker_busy:
+            st.warning("⏳ A worker is already running — wait for it to finish "
+                       "or the button will be a no-op.")
+        else:
+            st.caption(
+                "Manually trigger the same worker cron runs. "
+                "Typical duration: 30–120s. Output goes to `background_worker.log`."
+            )
+
+    if run_now and not worker_busy:
+        with st.spinner("⏳ Running background worker (this may take 1–2 minutes)..."):
+            result = worker_launcher.launch_worker(timeout_seconds=300)
+
+        if result["ok"]:
+            st.success(result["msg"])
+        else:
+            st.error(result["msg"])
+
+        # Always clear data caches — even a partial run may have added rows
+        get_enriched_folio_nav_df.clear()
+        get_folio_nav_summary_cached.clear()
+        load_previous_nav_map_cached.clear()
+        get_or_fetch_nav_for_date_cached.clear()
+        get_all_folios_with_isin_and_nav.clear()
+        _amfi.load(force=True)
+
+        # Show the tail of the worker log inline so you don't have to open a terminal
+        with st.expander("📜 Worker log (last 60 lines)", expanded=not result["ok"]):
+            st.code(result.get("log_tail") or "(no log yet)", language="log")
+
+        # If the worker failed, surface stderr too
+        if not result["ok"] and result.get("stderr_tail"):
+            with st.expander("🐞 Worker stderr (last 10 lines)", expanded=True):
+                st.code(result["stderr_tail"], language="log")
+
+        st.rerun()
+
+    st.divider()
+
+
+    tab_upload, tab_raw, tab_failures = st.tabs(
+        ["📤 Upload Data", "📄 View Raw Data", "⚠️ Sync Failures"]
+    )
+
+    # ---------- UPLOAD TAB ----------
+    with tab_upload:
+        data_manager.render_data_manager()
+
+    # ---------- SYNC FAILURES TAB ----------
+    with tab_failures:
+        st.subheader("⚠️ Sync Failure Log")
+        st.caption(
+            "Persistent record of every mailback / NAV / manual-upload failure. "
+            "Newest first. Log file survives restarts and worker crashes."
+        )
+
+        fc1, fc2, fc3, fc4 = st.columns([1, 1, 1, 2])
+        with fc1:
+            source_filter = st.selectbox(
+                "Source",
+                ["All", "mailback", "nav", "bse", "manual_upload"],
+                key="fail_src_filter",
+            )
+        with fc2:
+            limit = st.number_input(
+                "Show last N", 10, 2000, 200, step=10, key="fail_limit"
+            )
+        with fc3:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if st.button("🔄 Refresh", width="stretch", key="fail_refresh"):
+                st.rerun()
+        with fc4:
+            st.caption(f"📁 Log file: `{sflog.get_log_path()}`")
+
+        records = sflog.read_failures(
+            limit=int(limit),
+            source_filter="" if source_filter == "All" else source_filter,
+        )
+
+        if not records:
+            st.success("✅ No failures logged — everything is clean.")
+        else:
+            st.warning(f"⚠️ {len(records)} failure record(s) found.")
+
+            rows = []
+            for r in records:
+                rows.append({
+                    "Timestamp": r.get("ts", ""),
+                    "Source":    r.get("source", ""),
+                    "Stage":     r.get("stage", ""),
+                    "RTA":       r.get("rta", ""),
+                    "Report":    r.get("report", ""),
+                    "File":      r.get("file", ""),
+                    "Message":   r.get("msg", ""),
+                })
+            fail_df = pd.DataFrame(rows)
+
+            st.dataframe(
+                fail_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Message": st.column_config.TextColumn(width="large"),
+                },
+            )
+
+            dc1, dc2 = st.columns(2)
+            with dc1:
+                csv = fail_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇️ Download Failure Log (CSV)",
+                    csv,
+                    f"sync_failures_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    "text/csv",
+                    key="fail_download",
+                )
+            with dc2:
+                if st.button("🗑️ Clear Log", key="fail_clear"):
+                    if sflog.clear_log():
+                        st.success("Log cleared.")
+                        st.rerun()
+                    else:
+                        st.error("Could not clear log — check file permissions.")
+
+    # ---------- RAW DATA TAB ----------
+    with tab_raw:
+        st.subheader("📄 Raw Data Explorer")
+        st.caption("View raw uploaded data directly from the database.")
+
+        source = st.radio(
+            "Select Data Source",
+            ["BSE", "CAMS", "KFinTech"],
+            horizontal=True,
+            key="raw_source"
+        )
+
+        if source == "BSE":
+            data_type = st.radio(
+                "Select Data Type",
+                ["Bse Client Master", "BSE SiP", "BSE Scheme Master"],
+                horizontal=True,
+                key="raw_bse_type"
+            )
+            table_map = {
+                "Bse Client Master": "bse_client_master",
+                "BSE SiP": "bse_sip",
+                "BSE Scheme Master": "bse_scheme_master"
+            }
+            table = table_map[data_type]
+
+        elif source == "CAMS":
+            data_type = st.radio(
+                "Select Data Type",
+                ["Folio Master", "Transactions", "SIP Master", "AUM", "Brokerage"],
+                horizontal=True,
+                key="raw_cams_type"
+            )
+            table_map = {
+                "Folio Master": "cams_wbr9_folio",
+                "Transactions": "cams_wbr2_transaction",
+                "SIP Master": "cams_wbr49_sip",
+                "AUM": "cams_wbr4_aum",
+                "Brokerage": "cams_wbr77_brokerage"
+            }
+            table = table_map[data_type]
+
+        else:
+            data_type = st.radio(
+                "Select Data Type",
+                ["Folio Master", "Transactions", "SIP Master", "AUM", "Brokerage"],
+                horizontal=True,
+                key="raw_kfin_type"
+            )
+            table_map = {
+                "Folio Master": "kfin_mfsd211_folio",
+                "Transactions": "kfin_mfsd201_transaction",
+                "SIP Master": "kfin_mfsd243_sip",
+                "AUM": "kfin_mfsd203_aum",
+                "Brokerage": "kfin_mfsd205_brokerage"
+            }
+            table = table_map[data_type]
+
+        st.divider()
+
+        with get_conn() as conn:
+            total_rows = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+
+        st.metric(f"Total Records in {table}", f"{total_rows:,}")
+
+        if total_rows > 0:
+            df_raw = load_table_summary(table, data_version)
+            if not df_raw.empty:
+                # ── View options ──
+                view_col1, view_col2 = st.columns([1, 3])
+                with view_col1:
+                    auto_fit = st.toggle("🔍 Auto-fit columns", value=True,
+                                         help="Resize columns to fit content so full headers are visible")
+                with view_col2:
+                    st.caption(f"Showing {len(df_raw):,} rows × {len(df_raw.columns)} columns")
+
+                # ── AgGrid with dark mode support and auto-sizing ──
+                try:
+                    from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+                    gb = GridOptionsBuilder.from_dataframe(df_raw)
+                    gb.configure_default_column(
+                        filter=True,
+                        sortable=True,
+                        resizable=True,
+                        wrapText=True,
+                        autoHeaderHeight=True,
+                        minWidth=100
+                    )
+
+                    if auto_fit:
+                        gb.configure_grid_options(
+                            autoSizeStrategy={'type': 'fitCellContents'},
+                            suppressColumnVirtualisation=True
+                        )
+                    else:
+                        gb.configure_grid_options(
+                            autoSizeStrategy={'type': 'fitGridWidth'},
+                            suppressColumnVirtualisation=True
+                        )
+
+                    gb.configure_pagination(
+                        paginationAutoPageSize=False,
+                        paginationPageSize=50
+                    )
+
+                    grid_opts = gb.build()
+
+                    AgGrid(
+                        df_raw,
+                        gridOptions=grid_opts,
+                        height=600,
+                        update_mode=GridUpdateMode.NO_UPDATE,
+                        fit_columns_on_grid_load=not auto_fit,
+                        allow_unsafe_jscode=True,
+                        theme="alpine-dark" if dark else "alpine",
+                        key=f"raw_{table}_{auto_fit}"
+                    )
+                except ImportError:
+                    st.dataframe(
+                        df_raw,
+                        width="stretch",
+                        hide_index=True,
+                        column_config={
+                            col: st.column_config.Column(label=col, width="large")
+                            for col in df_raw.columns
+                        }
+                    )
+
+                csv = df_raw.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="⬇️ Download Raw Data (CSV)",
+                    data=csv,
+                    file_name=f"{source}_{data_type.replace(' ', '_')}_raw.csv",
+                    mime="text/csv",
+                )
+            else:
+                st.info("No data to display.")
+        else:
+            st.info(f"No data in `{table}` yet. Upload data in the Upload Data tab.")
+
+        # DB Stats at bottom
+        st.divider()
+        st.subheader("🗄️ Database Stats")
+        stats = load_db_stats(data_version())
+
+        cols = st.columns(3)
+        categories = {
+            "BSE": ["bse_client_master", "bse_sip", "bse_scheme_master"],
+            "CAMS": ["cams_wbr4_aum", "cams_wbr9_folio", "cams_wbr2_transaction", "cams_wbr49_sip",
+                     "cams_wbr77_brokerage"],
+            "KFinTech": ["kfin_mfsd203_aum", "kfin_mfsd211_folio", "kfin_mfsd201_transaction", "kfin_mfsd243_sip",
+                         "kfin_mfsd205_brokerage"],
+        }
+        for i, (cat, tables) in enumerate(categories.items()):
+            with cols[i]:
+                st.markdown(f"**{cat}**")
+                for t in tables:
+                    st.caption(f"{t}: **{stats.get(t, 0):,}**")
+
+        with cols[0]:
+            st.markdown("**Other**")
+            st.caption(f"monthly_brokerage: **{stats.get('monthly_brokerage', 0):,}**")
+            st.caption(f"amc_code_map: **{stats.get('amc_code_map', 0):,}**")
+
+
+# ══════════════════════════════════════════════════════════════
+# START THE 60s REFRESH POLLER
+# ══════════════════════════════════════════════════════════════
+# Must be called AFTER every @st.cache_data function it references has
+# been defined, which is why it's here at the bottom of the module.
+# The decorator alone does nothing — the call is what schedules it.
+_refresh_watcher_poller()
