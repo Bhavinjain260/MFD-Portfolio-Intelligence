@@ -32,6 +32,29 @@ Migration:
     behaviour. Headless callers (background_worker, cron scripts) can
     pass state=None — the underlying sync is already idempotent via
     file-existence checks.
+
+    Summary of everything in this final file
+Section
+Lines
+Contents
+Module docstring + imports	1–49	Pure Python, no Streamlit
+Constants	52–79	URLs, dirs, thresholds, holidays, HTTP session
+Trading Calendar	82–135	is_trading_day, get_last_business_day, get_expected_nav_date
+Snapshot helpers	138–206	_ensure_text_dir, _snapshot_path, _count_isins_in_file, _read_snapshot_map
+Parser	209–401	_parse_nav_text (column-agnostic), _extract_nav_date_from_text, _normalize_history_text_to_live_format
+Snapshot save	404–448	_save_nav_snapshot (with richer-file-kept guard)
+Live download	451–575	download_and_save_nav, download_and_save_nav_if_needed
+Historical download	578–718	download_business_day_nav, sync_previous_business_day_nav
+Sync wrapper	721–763	sync_previous_business_day_nav_if_needed (with state= param — migration fix)
+Previous snapshot lookup	766–833	_previous_snapshot_path, load_previous_nav_map, get_previous_nav_date
+Skip-back resolver	836–939	_resolve_prev_nav_for_folios_impl, resolve_prev_nav_for_folios
+DB date lookup	942–975	get_nav_for_date_from_db
+Historical orchestrator	978–1070	get_or_fetch_nav_for_date (3-source fallback)
+NEW: High-level orchestrators	1073–1266	get_previous_nav_baseline + get_week_ago_nav
+In-memory index	1269–1369	AMFINavIndex class, _amfi singleton, fetch_nav_by_isin, fetch_amc_by_isin, load_nav_dataframe
+DB queries	1372–1685	15 query functions + get_nav_for_date_by_isin (rename fix + alias)
+DB ingestion	1688–1883	ingest_nav_file_to_db, ingest_nav_bytes_to_db (new), _parse_nav_file, _insert_nav_rows
+Diagnostics	1886–1927	diagnose_previous_day_coverage
 """
 
 import logging
@@ -446,7 +469,6 @@ def _save_nav_snapshot(text: str, iso_date: str, *,
              path, size, new_count, source)
     return {"path": path, "bytes": size, "date": iso_date,
             "record_count": new_count, "kept_existing": False}
-
 
 # ══════════════════════════════════════════════════════════════
 # LIVE DOWNLOAD
@@ -938,7 +960,6 @@ def resolve_prev_nav_for_folios(
         min_overlap_pct=min_overlap_pct,
     )
 
-
 # ══════════════════════════════════════════════════════════════
 # DB LOOKUP FOR A SPECIFIC DATE
 # ══════════════════════════════════════════════════════════════
@@ -1069,6 +1090,201 @@ def get_or_fetch_nav_for_date(target_iso: str) -> dict:
     log.error("[NAV-LOOKUP] %s — no data available from any source", target_iso)
     return {}
 
+
+# ══════════════════════════════════════════════════════════════
+# HIGH-LEVEL BASELINE ORCHESTRATORS
+# ─────────────────────────────────────────────────────────────
+# What app.py used to do inline — moved here so background_worker,
+# cron scripts, and any headless caller gets the same behaviour as
+# the Streamlit UI. Pure Python: no Streamlit, no caching.
+#
+# Boundary:
+#   - These functions return (iso, nav_map, diagnostics). Pure NAV
+#     answers — no pandas, no folio dataframe coupling.
+#   - The @st.cache_data wrappers live in app.py.
+#   - The per-row diff arithmetic ((current_nav - prev_nav) * units)
+#     also stays in app.py, because it depends on the folio
+#     dataframe schema built by get_enriched_folio_nav_df().
+# ══════════════════════════════════════════════════════════════
+
+def get_previous_nav_baseline(
+    current_date_iso,
+    our_isins: tuple,
+    max_lookback: int = 10,
+    min_overlap_pct: float = 0.5,
+) -> tuple:
+    """
+    High-level "previous baseline" resolver.
+
+    Wraps resolve_prev_nav_for_folios() with a fallback that the
+    app.py block intended but never actually applied: if the skip-back
+    loop exhausts max_lookback without finding a date with sufficient
+    ISIN overlap, fall back to whatever the immediate previous snapshot
+    on disk contains (load_previous_nav_map()).
+
+    This fixes the dead-code bug where app.py called
+    load_previous_nav_map_cached() and get_previous_nav_date() but
+    threw their results away before they could serve as fallbacks.
+
+    Parameters
+    ----------
+    current_date_iso : str or date
+        The "today" NAV date. Accepts ISO string ('YYYY-MM-DD') or
+        a date object — same flexibility as resolve_prev_nav_for_folios.
+    our_isins : tuple of str
+        ISINs the caller's folios hold. Tuple (not set) so the
+        @st.cache_data wrapper in app.py can hash it.
+    max_lookback : int
+        How many business days to walk backward before giving up.
+    min_overlap_pct : float
+        Fraction of our_isins that must be present in a candidate
+        date's NAV map for it to be accepted as the baseline.
+
+    Returns
+    -------
+    (iso_or_None, nav_map, diagnostics)
+        iso_or_None : str | None
+            The baseline date that was used ('YYYY-MM-DD'), or None
+            if both skip-back and fallback failed.
+        nav_map : dict
+            {isin: nav_float} for the baseline date. Empty dict if
+            nothing could be resolved.
+        diagnostics : dict
+            Same shape as resolve_prev_nav_for_folios() returns, plus:
+              - fallback_used : bool
+              - fallback_date : str | None
+              - first_tried_date : str | None  (the immediate previous
+                business day — useful for the "snapshot was incomplete"
+                warning in app.py)
+    """
+    iso, nav_map, diag = resolve_prev_nav_for_folios(
+        current_date_iso, our_isins,
+        max_lookback=max_lookback,
+        min_overlap_pct=min_overlap_pct,
+    )
+
+    # Surface the immediate previous business day for UI messaging.
+    # Saves app.py from having to recompute it just to print "using X
+    # instead of Y because Y was incomplete".
+    if isinstance(current_date_iso, str):
+        _cd = datetime.strptime(current_date_iso, "%Y-%m-%d").date()
+    else:
+        _cd = (
+            current_date_iso.date() if hasattr(current_date_iso, "date")
+            else current_date_iso
+        )
+    _first_tried = get_last_business_day(_cd).strftime("%Y-%m-%d")
+    diag["first_tried_date"] = _first_tried
+
+    if iso and nav_map:
+        diag["fallback_used"] = False
+        diag["fallback_date"] = None
+        return iso, nav_map, diag
+
+    # Skip-back exhausted — fall back to the file-system previous
+    # snapshot. This is the rescue path for the failure mode where
+    # AMFI's history endpoint is unavailable AND no recent disk
+    # snapshot covers enough of our folios.
+    fallback_map = load_previous_nav_map()
+    fallback_date = get_previous_nav_date()
+    if fallback_map:
+        diag["fallback_used"] = True
+        diag["fallback_date"] = fallback_date
+        log.warning(
+            "[NAV-BASELINE] Skip-back found no sufficient overlap in "
+            "%d business days; falling back to load_previous_nav_map() "
+            "(date=%s, %d ISINs)",
+            max_lookback, fallback_date, len(fallback_map),
+        )
+        return fallback_date, fallback_map, diag
+
+    diag["fallback_used"] = False
+    diag["fallback_date"] = None
+    log.error(
+        "[NAV-BASELINE] Skip-back exhausted AND no previous snapshot "
+        "available. Returning empty nav_map; 1-day diff will show 0."
+    )
+    return None, {}, diag
+
+
+def get_week_ago_nav(
+    current_date_iso,
+    days_back: int = 7,
+    use_business_days: bool = True,
+) -> tuple:
+    """
+    Fetch NAV for `days_back` trading (or calendar) days before
+    current_date.
+
+    Replaces the inline `timedelta(days=7)` arithmetic that lived in
+    app.py's 1-Week Movement block. Moving it here means the policy
+    (how to interpret "1 week ago") is owned by nav_engine, not the
+    UI layer — so background_worker and any headless caller get the
+    same behaviour.
+
+    Parameters
+    ----------
+    current_date_iso : str or date
+        The "today" NAV date. Accepts ISO string ('YYYY-MM-DD') or
+        a date object.
+    days_back : int
+        How many days to walk back. Default 7.
+    use_business_days : bool
+        True (default)  — count only NSE trading days, skipping
+                          weekends AND holidays. "1 week ago" becomes
+                          "5 trading days ago" (previous Friday for a
+                          Friday start). Consistent with the 1-day
+                          block's semantics.
+        False           — legacy calendar-day arithmetic. Still walks
+                          back to the nearest preceding trading day
+                          before fetching, so the returned map is
+                          always valid even if `days_back` lands on a
+                          weekend/holiday.
+
+    Returns
+    -------
+    (target_iso_or_None, nav_map)
+        target_iso : str | None
+            The exact date the fetch was resolved for, after any
+            holiday/weekend walk-back. 'YYYY-MM-DD' format.
+        nav_map : dict
+            {isin: nav_float} for the resolved date. Empty dict if
+            get_or_fetch_nav_for_date() returned nothing.
+    """
+    if isinstance(current_date_iso, str):
+        current_date = datetime.strptime(current_date_iso, "%Y-%m-%d").date()
+    else:
+        current_date = (
+            current_date_iso.date() if hasattr(current_date_iso, "date")
+            else current_date_iso
+        )
+
+    if use_business_days:
+        # Count backward over NSE trading days only.
+        cursor = current_date
+        counted = 0
+        while counted < days_back:
+            cursor -= timedelta(days=1)
+            if is_trading_day(cursor):
+                counted += 1
+        target = cursor
+    else:
+        # Legacy calendar-day arithmetic, then walk back to the
+        # nearest preceding trading day so the fetch is valid.
+        target = current_date - timedelta(days=days_back)
+        while not is_trading_day(target):
+            target -= timedelta(days=1)
+
+    target_iso = target.strftime("%Y-%m-%d")
+    log.info(
+        "[NAV-WEEKAGO] current=%s, days_back=%s, mode=%s → target=%s",
+        current_date.isoformat(), days_back,
+        "business_days" if use_business_days else "calendar_days",
+        target_iso,
+    )
+
+    nav_map = get_or_fetch_nav_for_date(target_iso)
+    return target_iso, nav_map
 
 # ══════════════════════════════════════════════════════════════
 # IN-MEMORY INDEX
@@ -1229,8 +1445,14 @@ def get_all_latest_navs() -> dict[str, tuple[float, str]]:
     return navs
 
 
-def get_nav_for_date(isin: str, nav_date: str) -> Optional[float]:
-    """Specific ISIN on specific date, from DB."""
+def get_nav_for_date_by_isin(isin: str, nav_date: str) -> Optional[float]:
+    """
+    Specific ISIN on specific date, from DB. Returns nav_value or None.
+
+    Renamed from `get_nav_for_date` to avoid confusion with
+    `get_or_fetch_nav_for_date` (which returns a dict, not a float).
+    The old name is preserved as an alias below for backwards compat.
+    """
     if "-" in nav_date and len(nav_date) == 10:
         date_str = nav_date
     else:
@@ -1249,6 +1471,11 @@ def get_nav_for_date(isin: str, nav_date: str) -> Optional[float]:
             LIMIT 1
         """, (isin, isin, date_str)).fetchone()
     return float(row[0]) if row else None
+
+
+# Backwards-compat alias — old nav_queries.py exposed this as get_nav_for_date.
+# Deprecated; new code should use get_nav_for_date_by_isin instead.
+get_nav_for_date = get_nav_for_date_by_isin
 
 
 def get_previous_nav_date_db() -> Optional[str]:
@@ -1477,7 +1704,6 @@ def get_regular_plan_history(isin: str, days: int = 30) -> list[dict]:
         })
     return list(reversed(history))
 
-
 # ══════════════════════════════════════════════════════════════
 # DB INGESTION (from nav_data_ingestion.py)
 # ══════════════════════════════════════════════════════════════
@@ -1511,6 +1737,32 @@ def ingest_nav_file_to_db(filepath: str) -> dict:
             'fund_houses': set(),
             'reason': f"Ingestion failed: {e}",
         }
+
+
+def ingest_nav_bytes_to_db(data: bytes) -> dict:
+    """
+    Convenience wrapper: save raw bytes to a temp file, then call
+    ingest_nav_file_to_db(). Useful for Streamlit UploadedFile objects
+    (call .getvalue() to get bytes, then pass here) and any other
+    in-memory NAV content that doesn't have a filesystem path.
+
+    Usage in data_manager.py:
+        from nav_engine import ingest_nav_bytes_to_db
+        result = ingest_nav_bytes_to_db(file.getvalue())
+
+    Returns: same dict shape as ingest_nav_file_to_db().
+    """
+    import tempfile
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".txt", mode='wb') as tmp:
+        tmp.write(data)
+        tmp_path = tmp.name
+    try:
+        return ingest_nav_file_to_db(tmp_path)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
 
 
 def _parse_nav_file(filepath: str) -> list[dict]:

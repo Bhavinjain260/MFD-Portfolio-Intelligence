@@ -1,0 +1,202 @@
+Migration Checklist v1
+1. Delete these files (now superseded)
+nav_service.py
+
+nav_queries.py
+
+nav_data_ingestion.py
+
+trading_day_calender.py
+
+2. Update app.py imports
+Replace the block:
+
+python
+import nav_service
+from nav_service import (...)
+with:
+
+python
+import nav_engine as nav_service
+from nav_engine import (
+    AMFI_TEXT_URL, NAV_HISTORY_URL, NAV_TEXT_DIR,
+    _ensure_text_dir, _snapshot_path, _latest_snapshot_path, get_snapshot_status,
+    _extract_nav_date_from_text, _parse_nav_text, _get_file_nav_date,
+    _have_snapshot_for_date, _looks_like_amfi_format,
+    _normalize_history_text_to_live_format, _fmt_amfi_date,
+    download_and_save_nav, download_and_save_nav_if_needed,
+    download_business_day_nav, _save_nav_snapshot,
+    get_last_business_day, sync_previous_business_day_nav,
+    sync_previous_business_day_nav_if_needed,
+    _previous_snapshot_path, load_previous_nav_map, get_previous_nav_date,
+    get_or_fetch_nav_for_date,
+    get_nav_for_date_from_db, diagnose_previous_day_coverage,
+    resolve_prev_nav_for_folios,
+    AMFINavIndex, _amfi, fetch_nav_by_isin, fetch_amc_by_isin,
+    load_nav_dataframe,
+)
+3. Update the one session_state-dependent call in app.py
+Before (in Admin Panel — "Sync Previous Business Day NAV" button):
+
+python
+result = sync_previous_business_day_nav_if_needed(force=True)
+After:
+
+python
+result = sync_previous_business_day_nav_if_needed(
+    force=True, state=st.session_state
+)
+Also, in the caption block above it:
+
+python
+prev_status = st.session_state.get("prev_nav_done_for")
+if prev_status:
+    st.caption(f"✅ Previous business day NAV synced ({prev_status})")
+This continues to work because the pure function does still set state["prev_nav_done_for"] when state is passed.
+
+4. Update background_worker.py
+python
+# Old
+from nav_service import download_and_save_nav_if_needed
+from nav_service import sync_previous_business_day_nav
+
+# New
+from nav_engine import download_and_save_nav_if_needed
+from nav_engine import sync_previous_business_day_nav
+No state parameter needed — the worker calls the underlying sync_previous_business_day_nav directly (already idempotent).
+
+5. app.py cached wrappers — no changes needed
+The @st.cache_data wrappers at the top of app.py (load_previous_nav_map_cached, resolve_prev_nav_for_folios_cached, get_or_fetch_nav_for_date_cached) call nav_service.<fn> which, after the alias change, transparently resolves to nav_engine.<fn>. All three work because the pure functions return the same shapes as before.
+
+
+V2
+
+Fix 3 — Updated Migration Guide (addresses the data_manager.py gap)
+Migration Checklist (CORRECTED)
+1. Delete these files (now superseded)
+nav_service.py
+nav_queries.py
+nav_data_ingestion.py
+trading_day_calender.py
+2. Update app.py imports
+Replace:
+
+python
+
+import nav_service
+from nav_service import (...)
+with:
+
+python
+
+import nav_engine as nav_service
+from nav_engine import (
+    AMFI_TEXT_URL, NAV_HISTORY_URL, NAV_TEXT_DIR,
+    _ensure_text_dir, _snapshot_path, _latest_snapshot_path, get_snapshot_status,
+    _extract_nav_date_from_text, _parse_nav_text, _get_file_nav_date,
+    _have_snapshot_for_date, _looks_like_amfi_format,
+    _normalize_history_text_to_live_format, _fmt_amfi_date,
+    download_and_save_nav, download_and_save_nav_if_needed,
+    download_business_day_nav, _save_nav_snapshot,
+    get_last_business_day, sync_previous_business_day_nav,
+    sync_previous_business_day_nav_if_needed,
+    _previous_snapshot_path, load_previous_nav_map, get_previous_nav_date,
+    get_or_fetch_nav_for_date,
+    get_nav_for_date_from_db, diagnose_previous_day_coverage,
+    resolve_prev_nav_for_folios,
+    AMFINavIndex, _amfi, fetch_nav_by_isin, fetch_amc_by_isin,
+    load_nav_dataframe,
+)
+3. Update the session_state-dependent call in app.py
+Before (Admin Panel — "Sync Previous Business Day NAV" button):
+
+python
+
+result = sync_previous_business_day_nav_if_needed(force=True)
+After:
+
+python
+
+result = sync_previous_business_day_nav_if_needed(force=True, state=st.session_state)
+4. Update background_worker.py
+python
+
+# Old
+from nav_service import download_and_save_nav_if_needed
+from nav_service import sync_previous_business_day_nav
+
+# New
+from nav_engine import download_and_save_nav_if_needed
+from nav_engine import sync_previous_business_day_nav
+No state parameter needed — the worker calls sync_previous_business_day_nav directly.
+
+5. NEW — Update data_manager.py (this was the gap that would break NAV uploads)
+data_manager.py currently imports nav_data_ingestion at line 23 and calls it at line 2149. Since you're deleting nav_data_ingestion.py, you MUST update data_manager.py.
+
+Replace the top import (around line 23):
+
+python
+
+# Old
+import nav_data_ingestion
+
+# New
+from nav_engine import ingest_nav_bytes_to_db, ingest_nav_file_to_db
+Replace the parse_nav_file function (around line 2130) with:
+
+python
+
+def parse_nav_file(file, replace: bool) -> tuple[bool, str, dict]:
+    """
+    Parses AMFI NAV text file uploaded via Streamlit UI.
+    Delegates to nav_engine.ingest_nav_bytes_to_db() — no temp-file dance.
+    """
+    try:
+        result = ingest_nav_bytes_to_db(file.getvalue())
+        if result.get('ok'):
+            msg = f"Imported {result['inserted']} NAV records | Skipped: {result['skipped']}"
+            if result['inserted']:
+                bump()
+            return True, msg, {
+                "rows": result['inserted'],
+                "skipped": result['skipped'],
+                "fund_houses": len(result.get('fund_houses', set())),
+            }
+        else:
+            sflog.record_failure(
+                source="manual_upload", stage="parse",
+                rta="AMFI", report="NAV", file=getattr(file, "name", ""),
+                msg=result.get('reason', 'Unknown error'),
+            )
+            return False, result.get('reason', 'Unknown error'), {}
+    except Exception as e:
+        sflog.record_failure(
+            source="manual_upload", stage="parse",
+            rta="AMFI", report="NAV", file=getattr(file, "name", ""),
+            msg=f"File read error: {e}",
+        )
+        return False, f"File read error: {e}", {}
+Replace the parse_nav_filepath function (around line 2160) with:
+
+python
+
+def parse_nav_filepath(filepath: str) -> dict:
+    """Wrapper for auto-fetch scheduler. Delegates to nav_engine."""
+    result = ingest_nav_file_to_db(filepath)
+    if result.get('ok'):
+        return {
+            'ok': True,
+            'inserted': result['inserted'],
+            'skipped': result['skipped'],
+            'nav_date': result['nav_date'],
+            'fund_houses': result['fund_houses'],
+            'reason': f"Inserted {result['inserted']} Regular NAV records",
+        }
+    else:
+        return {'ok': False, 'reason': result.get('reason', 'Unknown error')}
+Delete these two functions entirely (their logic now lives in nav_engine.py):
+
+_parse_nav_text(file_obj) — replaced by nav_engine._parse_nav_file
+_insert_nav_rows(rows) — replaced by nav_engine._insert_nav_rows
+6. app.py cached wrappers — no changes needed
+The @st.cache_data wrappers call nav_service.<fn> which resolves to nav_engine.<fn> via the alias.
