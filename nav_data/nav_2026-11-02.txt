@@ -3326,10 +3326,10 @@ Kotak Mahindra Mutual Fund
 152911;INF174KA1TH7;INF174KA1TI5;Kotak MNC Fund;Direct Plan;IDCW Option;12.005;02-Nov-2026
 152913;INF174KA1TJ3;-;Kotak MNC Fund;Regular Plan;Growth;11.664;02-Nov-2026
 152912;INF174KA1TK1;INF174KA1TL9;Kotak MNC Fund;Regular Plan;IDCW Option;11.664;02-Nov-2026
-147727;INF174KA1EZ1;-;Kotak Pioneer Fund;Direct Plan;Growth;37.173;30-Oct-2026
-147724;INF174KA1EW8;-;Kotak Pioneer Fund;Regular Plan;Growth;33.377;30-Oct-2026
-147728;INF174KA1EU2;INF174KA1EV0;Kotak Pioneer Fund;Regular Plan;Reinvestment of Income Distribution cum capital withdrawal option;33.392;30-Oct-2026
-147725;INF174KA1EX6;INF174KA1EY4;Kotak Pioneer Fund;Direct Plan;Reinvestment of Income Distribution cum capital withdrawal option;37.168;30-Oct-2026
+147727;INF174KA1EZ1;-;Kotak Pioneer Fund;Direct Plan;Growth;37.514;02-Nov-2026
+147724;INF174KA1EW8;-;Kotak Pioneer Fund;Regular Plan;Growth;33.679;02-Nov-2026
+147728;INF174KA1EU2;INF174KA1EV0;Kotak Pioneer Fund;Regular Plan;Reinvestment of Income Distribution cum capital withdrawal option;33.694;02-Nov-2026
+147725;INF174KA1EX6;INF174KA1EY4;Kotak Pioneer Fund;Direct Plan;Reinvestment of Income Distribution cum capital withdrawal option;37.508;02-Nov-2026
 151881;INF174KA1OL0;-;Kotak Quant Fund;Direct Plan;Growth;14.248;02-Nov-2026
 151880;INF174KA1OM8;INF174KA1ON6;Kotak Quant Fund;Direct Plan;IDCW;14.248;02-Nov-2026
 151878;INF174KA1OI6;-;Kotak Quant Fund;Regular Plan;Growth;14.056;02-Nov-2026
@@ -10626,26 +10626,14 @@ Axis Mutual Fund
 149874;INF846K018G4;INF846K019G2;Axis CRISIL IBX SDL May 2027 Index Fund;Direct Plan;IDCW Option;13.3147;02-Nov-2026
 149872;INF846K010H9;-;Axis CRISIL IBX SDL May 2027 Index Fund;Regular Plan;Growth Option;13.2288;02-Nov-2026
 149875;INF846K011H7;INF846K012H5;Axis CRISIL IBX SDL May 2027 Index Fund;Regular Plan;IDCW Option;13.2289;02-Nov-2026
-153051;INF846K015Y3;-;Axis CRISIL-IBX AAA Bond Financial Services - Sep 2027 Index Fund;Direct Plan;Growth Option;11.3810;11-Sep-2026
-153052;INF846K017Y9;INF846K019Y5;Axis CRISIL-IBX AAA Bond Financial Services - Sep 2027 Index Fund;Direct Plan;IDCW Option;11.3810;11-Sep-2026
-153050;INF846K014Y6;-;Axis CRISIL-IBX AAA Bond Financial Services - Sep 2027 Index Fund;Regular Plan;Growth Option;11.3612;11-Sep-2026
-153053;INF846K016Y1;INF846K018Y7;Axis CRISIL-IBX AAA Bond Financial Services - Sep 2027 Index Fund;Regular Plan;IDCW Option;11.3609;11-Sep-2026
 152887;INF846K017X1;-;Axis CRISIL-IBX AAA Bond NBFC - Jun 2027 Index Fund;Direct Plan;Growth Option;11.6432;02-Nov-2026
 152888;INF846K019X7;INF846K011Y2;Axis CRISIL-IBX AAA Bond NBFC - Jun 2027 Index Fund;Direct Plan;IDCW Option;11.6432;02-Nov-2026
 152886;INF846K016X3;-;Axis CRISIL-IBX AAA Bond NBFC - Jun 2027 Index Fund;Regular Plan;Growth Option;11.5632;02-Nov-2026
 152885;INF846K018X9;INF846K010Y4;Axis CRISIL-IBX AAA Bond NBFC - Jun 2027 Index Fund;Regular Plan;IDCW Option;11.5632;02-Nov-2026
-153172;INF846KA1028;-;Axis CRISIL-IBX AAA Bond NBFC-HFC - Jun 2027 Index Fund;Direct Plan;Growth option;11.3280;11-Sep-2026
-153173;INF846K018Z4;INF846KA1010;Axis CRISIL-IBX AAA Bond NBFC-HFC - Jun 2027 Index Fund;Direct Plan;IDCW option;11.3384;11-Sep-2026
-153174;INF846K016Z8;-;Axis CRISIL-IBX AAA Bond NBFC-HFC - Jun 2027 Index Fund;Regular Plan;Growth option;11.3074;11-Sep-2026
-153175;INF846K017Z6;INF846K019Z2;Axis CRISIL-IBX AAA Bond NBFC-HFC - Jun 2027 Index Fund;Regular Plan;IDCW option;11.3075;11-Sep-2026
 153879;INF846KA1226;-;Axis CRISIL-IBX Financial Services 3-6 Months Debt Index Fund;Direct Plan;Growth option;10.7288;02-Nov-2026
 153882;INF846KA1242;INF846KA1267;Axis CRISIL-IBX Financial Services 3-6 Months Debt Index Fund;Direct Plan;IDCW option;10.7287;02-Nov-2026
 153880;INF846KA1218;-;Axis CRISIL-IBX Financial Services 3-6 Months Debt Index Fund;Regular Plan;Growth option;10.7149;02-Nov-2026
 153881;INF846KA1234;INF846KA1259;Axis CRISIL-IBX Financial Services 3-6 Months Debt Index Fund;Regular Plan;IDCW option;10.7140;02-Nov-2026
-150854;INF846K018K6;-;Axis Nifty SDL September 2026 Debt Index Fund;Direct Plan;Growth Option;13.0684;30-Sep-2026
-150852;INF846K019K4;INF846K010L1;Axis Nifty SDL September 2026 Debt Index Fund;Direct Plan;IDCW Option;13.0684;30-Sep-2026
-150853;INF846K012L7;INF846K013L5;Axis Nifty SDL September 2026 Debt Index Fund;Regular Plan;IDCW Option;13.0075;30-Sep-2026
-150851;INF846K011L9;-;Axis Nifty SDL September 2026 Debt Index Fund;Regular Plan;Growth Option;13.0089;30-Sep-2026
  
 Baroda BNP Paribas Mutual Fund
  
@@ -11191,10 +11179,10 @@ DSP Mutual Fund
 130491;INF740K01Z68;INF740K01Z76;DSP Income Plus Arbitrage Omni FoF;Direct Plan;IDCW;18.5619;02-Nov-2026
 130492;INF740K01Z27;-;DSP Income Plus Arbitrage Omni FoF;Regular Plan;Growth;22.4932;02-Nov-2026
 130490;INF740K01Z35;INF740K01Z43;DSP Income Plus Arbitrage Omni FoF;Regular Plan;IDCW;16.6174;02-Nov-2026
-154167;INF740KA1YE9;-;DSP Multi Asset Omni Fund of Funds;Direct Plan;Growth;9.9299;30-Oct-2026
-154166;INF740KA1YF6;INF740KA1YG4;DSP Multi Asset Omni Fund of Funds;Direct Plan;IDCW;9.9299;30-Oct-2026
-154165;INF740KA1YB5;-;DSP Multi Asset Omni Fund of Funds;Regular Plan;Growth;9.8787;30-Oct-2026
-154168;INF740KA1YC3;INF740KA1YD1;DSP Multi Asset Omni Fund of Funds;Regular Plan;IDCW;9.8787;30-Oct-2026
+154167;INF740KA1YE9;-;DSP Multi Asset Omni Fund of Funds;Direct Plan;Growth;9.9342;02-Nov-2026
+154166;INF740KA1YF6;INF740KA1YG4;DSP Multi Asset Omni Fund of Funds;Direct Plan;IDCW;9.9342;02-Nov-2026
+154165;INF740KA1YB5;-;DSP Multi Asset Omni Fund of Funds;Regular Plan;Growth;9.8825;02-Nov-2026
+154168;INF740KA1YC3;INF740KA1YD1;DSP Multi Asset Omni Fund of Funds;Regular Plan;IDCW;9.8825;02-Nov-2026
 153487;INF740KA1VZ0;-;DSP Silver ETF Fund of Fund;Direct Plan;Growth;18.5463;02-Nov-2026
 153489;INF740KA1WA1;INF740KA1WB9;DSP Silver ETF Fund of Fund;Direct Plan;IDCW;18.5463;02-Nov-2026
 153486;INF740KA1VW7;-;DSP Silver ETF Fund of Fund;Regular Plan;Growth;18.4289;02-Nov-2026
@@ -11275,9 +11263,9 @@ HDFC Mutual Fund
  
 ICICI Prudential Mutual Fund
  
-120700;INF109K01X40;-;ICICI Prudential Aggressive Hybrid Active FOF;Direct Plan;Growth;237.7950;30-Oct-2026
-102135;INF109K01852;-;ICICI Prudential Aggressive Hybrid Active FOF;Regular Plan;Growth;219.4613;30-Oct-2026
-102136;INF109K01FR2;INF109K01860;ICICI Prudential Aggressive Hybrid Active FOF - Dividend Option;Regular Plan;IDCW;170.1237;30-Oct-2026
+120700;INF109K01X40;-;ICICI Prudential Aggressive Hybrid Active FOF;Direct Plan;Growth;239.4854;02-Nov-2026
+102135;INF109K01852;-;ICICI Prudential Aggressive Hybrid Active FOF;Regular Plan;Growth;221.0011;02-Nov-2026
+102136;INF109K01FR2;INF109K01860;ICICI Prudential Aggressive Hybrid Active FOF - Dividend Option;Regular Plan;IDCW;171.3173;02-Nov-2026
 143904;INF109KC1FW3;-;ICICI Prudential BHARAT 22 FOF;Regular Plan;Cumulative;32.3090;02-Nov-2026
 143903;INF109KC1FX1;-;ICICI Prudential BHARAT 22 FOF;Direct Plan;Cumulative;32.3213;02-Nov-2026
 149331;INF109KC1V91;-;ICICI Prudential BSE 500 ETF FOF;Direct Plan;Growth;15.2840;02-Nov-2026
@@ -11290,18 +11278,18 @@ ICICI Prudential Mutual Fund
 102143;INF109K01FS0;INF109K01886;ICICI Prudential Diversified Debt Strategy Active FOF - Dividend option;Regular Plan;IDCW;41.5544;02-Nov-2026
 154266;INF109K1A468;-;ICICI Prudential Diversified Equity All Cap Active FOF;Direct Plan;Growth;10.2691;02-Nov-2026
 154265;INF109K1A450;-;ICICI Prudential Diversified Equity All Cap Active FOF;Regular Plan;Growth;10.2013;02-Nov-2026
-148035;INF109KC1I49;-;ICICI Prudential Diversified Equity All Cap Omni FOF;Direct Plan;Growth;31.2798;30-Oct-2026
-148036;INF109KC1I64;INF109KC1I56;ICICI Prudential Diversified Equity All Cap Omni FOF;Direct Plan;IDCW;24.3606;30-Oct-2026
-148033;INF109KC1I15;-;ICICI Prudential Diversified Equity All Cap Omni FOF;Regular Plan;Growth;29.8296;30-Oct-2026
-148034;INF109KC1I31;INF109KC1I23;ICICI Prudential Diversified Equity All Cap Omni FOF;Regular Plan;IDCW;23.0635;30-Oct-2026
-120679;INF109K01X16;-;ICICI Prudential Dynamic Asset Allocation Active FOF;Direct Plan;Growth;134.3566;30-Oct-2026
-120680;INF109K01W90;INF109K01X08;ICICI Prudential Dynamic Asset Allocation Active FOF;Direct Plan;IDCW;105.3620;30-Oct-2026
-102137;INF109K01837;-;ICICI Prudential Dynamic Asset Allocation Active FOF;Regular Plan;Growth;120.0323;30-Oct-2026
-102138;INF109K01FJ9;INF109K01845;ICICI Prudential Dynamic Asset Allocation Active FOF- Dividend;Regular Plan;IDCW;92.2440;30-Oct-2026
-147648;INF109KC1F34;-;ICICI Prudential Global Advantage Fund (FOF);Direct Plan;Growth;22.5558;30-Oct-2026
-147645;INF109KC1F42;-;ICICI Prudential Global Advantage Fund (FOF);Direct Plan;IDCW;22.5557;30-Oct-2026
-147647;INF109KC1F00;-;ICICI Prudential Global Advantage Fund (FOF);Regular Plan;Growth;21.4951;30-Oct-2026
-147646;INF109KC1F18;-;ICICI Prudential Global Advantage Fund (FOF);Regular Plan;IDCW;21.4945;30-Oct-2026
+148035;INF109KC1I49;-;ICICI Prudential Diversified Equity All Cap Omni FOF;Direct Plan;Growth;31.6322;02-Nov-2026
+148036;INF109KC1I64;INF109KC1I56;ICICI Prudential Diversified Equity All Cap Omni FOF;Direct Plan;IDCW;24.6351;02-Nov-2026
+148033;INF109KC1I15;-;ICICI Prudential Diversified Equity All Cap Omni FOF;Regular Plan;Growth;30.1645;02-Nov-2026
+148034;INF109KC1I31;INF109KC1I23;ICICI Prudential Diversified Equity All Cap Omni FOF;Regular Plan;IDCW;23.3224;02-Nov-2026
+120679;INF109K01X16;-;ICICI Prudential Dynamic Asset Allocation Active FOF;Direct Plan;Growth;135.6696;02-Nov-2026
+120680;INF109K01W90;INF109K01X08;ICICI Prudential Dynamic Asset Allocation Active FOF;Direct Plan;IDCW;106.3917;02-Nov-2026
+102137;INF109K01837;-;ICICI Prudential Dynamic Asset Allocation Active FOF;Regular Plan;Growth;121.1960;02-Nov-2026
+102138;INF109K01FJ9;INF109K01845;ICICI Prudential Dynamic Asset Allocation Active FOF- Dividend;Regular Plan;IDCW;93.1383;02-Nov-2026
+147648;INF109KC1F34;-;ICICI Prudential Global Advantage Fund (FOF);Direct Plan;Growth;22.6833;02-Nov-2026
+147645;INF109KC1F42;-;ICICI Prudential Global Advantage Fund (FOF);Direct Plan;IDCW;22.6832;02-Nov-2026
+147647;INF109KC1F00;-;ICICI Prudential Global Advantage Fund (FOF);Regular Plan;Growth;21.6154;02-Nov-2026
+147646;INF109KC1F18;-;ICICI Prudential Global Advantage Fund (FOF);Regular Plan;IDCW;21.6147;02-Nov-2026
 120685;INF109K01U92;-;ICICI Prudential Gold ETF FOF;Direct Plan;Growth;43.5131;02-Nov-2026
 120686;INF109K01U76;INF109K01U84;ICICI Prudential Gold ETF FOF;Direct Plan;IDCW;43.5171;02-Nov-2026
 115833;INF109K01TK8;-;ICICI Prudential Gold ETF FOF;Regular Plan;Growth;41.8523;02-Nov-2026
@@ -11314,8 +11302,8 @@ ICICI Prudential Mutual Fund
 120242;INF109K01W58;-;ICICI Prudential Multi Sector Passive FOF;Direct Plan;Growth;171.9871;02-Nov-2026
 102133;INF109K01795;-;ICICI Prudential Multi Sector Passive FOF;Regular Plan;Growth;163.9173;02-Nov-2026
 102134;INF109K01DW7;INF109K01803;ICICI Prudential Multi Sector Passive FOF-Dividend Option;Regular Plan;IDCW;127.7122;02-Nov-2026
-154449;INF109K1A559;-;ICICI Prudential Multi-Asset Active FOF;Direct Plan;Growth;9.6981;30-Oct-2026
-154450;INF109K1A542;-;ICICI Prudential Multi-Asset Active FOF;Regular Plan;Growth;9.6673;30-Oct-2026
+154449;INF109K1A559;-;ICICI Prudential Multi-Asset Active FOF;Direct Plan;Growth;9.7577;02-Nov-2026
+154450;INF109K1A542;-;ICICI Prudential Multi-Asset Active FOF;Regular Plan;Growth;9.7258;02-Nov-2026
 148822;INF109KC1P81;-;ICICI Prudential Nifty 100 Low Volatility 30 ETF FOF;Direct Plan;Growth;17.5501;02-Nov-2026
 148823;INF109KC1Q07;INF109KC1P99;ICICI Prudential Nifty 100 Low Volatility 30 ETF FOF;Direct Plan;IDCW;17.5501;02-Nov-2026
 148821;INF109KC1P57;-;ICICI Prudential Nifty 100 Low Volatility 30 ETF FOF;Regular Plan;Growth;17.1245;02-Nov-2026
@@ -11585,8 +11573,8 @@ Franklin Templeton Mutual Fund
  
 HDFC Mutual Fund
  
-149180;INF179KC1BO4;-;HDFC Developed World Overseas Equity Passive FOF;;;21.663;30-Oct-2026
-149181;INF179KC1BP1;-;HDFC Developed World Overseas Equity Passive FOF;;;21.163;30-Oct-2026
+149180;INF179KC1BO4;-;HDFC Developed World Overseas Equity Passive FOF;;;21.621;02-Nov-2026
+149181;INF179KC1BP1;-;HDFC Developed World Overseas Equity Passive FOF;;;21.122;02-Nov-2026
  
 ICICI Prudential Mutual Fund
  
@@ -13166,10 +13154,10 @@ Kotak Mahindra Mutual Fund
 106442;INF174K01DX9;INF174K01DW1;Kotak Global Emerging Market Overseas Equity Active FOF;Regular Plan;Payout of Income Distribution cum capital withdrawal option;35.84;02-Nov-2026
 119778;INF174K01LX2;INF174K01LY0;Kotak Global Emerging Market Overseas Equity Active FOF;Direct Plan;Payout of Income Distribution cum capital withdrawal option;39.32;02-Nov-2026
 106441;INF174K01DV3;-;Kotak Global Emerging Market Overseas Equity Active FOF;Regular Plan;Growth;35.837;02-Nov-2026
-149058;INF174KA1HE9;INF174KA1HF6;Kotak Global Innovation Overseas Equity Active FOF;Regular Plan;IDCW Option;13.895;30-Oct-2026
-149056;INF174KA1HD1;-;Kotak Global Innovation Overseas Equity Active FOF;Regular Plan;Growth;13.8946;30-Oct-2026
-149060;INF174KA1HH2;INF174KA1HI0;Kotak Global Innovation Overseas Equity Active FOF;Direct Plan;IDCW Option;14.7782;30-Oct-2026
-149059;INF174KA1HG4;-;Kotak Global Innovation Overseas Equity Active FOF;Direct Plan;Growth;14.7805;30-Oct-2026
+149058;INF174KA1HE9;INF174KA1HF6;Kotak Global Innovation Overseas Equity Active FOF;Regular Plan;IDCW Option;13.8193;02-Nov-2026
+149056;INF174KA1HD1;-;Kotak Global Innovation Overseas Equity Active FOF;Regular Plan;Growth;13.8189;02-Nov-2026
+149060;INF174KA1HH2;INF174KA1HI0;Kotak Global Innovation Overseas Equity Active FOF;Direct Plan;IDCW Option;14.699;02-Nov-2026
+149059;INF174KA1HG4;-;Kotak Global Innovation Overseas Equity Active FOF;Direct Plan;Growth;14.7013;02-Nov-2026
 148646;INF174KA1FO2;-;Kotak International REIT Overseas Equity Active FOF;Direct Plan;Growth;11.7095;02-Nov-2026
 148649;INF174KA1FN4;INF174KA1FP9;Kotak International REIT Overseas Equity Active FOF;Direct Plan;Payout of Income Distribution cum capital withdrawal option;11.7094;02-Nov-2026
 148645;INF174KA1FL8;-;Kotak International REIT Overseas Equity Active FOF;Regular Plan;Growth;11.1224;02-Nov-2026

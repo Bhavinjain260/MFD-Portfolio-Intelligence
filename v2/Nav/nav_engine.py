@@ -10,53 +10,65 @@ Covers:
   • Previous-day sync + skip-back baseline resolver (local-first)
   • DB queries (latest, previous, history, scheme metadata)
   • DB ingestion (batched, single transaction)
-  • Business-day + trading-calendar helpers (holiday-aware, JSON-extendable)
+  • Business-day + trading-calendar helpers (holiday-aware, JSON-extendable,
+    self-learning from AMFI responses)
   • Diagnostics
 
 No Streamlit APIs. Cached wrappers live in app.py.
 
+Time zone
+---------
+All "now" / "today" logic runs in IST (Asia/Kolkata), independent of the
+server's local zone.
+
 Holidays
 --------
-Built-in: NSE_HOLIDAYS_2026. To add years, create `nse_holidays.json`
-(path via env NSE_HOLIDAYS_FILE):
+Built-in: NSE_HOLIDAYS_2026 (verified against the NSE list). To add years,
+create `nse_holidays.json` (path via env NSE_HOLIDAYS_FILE):
     {"2027": {"2027-01-26": "Republic Day", "...": "..."}}
 Years with no data are treated as weekend-only (a warning is logged once).
+Dates AMFI proves to be non-trading (it answers a history request with the
+previous trading day's data) are learned automatically and stored under the
+"learned" key of the same file. Learned dates never count as curated year data.
+
+Ingestion scope
+---------------
+By default only "Regular Plan" rows go into the DB. Set env
+NAV_INGEST_PLANS="Regular Plan,Direct Plan" (or "all") to ingest more.
+Disk snapshots always hold every plan.
+
+Changelog (this revision)
+-------------------------
+  • IST-aware clock everywhere; cutoffs compared in IST.
+  • NSE 2026 holiday list corrected; learned-holiday mechanism added.
+  • _network_nav_map never relabels data: if AMFI returns a different date
+    than requested, that data is saved under its real date and the requested
+    date gets only local data.
+  • get_week_ago_nav counts 5 trading days by default (calendar mode: 7).
+  • nav_history writes use ON CONFLICT DO UPDATE; duplicates are removed
+    before the UNIQUE index is created.
+  • Thread-safe module caches; AMFINavIndex swaps state atomically and
+    rate-limits its error logs.
+  • Live-file validation: >= max(_MIN_ACCEPTABLE_ISIN_COUNT, 90% of the
+    latest snapshot's rows).
+  • Keeping a thicker existing snapshot refreshes its mtime (no 10-minute
+    re-download loop).
+  • Baseline fallback is relative to the requested date.
+  • ISIN lookups use two indexed lookups (CTE + UNION) instead of OR.
+  • download_and_save_nav_if_needed returns `stale` when AMFI has not yet
+    published the expected NAV date.
+  • Removed: get_expected_nav_date, dead 8-col plan branch,
+    sync_previous_business_day_nav(max_lookback), AMFINavIndex(ttl_seconds),
+    _count_isins_in_file / _get_file_nav_date aliases.
 
 Migration notes
 ---------------
-  • Public API unchanged. NAV values returned from DB / index are `NavPoint`
-    NamedTuples (nav, date) — still index-able like the old tuples.
+  • Public API otherwise unchanged. NAV values returned from DB / index are
+    `NavPoint` NamedTuples (nav, date) — still index-able like old tuples.
   • `get_nav_for_date` kept as a deprecated alias.
   • Run `cleanup_unknown_plan_rows()` once (dry-run first) to purge rows
     ingested under plan='Unknown' by the old Regular-Plan-filter bug, then
     re-ingest.
-
-
-Bugs (fix first)
-
-Regular Plan filter never fires. Live NAVAll.txt is 6-col, and _normalize_history_text_to_live_format strips plan/option. So _parse_nav_file always takes the “Unknown” branch and ingests every plan. Fix: keep 8-col for history, and derive plan from the scheme name (“Direct”/”Regular”) for 6-col.
-get_nav_history / get_regular_plan_history: LAG() has no PARTITION BY nh.nav_option_id, so payout and reinvest rows mix.
-get_all_latest_navs, get_regular_plan_navs, get_previous_navs_map: COALESCE(payout, reinvest) drops reinvest ISINs. Emit both ISINs, as get_nav_for_date_from_db already does.
-Holidays: NSE_HOLIDAYS_2026 ends this year, so 2027 silently has none. get_last_business_day ignores holidays entirely, even though is_trading_day exists. get_expected_nav_date is unused. Load holidays from a JSON file keyed by year and use is_trading_day everywhere.
-Download gate: snapshots are saved by NAV date, not download date. On weekends and holidays has_today is never true, so every call re-downloads. Compare the latest snapshot date to the expected NAV date, and store a last_attempt timestamp with backoff.
-download_and_save_nav_if_needed returns ok: True even when ingestion failed.
-AMFINavIndex uses class-level mutable dicts shared across instances. Move them into __init__ and add a threading.Lock.
-INSERT OR IGNORE on nav_options never updates changed ISINs. Use ON CONFLICT DO UPDATE.
-
-Make it smarter
-
-Snapshot index: _have_snapshot_for_date and _previous_snapshot_path open every file on each call. Build {nav_date: path} once, refresh it on save, and cache it by directory mtime.
-Parse once: _save_nav_snapshot parses the full text just to count rows. Count lines cheaply, or parse once and pass the result along.
-Ingestion speed: _insert_nav_rows does 4 queries per row. Cache (code, plan, option) → id, use executemany, and wrap in one transaction. This takes roughly 18k rows from minutes to about 1 second.
-Safe writes: write to a temp file then os.replace. Decode with res.content.decode("utf-8-sig").
-Validate live downloads: reject a live file with fewer than _MIN_ACCEPTABLE_ISIN_COUNT rows before saving, as the history path effectively does.
-Retries: use requests.Session with urllib3.Retry (backoff, 429/5xx) for live downloads too. Right now only the history path uses the session.
-Typed values: replace the tuple | float ambiguity with NamedTuple NavPoint(nav, date). This also removes the isinstance juggling in _read_snapshot_map and load_previous_nav_map.
-Skip-back: it can trigger a network fetch per candidate date. Try disk and DB first, and hit the network only for the first missing date.
-DB indexes: add them on nav_history(nav_date), nav_history(nav_option_id, nav_date), nav_options(isin_payout) and nav_options(isin_reinvest).
-Dead code: get_nav_for_date is an alias with a misleading name, and LOOKBACK_DELAY_SECONDS and the 2 PM/11 AM comment docstrings disagree with NAV_REDOWNLOAD_TIMES. Clean these up.
-
-
 """
 
 import json
@@ -67,7 +79,8 @@ import threading
 import time as _time
 import warnings
 from collections import OrderedDict
-from datetime import datetime, timedelta, date as date_cls, time as time_cls
+from datetime import (datetime, timedelta, timezone,
+                      date as date_cls, time as time_cls)
 from typing import NamedTuple, Optional
 
 import requests
@@ -77,8 +90,43 @@ from urllib3.util.retry import Retry
 import sync_failure_log as sflog
 from init_db import get_conn
 
+try:
+    from zoneinfo import ZoneInfo
+    IST = ZoneInfo("Asia/Kolkata")
+except Exception:  # tzdata missing (e.g. some Windows installs)
+    IST = timezone(timedelta(hours=5, minutes=30), "IST")
+
 
 log = logging.getLogger("nav_engine")
+
+
+def _now() -> datetime:
+    """Current time in IST (timezone-aware)."""
+    return datetime.now(IST)
+
+
+def _as_date(d) -> date_cls:
+    """Accept ISO string, datetime or date."""
+    if isinstance(d, str):
+        return datetime.strptime(d, "%Y-%m-%d").date()
+    if isinstance(d, datetime):
+        return d.date()
+    return d
+
+
+# ── throttled logging (avoid per-call error floods) ───────────
+_LOG_THROTTLE: dict[str, float] = {}
+_LOG_THROTTLE_LOCK = threading.Lock()
+
+
+def _log_throttled(key: str, level: int, msg: str, *args, interval: float = 300.0) -> None:
+    now = _time.monotonic()
+    with _LOG_THROTTLE_LOCK:
+        last = _LOG_THROTTLE.get(key)
+        if last is not None and now - last < interval:
+            return
+        _LOG_THROTTLE[key] = now
+    log.log(level, msg, *args)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -97,7 +145,7 @@ NAV_HISTORY_URL = "https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx
 NAV_TEXT_DIR = os.environ.get("NAV_TEXT_DIR", "nav_data")
 NSE_HOLIDAYS_FILE = os.environ.get("NSE_HOLIDAYS_FILE", "nse_holidays.json")
 
-# Re-publish cutoffs during the day. Domestic NAVs settle ~3 PM;
+# Re-publish cutoffs during the day (IST). Domestic NAVs settle ~3 PM;
 # foreign/international scheme NAVs land ~11 PM.
 NAV_REDOWNLOAD_TIMES = [time_cls(15, 0), time_cls(23, 0)]
 
@@ -107,9 +155,15 @@ RETRY_BACKOFF_SECONDS = 600
 
 # A full NAVAll.txt has ~18,000+ data rows. The history endpoint returns
 # only ~900-1000. Anything below this is "partial".
-_MIN_ACCEPTABLE_ISIN_COUNT = 3000
+_MIN_ACCEPTABLE_ISIN_COUNT = 10000
+_LIVE_MIN_FRACTION_OF_PREV = 0.9
 
 _SIG_CHECK_INTERVAL = 30  # seconds between AMFINavIndex file-change checks
+
+# Which plans go into the DB. "all" disables the filter.
+_INGEST_PLANS_RAW = os.environ.get("NAV_INGEST_PLANS", "Regular Plan")
+_INGEST_ALL = _INGEST_PLANS_RAW.strip().lower() == "all"
+_INGEST_PLANS = {p.strip().lower() for p in _INGEST_PLANS_RAW.split(",") if p.strip()}
 
 
 def _build_session() -> requests.Session:
@@ -144,84 +198,132 @@ def _decode_response(res: requests.Response) -> str:
 # ══════════════════════════════════════════════════════════════
 # TRADING CALENDAR
 # ══════════════════════════════════════════════════════════════
+# NSE equity segment weekday holidays, 2026 (weekend holidays omitted —
+# they are non-trading anyway; Muhurat session 2026-11-08 is a Sunday).
 NSE_HOLIDAYS_2026 = {
+    "2026-01-15": "Municipal Corporation Election - Maharashtra",
     "2026-01-26": "Republic Day",
-    "2026-03-25": "Holi",
-    "2026-04-02": "Good Friday",
-    "2026-04-10": "Eid ul-Fitr",
-    "2026-04-21": "Ram Navami",
-    "2026-05-01": "May Day",
-    "2026-08-15": "Independence Day",
-    "2026-08-28": "Janmashtami",
-    "2026-09-16": "Milad-un-Nabi",
-    "2026-10-02": "Gandhi Jayanti",
-    "2026-10-24": "Dussehra",
-    "2026-11-08": "Diwali",
-    "2026-11-09": "Diwali (Day 2)",
+    "2026-03-03": "Holi",
+    "2026-03-26": "Shri Ram Navami",
+    "2026-03-31": "Shri Mahavir Jayanti",
+    "2026-04-03": "Good Friday",
+    "2026-04-14": "Dr. Baba Saheb Ambedkar Jayanti",
+    "2026-05-01": "Maharashtra Day",
+    "2026-05-28": "Bakri Id",
+    "2026-06-26": "Muharram",
+    "2026-09-14": "Ganesh Chaturthi",
+    "2026-10-02": "Mahatma Gandhi Jayanti",
+    "2026-10-20": "Dussehra",
+    "2026-11-10": "Diwali - Balipratipada",
+    "2026-11-24": "Prakash Gurpurb Sri Guru Nanak Dev",
     "2026-12-25": "Christmas",
 }
 
-_HOLIDAY_CACHE: dict = {"sig": "unset", "data": {}}
+_HOLIDAY_CACHE: dict = {"sig": "unset", "data": None}
 _HOLIDAY_WARNED_YEARS: set = set()
+_HOLIDAY_LOCK = threading.RLock()
+
+
+def _load_holidays() -> tuple[dict[str, dict[str, str]], dict[str, str]]:
+    """
+    (curated, learned):
+      curated: {year_str: {iso_date: name}} — built-in merged with JSON file
+      learned: {iso_date: note} — dates AMFI showed to be non-trading
+    """
+    with _HOLIDAY_LOCK:
+        try:
+            sig = os.stat(NSE_HOLIDAYS_FILE).st_mtime_ns
+        except OSError:
+            sig = None
+        if _HOLIDAY_CACHE["sig"] == sig and _HOLIDAY_CACHE["data"] is not None:
+            return _HOLIDAY_CACHE["data"]
+
+        curated: dict[str, dict[str, str]] = {"2026": dict(NSE_HOLIDAYS_2026)}
+        learned: dict[str, str] = {}
+        if sig is not None:
+            try:
+                with open(NSE_HOLIDAYS_FILE, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+                for key, mapping in raw.items():
+                    if key == "learned":
+                        learned.update(mapping)
+                    elif str(key).isdigit() and isinstance(mapping, dict):
+                        curated.setdefault(str(key), {}).update(mapping)
+            except Exception:
+                log.exception("[CAL] Failed to read %s — using built-in holidays",
+                              NSE_HOLIDAYS_FILE)
+        _HOLIDAY_CACHE["sig"] = sig
+        _HOLIDAY_CACHE["data"] = (curated, learned)
+        return curated, learned
 
 
 def _holidays() -> dict[str, dict[str, str]]:
-    """{year_str: {iso_date: name}} — built-in merged with JSON file."""
-    try:
-        sig = os.stat(NSE_HOLIDAYS_FILE).st_mtime_ns
-    except OSError:
-        sig = None
-    if _HOLIDAY_CACHE["sig"] == sig and _HOLIDAY_CACHE["data"]:
-        return _HOLIDAY_CACHE["data"]
-
-    merged: dict[str, dict[str, str]] = {"2026": dict(NSE_HOLIDAYS_2026)}
-    if sig is not None:
-        try:
-            with open(NSE_HOLIDAYS_FILE, "r", encoding="utf-8") as f:
-                raw = json.load(f)
-            for year, mapping in raw.items():
-                merged.setdefault(str(year), {}).update(mapping)
-        except Exception:
-            log.exception("[CAL] Failed to read %s — using built-in holidays",
-                          NSE_HOLIDAYS_FILE)
-    _HOLIDAY_CACHE["sig"] = sig
-    _HOLIDAY_CACHE["data"] = merged
-    return merged
+    """Curated holidays only: {year_str: {iso_date: name}}."""
+    return _load_holidays()[0]
 
 
 def is_trading_day(target_date: date_cls) -> bool:
     """Weekend- and holiday-aware trading day check (NSE calendar)."""
     if target_date.weekday() >= 5:
         return False
+    iso = target_date.strftime("%Y-%m-%d")
+    curated, learned = _load_holidays()
+    if iso in learned:
+        return False
     year = str(target_date.year)
-    hol = _holidays()
-    if year not in hol:
+    year_data = curated.get(year)
+    if not year_data:
         if year not in _HOLIDAY_WARNED_YEARS:
             _HOLIDAY_WARNED_YEARS.add(year)
             log.warning("[CAL] No holiday data for %s — treating as weekend-only. "
                         "Add it to %s.", year, NSE_HOLIDAYS_FILE)
         return True
-    return target_date.strftime("%Y-%m-%d") not in hol[year]
+    return iso not in year_data
 
 
-def get_expected_nav_date(download_date: date_cls, is_domestic: bool = True) -> date_cls:
+def _learn_holiday(iso_date: str, note: str) -> None:
+    """Persist a learned non-trading date (atomic write, merged with file)."""
+    with _HOLIDAY_LOCK:
+        try:
+            raw: dict = {}
+            if os.path.exists(NSE_HOLIDAYS_FILE):
+                with open(NSE_HOLIDAYS_FILE, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+            learned = raw.setdefault("learned", {})
+            if iso_date in learned:
+                return
+            learned[iso_date] = note
+            tmp = f"{NSE_HOLIDAYS_FILE}.{os.getpid()}.tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(raw, f, indent=2, sort_keys=True)
+            os.replace(tmp, NSE_HOLIDAYS_FILE)
+            _HOLIDAY_CACHE["sig"] = "unset"
+            log.warning("[CAL] Learned non-trading day %s (%s)", iso_date, note)
+        except Exception:
+            log.exception("[CAL] Could not record learned holiday %s", iso_date)
+
+
+def _maybe_learn_holiday(requested_iso: str, actual_iso: str) -> None:
     """
-    NAV date a download on `download_date` is expected to carry when taken
-    BEFORE that day's publish: lag of 1 trading day (domestic) or 2
-    (international). Backtracks over non-trading days.
+    AMFI answered a history request for `requested_iso` with `actual_iso`
+    data. Learn the requested date as non-trading ONLY if it is a past
+    weekday our calendar thought was open, and AMFI's answer is exactly the
+    previous trading day (anything older looks like a publishing gap).
     """
-    lag = 1 if is_domestic else 2
-    nav_date = download_date - timedelta(days=lag)
-    for _ in range(30):
-        if is_trading_day(nav_date):
-            break
-        nav_date -= timedelta(days=1)
-    return nav_date
+    try:
+        req = datetime.strptime(requested_iso, "%Y-%m-%d").date()
+    except ValueError:
+        return
+    if req >= _now().date() or not is_trading_day(req):
+        return
+    if actual_iso != get_last_business_day(req).strftime("%Y-%m-%d"):
+        return
+    _learn_holiday(requested_iso, f"Learned: AMFI returned {actual_iso} data")
 
 
 def get_last_business_day(from_date: date_cls | None = None) -> date_cls:
     """Most recent trading day strictly BEFORE from_date (holiday-aware)."""
-    from_date = from_date or datetime.now().date()
+    from_date = from_date or _now().date()
     candidate = from_date - timedelta(days=1)
     for _ in range(30):
         if is_trading_day(candidate):
@@ -235,6 +337,7 @@ def get_last_business_day(from_date: date_cls | None = None) -> date_cls:
 # ══════════════════════════════════════════════════════════════
 _INDEX_LOCK = threading.RLock()
 _WRITE_LOCK = threading.Lock()
+_CACHE_LOCK = threading.Lock()   # guards _DATE_CACHE / _ROWS_CACHE / _MAP_CACHE
 _INDEX: dict = {"dir": None, "sig": None, "map": {}}
 _DATE_CACHE: dict[str, tuple[tuple[int, int], Optional[str]]] = {}
 _ROWS_CACHE: dict[str, tuple[tuple[int, int], int]] = {}
@@ -261,7 +364,8 @@ def _file_nav_date(path: str) -> Optional[str]:
         sig = _file_sig(path)
     except OSError:
         return None
-    cached = _DATE_CACHE.get(path)
+    with _CACHE_LOCK:
+        cached = _DATE_CACHE.get(path)
     if cached and cached[0] == sig:
         return cached[1]
 
@@ -283,11 +387,9 @@ def _file_nav_date(path: str) -> Optional[str]:
                     continue
     except OSError:
         return None
-    _DATE_CACHE[path] = (sig, nav_date)
+    with _CACHE_LOCK:
+        _DATE_CACHE[path] = (sig, nav_date)
     return nav_date
-
-
-_get_file_nav_date = _file_nav_date  # backwards-compat name
 
 
 def _row_count(path: str) -> int:
@@ -296,7 +398,8 @@ def _row_count(path: str) -> int:
         sig = _file_sig(path)
     except OSError:
         return 0
-    cached = _ROWS_CACHE.get(path)
+    with _CACHE_LOCK:
+        cached = _ROWS_CACHE.get(path)
     if cached and cached[0] == sig:
         return cached[1]
     count = 0
@@ -307,11 +410,9 @@ def _row_count(path: str) -> int:
                     count += 1
     except OSError:
         return 0
-    _ROWS_CACHE[path] = (sig, count)
+    with _CACHE_LOCK:
+        _ROWS_CACHE[path] = (sig, count)
     return count
-
-
-_count_isins_in_file = _row_count  # backwards-compat name
 
 
 def _count_data_lines(text: str) -> int:
@@ -368,7 +469,7 @@ def _have_snapshot_for_date(iso_date: str) -> bool:
 
 def get_snapshot_status() -> dict:
     idx = _snapshot_index()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = _now().strftime("%Y-%m-%d")
     latest_date = max(idx) if idx else None
     latest_path = idx[latest_date] if latest_date else None
     return {
@@ -400,19 +501,21 @@ def _read_snapshot_map(path: str) -> dict:
         key = (path,) + _file_sig(path)
     except OSError:
         return {}
-    cached = _MAP_CACHE.get(key)
-    if cached is not None:
-        _MAP_CACHE.move_to_end(key)
-        return dict(cached)
+    with _CACHE_LOCK:
+        cached = _MAP_CACHE.get(key)
+        if cached is not None:
+            _MAP_CACHE.move_to_end(key)
+            return dict(cached)
     try:
         with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
             nav_map, _, _ = _parse_nav_text(f.read())
     except OSError:
         return {}
     out = {isin: pt.nav for isin, pt in nav_map.items() if pt.nav > 0}
-    _MAP_CACHE[key] = out
-    while len(_MAP_CACHE) > _MAP_CACHE_MAX:
-        _MAP_CACHE.popitem(last=False)
+    with _CACHE_LOCK:
+        _MAP_CACHE[key] = out
+        while len(_MAP_CACHE) > _MAP_CACHE_MAX:
+            _MAP_CACHE.popitem(last=False)
     return dict(out)
 
 
@@ -500,7 +603,7 @@ def _parse_nav_text(text: str) -> tuple[dict, dict, list[dict]]:
                 if r["amc"]:
                     amc_map[isin] = r["amc"]
 
-    log.info("[NAV-PARSE] Parsed %d records, %d ISINs", len(records), len(nav_map))
+    log.debug("[NAV-PARSE] Parsed %d records, %d ISINs", len(records), len(nav_map))
     return nav_map, amc_map, records
 
 
@@ -572,7 +675,7 @@ def _normalize_history_text_to_live_format(text: str) -> str:
     if layout["name"] == 3 and layout["nav"] == layout["width"] - 2:
         return text  # already live layout
 
-    need = max(layout.values()) + 1
+    need = max(layout[k] for k in ("code", "name", "isin1", "isin2", "nav", "date")) + 1
     out = []
     for line in lines:
         stripped = line.strip()
@@ -606,6 +709,8 @@ def _save_nav_snapshot(text: str, iso_date: str, *,
     """
     Atomically save a snapshot. An existing file with MORE rows is never
     clobbered by a thinner one (partial-history vs full-live protection).
+    When a thicker file is kept, its mtime is refreshed so the freshness
+    gate does not keep re-downloading.
     """
     _ensure_text_dir()
     path = _snapshot_path(iso_date)
@@ -619,6 +724,11 @@ def _save_nav_snapshot(text: str, iso_date: str, *,
                     "[NAV-SAVE] Keeping existing %s (existing=%d rows, incoming=%d, "
                     "source=%s, allow_overwrite=%s).",
                     path, existing, new_count, source, allow_overwrite)
+                if allow_overwrite and existing > new_count:
+                    try:
+                        os.utime(path, None)
+                    except OSError:
+                        pass
                 return {"path": path, "bytes": os.path.getsize(path),
                         "date": iso_date, "record_count": existing,
                         "kept_existing": True}
@@ -673,11 +783,17 @@ def _save_and_ingest(text: str, iso_date: str, source: str) -> tuple[dict, dict]
 # ══════════════════════════════════════════════════════════════
 # LIVE DOWNLOAD
 # ══════════════════════════════════════════════════════════════
+def _min_live_rows() -> int:
+    """Row floor for a live file: absolute minimum, or 90% of the latest snapshot."""
+    path = _latest_snapshot_path()
+    prev = _row_count(path) if path else 0
+    return max(_MIN_ACCEPTABLE_ISIN_COUNT, int(prev * _LIVE_MIN_FRACTION_OF_PREV))
+
+
 def download_and_save_nav(timeout: int = 30) -> dict:
     """
     Download NAVAll.txt and save under the ACTUAL NAV date (from content).
-    Rejects empty / non-AMFI / partial (< _MIN_ACCEPTABLE_ISIN_COUNT rows)
-    responses before touching disk.
+    Rejects empty / non-AMFI / partial responses before touching disk.
     """
     log.info("[AMFI] Downloading NAV file from %s", AMFI_TEXT_URL)
     fail = {"path": None, "bytes": 0, "date": None}
@@ -695,10 +811,10 @@ def download_and_save_nav(timeout: int = 30) -> dict:
         return {**fail, "reason": "response is not AMFI NAV data"}
 
     rows = _count_data_lines(text)
-    if rows < _MIN_ACCEPTABLE_ISIN_COUNT:
-        log.error("[AMFI] Live file has only %d rows (< %d) — rejecting",
-                  rows, _MIN_ACCEPTABLE_ISIN_COUNT)
-        return {**fail, "reason": f"partial live file ({rows} rows)"}
+    floor = _min_live_rows()
+    if rows < floor:
+        log.error("[AMFI] Live file has only %d rows (< %d) — rejecting", rows, floor)
+        return {**fail, "reason": f"partial live file ({rows} rows, need {floor})"}
 
     actual_nav_date = _extract_nav_date_from_text(text)
     if not actual_nav_date:
@@ -715,7 +831,8 @@ def download_and_save_nav(timeout: int = 30) -> dict:
              "kept" if saved["kept_existing"] else "saved",
              saved["path"], saved["bytes"], rows, actual_nav_date)
     return {"path": saved["path"], "bytes": saved["bytes"],
-            "date": actual_nav_date, "rows": rows}
+            "date": actual_nav_date, "rows": rows,
+            "kept_existing": saved["kept_existing"]}
 
 
 # ── freshness gate ────────────────────────────────────────────
@@ -750,18 +867,23 @@ def _write_attempt(ok: bool, reason: str) -> None:
 
 def _required_snapshot(now: datetime) -> tuple[date_cls, datetime]:
     """
-    (expected NAV date, minimum file mtime) for the snapshot to be current.
+    (expected NAV date, minimum file mtime — IST-aware) for the snapshot to
+    be current.
 
       trading day, a cutoff has passed → today's NAV, saved after that cutoff
       otherwise (before first cutoff, weekend, holiday) → previous trading
         day's NAV, saved after its last (late-night) cutoff
     """
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=IST)
+    else:
+        now = now.astimezone(IST)
     today = now.date()
     cutoff = _last_passed_cutoff_today(now)
     if is_trading_day(today) and cutoff is not None:
-        return today, datetime.combine(today, cutoff)
+        return today, datetime.combine(today, cutoff, tzinfo=IST)
     prev = get_last_business_day(today)
-    return prev, datetime.combine(prev, max(NAV_REDOWNLOAD_TIMES))
+    return prev, datetime.combine(prev, max(NAV_REDOWNLOAD_TIMES), tzinfo=IST)
 
 
 def _snapshot_is_fresh(expected: date_cls, min_mtime: datetime) -> tuple[bool, Optional[str]]:
@@ -776,7 +898,7 @@ def _snapshot_is_fresh(expected: date_cls, min_mtime: datetime) -> tuple[bool, O
         if d > expected_iso:
             return True, path
         try:
-            if datetime.fromtimestamp(os.path.getmtime(path)) >= min_mtime:
+            if datetime.fromtimestamp(os.path.getmtime(path), IST) >= min_mtime:
                 return True, path
         except OSError:
             continue
@@ -789,21 +911,24 @@ def download_and_save_nav_if_needed(force: bool = False) -> dict:
     NAV cycle (see _required_snapshot). Works on weekends/holidays (compares
     NAV dates, not download dates) and backs off RETRY_BACKOFF_SECONDS after
     any attempt. `ok` is False if the download OR the DB ingestion failed.
+    `stale` is True when we still do not hold the expected NAV date
+    (e.g. AMFI has not published yet).
     """
-    now = datetime.now()
+    now = _now()
+    expected, min_mtime = _required_snapshot(now)
+    expected_iso = expected.strftime("%Y-%m-%d")
 
     if not force:
-        expected, min_mtime = _required_snapshot(now)
         fresh, path = _snapshot_is_fresh(expected, min_mtime)
         if fresh:
-            return {"ran": False, "ok": True,
+            return {"ran": False, "ok": True, "stale": False,
                     "reason": f"snapshot {os.path.basename(path)} is current",
                     "bytes": os.path.getsize(path)}
 
         last = _read_attempt()
         age = _time.time() - float(last.get("ts", 0) or 0)
         if last and age < RETRY_BACKOFF_SECONDS:
-            return {"ran": False, "ok": bool(last.get("ok")),
+            return {"ran": False, "ok": bool(last.get("ok")), "stale": True,
                     "reason": f"backoff: last attempt {int(age)}s ago "
                               f"({last.get('reason', '')}); retry in "
                               f"{int(RETRY_BACKOFF_SECONDS - age)}s",
@@ -814,20 +939,24 @@ def download_and_save_nav_if_needed(force: bool = False) -> dict:
     except Exception as e:
         log.exception("[AMFI] Download failed with exception")
         _write_attempt(False, f"exception: {e}")
-        return {"ran": True, "ok": False, "reason": f"download failed: {e}", "bytes": None}
+        return {"ran": True, "ok": False, "stale": True,
+                "reason": f"download failed: {e}", "bytes": None}
 
     if result.get("date") is None:
         reason = result.get("reason", "download failed")
         _write_attempt(False, reason)
         sflog.record_failure(source="nav", stage="fetch", msg=reason)
-        return {"ran": True, "ok": False, "reason": reason, "bytes": None}
+        return {"ran": True, "ok": False, "stale": True, "reason": reason, "bytes": None}
 
     ing = _ingest_logged(result["path"])
     ok = bool(ing.get("ok"))
+    stale = result["date"] < expected_iso
     reason = ("downloaded and ingested" if ok
               else f"downloaded; DB ingestion failed: {ing.get('reason')}")
+    if stale:
+        reason += f" (AMFI still at {result['date']}, expected {expected_iso})"
     _write_attempt(ok, reason)
-    return {"ran": True, "ok": ok, "reason": reason,
+    return {"ran": True, "ok": ok, "stale": stale, "reason": reason,
             "bytes": result.get("bytes"), "date": result.get("date")}
 
 
@@ -875,13 +1004,12 @@ def download_business_day_nav(target_date, timeout: int = 30) -> dict:
     }
 
 
-def sync_previous_business_day_nav(force: bool = False, timeout: int = 30,
-                                   max_lookback: int = 10) -> dict:
+def sync_previous_business_day_nav(force: bool = False, timeout: int = 30) -> dict:
     """
     Fetch the trading day before the latest snapshot's NAV date, save and
     ingest it. The calendar is holiday-aware, and if AMFI answers with an
-    earlier date anyway, that actual date is saved. `max_lookback` is kept
-    for compatibility and unused.
+    earlier date anyway, that actual date is saved (and the requested date
+    is learned as non-trading when it is safe to do so).
     """
     latest_path = _latest_snapshot_path()
     if latest_path is None:
@@ -916,6 +1044,7 @@ def sync_previous_business_day_nav(force: bool = False, timeout: int = 30,
     actual = result["actual_date"]
     if actual != iso_date:
         log.info("[AMFI-HIST] Requested %s but AMFI returned %s", iso_date, actual)
+        _maybe_learn_holiday(iso_date, actual)
         if not force and _have_snapshot_for_date(actual):
             return {"ran": False, "ok": True,
                     "reason": f"already have {actual}", "date": actual}
@@ -935,7 +1064,7 @@ def sync_previous_business_day_nav_if_needed(
     st.session_state from app.py). Headless callers pass None — the
     underlying sync is idempotent via snapshot checks.
     """
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = _now().strftime("%Y-%m-%d")
 
     if not force and state is not None and state.get("prev_nav_done_for") == today:
         return {"ran": False, "ok": True, "reason": "already synced successfully today"}
@@ -957,14 +1086,19 @@ def sync_previous_business_day_nav_if_needed(
 # ══════════════════════════════════════════════════════════════
 # PREVIOUS SNAPSHOT
 # ══════════════════════════════════════════════════════════════
-def load_previous_nav_map() -> dict:
-    """{isin: nav_float} for the previous snapshot, or {} if none."""
-    path, _ = _previous_snapshot_path()
+def load_previous_nav_map(current_date_iso=None) -> dict:
+    """
+    {isin: nav_float} for the snapshot before `current_date_iso`
+    (default: before the latest snapshot), or {} if none.
+    """
+    cur = _as_date(current_date_iso).strftime("%Y-%m-%d") if current_date_iso else None
+    path, _ = _previous_snapshot_path(cur)
     return _read_snapshot_map(path) if path else {}
 
 
-def get_previous_nav_date() -> Optional[str]:
-    _, date_str = _previous_snapshot_path()
+def get_previous_nav_date(current_date_iso=None) -> Optional[str]:
+    cur = _as_date(current_date_iso).strftime("%Y-%m-%d") if current_date_iso else None
+    _, date_str = _previous_snapshot_path(cur)
     return date_str
 
 
@@ -1031,7 +1165,11 @@ def _local_nav_map(iso: str) -> tuple[dict, bool]:
 
 
 def _network_nav_map(target_iso: str, fallback: dict) -> dict:
-    """AMFI history fetch for one date; saves + ingests; returns best map."""
+    """
+    AMFI history fetch for one date; saves + ingests; returns best map FOR
+    THAT DATE. If AMFI answers with a different date, that data is stored
+    under its real date and is never returned as `target_iso`'s data.
+    """
     best = fallback
     try:
         target_d = datetime.strptime(target_iso, "%Y-%m-%d").date()
@@ -1039,8 +1177,13 @@ def _network_nav_map(target_iso: str, fallback: dict) -> dict:
         actual = resp.get("actual_date")
         if actual and resp.get("text"):
             if actual != target_iso:
-                log.warning("[NAV-LOOKUP] Asked for %s, AMFI returned %s data",
-                            target_iso, actual)
+                log.warning("[NAV-LOOKUP] Asked for %s, AMFI returned %s data — "
+                            "not using it for %s", target_iso, actual, target_iso)
+                _maybe_learn_holiday(target_iso, actual)
+                if not _have_snapshot_for_date(actual):
+                    _save_and_ingest(resp["text"], actual, source="history")
+                return best
+
             saved, _ = _save_and_ingest(resp["text"], actual, source="history")
             hist = _read_snapshot_map(saved["path"])
             if len(hist) > len(best):
@@ -1142,14 +1285,8 @@ def resolve_prev_nav_for_folios(
     Returns (iso_date_or_None, nav_map, diagnostics).
     app.py wraps this with @st.cache_data.
     """
-    if isinstance(current_date_iso, str):
-        current_date = datetime.strptime(current_date_iso, "%Y-%m-%d").date()
-    else:
-        current_date = (current_date_iso.date() if hasattr(current_date_iso, "date")
-                        else current_date_iso)
-
     return _resolve_prev_nav_for_folios_impl(
-        current_date, set(isins_tuple),
+        _as_date(current_date_iso), set(isins_tuple),
         max_lookback=max_lookback, min_overlap_pct=min_overlap_pct,
     )
 
@@ -1157,17 +1294,8 @@ def resolve_prev_nav_for_folios(
 # ══════════════════════════════════════════════════════════════
 # HIGH-LEVEL BASELINE ORCHESTRATORS
 # ─────────────────────────────────────────────────────────────
-# What app.py used to do inline — moved here so background_worker,
-# cron scripts, and any headless caller gets the same behaviour as
-# the Streamlit UI. Pure Python: no Streamlit, no caching.
-#
-# Boundary:
-#   - These functions return (iso, nav_map, diagnostics). Pure NAV
-#     answers — no pandas, no folio dataframe coupling.
-#   - The @st.cache_data wrappers live in app.py.
-#   - The per-row diff arithmetic ((current_nav - prev_nav) * units)
-#     also stays in app.py, because it depends on the folio
-#     dataframe schema built by get_enriched_folio_nav_df().
+# Pure NAV answers — no pandas, no folio dataframe coupling. The
+# @st.cache_data wrappers and per-row diff arithmetic stay in app.py.
 # ══════════════════════════════════════════════════════════════
 
 def get_previous_nav_baseline(
@@ -1179,46 +1307,16 @@ def get_previous_nav_baseline(
     """
     High-level "previous baseline" resolver.
 
-    Wraps resolve_prev_nav_for_folios() with a fallback that the
-    app.py block intended but never actually applied: if the skip-back
-    loop exhausts max_lookback without finding a date with sufficient
-    ISIN overlap, fall back to whatever the immediate previous snapshot
-    on disk contains (load_previous_nav_map()).
+    Wraps resolve_prev_nav_for_folios() with a fallback: if the skip-back
+    loop exhausts max_lookback without finding a date with sufficient ISIN
+    overlap, fall back to the newest snapshot on disk that is strictly
+    BEFORE current_date_iso.
 
-    This fixes the dead-code bug where app.py called
-    load_previous_nav_map_cached() and get_previous_nav_date() but
-    threw their results away before they could serve as fallbacks.
-
-    Parameters
-    ----------
-    current_date_iso : str or date
-        The "today" NAV date. Accepts ISO string ('YYYY-MM-DD') or
-        a date object — same flexibility as resolve_prev_nav_for_folios.
-    our_isins : tuple of str
-        ISINs the caller's folios hold. Tuple (not set) so the
-        @st.cache_data wrapper in app.py can hash it.
-    max_lookback : int
-        How many trading days to walk backward before giving up.
-    min_overlap_pct : float
-        Fraction of our_isins that must be present in a candidate
-        date's NAV map for it to be accepted as the baseline.
-
-    Returns
-    -------
-    (iso_or_None, nav_map, diagnostics)
-        iso_or_None : str | None
-            The baseline date that was used ('YYYY-MM-DD'), or None
-            if both skip-back and fallback failed.
-        nav_map : dict
-            {isin: nav_float} for the baseline date. Empty dict if
-            nothing could be resolved.
-        diagnostics : dict
-            Same shape as resolve_prev_nav_for_folios() returns, plus:
-              - fallback_used : bool
-              - fallback_date : str | None
-              - first_tried_date : str | None  (the immediate previous
-                trading day — useful for the "snapshot was incomplete"
-                warning in app.py)
+    Returns (iso_or_None, nav_map, diagnostics). diagnostics is the
+    skip-back diagnostics plus:
+      - fallback_used : bool
+      - fallback_date : str | None
+      - first_tried_date : str | None  (immediate previous trading day)
     """
     iso, nav_map, diag = resolve_prev_nav_for_folios(
         current_date_iso, our_isins,
@@ -1226,36 +1324,25 @@ def get_previous_nav_baseline(
         min_overlap_pct=min_overlap_pct,
     )
 
-    # Surface the immediate previous trading day for UI messaging.
-    # Saves app.py from having to recompute it just to print "using X
-    # instead of Y because Y was incomplete".
-    if isinstance(current_date_iso, str):
-        _cd = datetime.strptime(current_date_iso, "%Y-%m-%d").date()
-    else:
-        _cd = (
-            current_date_iso.date() if hasattr(current_date_iso, "date")
-            else current_date_iso
-        )
-    _first_tried = get_last_business_day(_cd).strftime("%Y-%m-%d")
-    diag["first_tried_date"] = _first_tried
+    current = _as_date(current_date_iso)
+    current_iso = current.strftime("%Y-%m-%d")
+    diag["first_tried_date"] = get_last_business_day(current).strftime("%Y-%m-%d")
 
     if iso and nav_map:
         diag["fallback_used"] = False
         diag["fallback_date"] = None
         return iso, nav_map, diag
 
-    # Skip-back exhausted — fall back to the file-system previous
-    # snapshot. This is the rescue path for the failure mode where
-    # AMFI's history endpoint is unavailable AND no recent disk
-    # snapshot covers enough of our folios.
-    fallback_map = load_previous_nav_map()
-    fallback_date = get_previous_nav_date()
+    # Skip-back exhausted — fall back to the newest snapshot older than the
+    # requested date (NOT older than the latest file on disk).
+    fallback_map = load_previous_nav_map(current_iso)
+    fallback_date = get_previous_nav_date(current_iso)
     if fallback_map:
         diag["fallback_used"] = True
         diag["fallback_date"] = fallback_date
         log.warning(
             "[NAV-BASELINE] Skip-back found no sufficient overlap in "
-            "%d trading days; falling back to load_previous_nav_map() "
+            "%d trading days; falling back to previous snapshot "
             "(date=%s, %d ISINs)",
             max_lookback, fallback_date, len(fallback_map),
         )
@@ -1272,58 +1359,24 @@ def get_previous_nav_baseline(
 
 def get_week_ago_nav(
     current_date_iso,
-    days_back: int = 7,
+    days_back: Optional[int] = None,
     use_business_days: bool = True,
 ) -> tuple:
     """
-    Fetch NAV for `days_back` trading (or calendar) days before
-    current_date.
+    Fetch NAV for roughly "one week before" current_date.
 
-    Replaces the inline `timedelta(days=7)` arithmetic that lived in
-    app.py's 1-Week Movement block. Moving it here means the policy
-    (how to interpret "1 week ago") is owned by nav_engine, not the
-    UI layer — so background_worker and any headless caller get the
-    same behaviour.
+    use_business_days=True  (default) — `days_back` counts NSE TRADING days,
+        default 5 (= the same weekday last week, barring holidays).
+    use_business_days=False — `days_back` is calendar days, default 7; the
+        result is walked back to the nearest preceding trading day.
 
-    Parameters
-    ----------
-    current_date_iso : str or date
-        The "today" NAV date. Accepts ISO string ('YYYY-MM-DD') or
-        a date object.
-    days_back : int
-        How many days to walk back. Default 7.
-    use_business_days : bool
-        True (default)  — count only NSE trading days, skipping
-                          weekends AND holidays. "1 week ago" becomes
-                          "5 trading days ago" (previous Friday for a
-                          Friday start). Consistent with the 1-day
-                          block's semantics.
-        False           — legacy calendar-day arithmetic. Still walks
-                          back to the nearest preceding trading day
-                          before fetching, so the returned map is
-                          always valid even if `days_back` lands on a
-                          weekend/holiday.
-
-    Returns
-    -------
-    (target_iso_or_None, nav_map)
-        target_iso : str | None
-            The exact date the fetch was resolved for, after any
-            holiday/weekend walk-back. 'YYYY-MM-DD' format.
-        nav_map : dict
-            {isin: nav_float} for the resolved date. Empty dict if
-            get_or_fetch_nav_for_date() returned nothing.
+    Returns (target_iso_or_None, nav_map).
     """
-    if isinstance(current_date_iso, str):
-        current_date = datetime.strptime(current_date_iso, "%Y-%m-%d").date()
-    else:
-        current_date = (
-            current_date_iso.date() if hasattr(current_date_iso, "date")
-            else current_date_iso
-        )
+    current_date = _as_date(current_date_iso)
+    if days_back is None:
+        days_back = 5 if use_business_days else 7
 
     if use_business_days:
-        # Count backward over NSE trading days only.
         cursor = current_date
         counted = 0
         while counted < days_back:
@@ -1332,8 +1385,6 @@ def get_week_ago_nav(
                 counted += 1
         target = cursor
     else:
-        # Legacy calendar-day arithmetic, then walk back to the
-        # nearest preceding trading day so the fetch is valid.
         target = current_date - timedelta(days=days_back)
         while not is_trading_day(target):
             target -= timedelta(days=1)
@@ -1346,8 +1397,6 @@ def get_week_ago_nav(
         target_iso,
     )
 
-    # Uses the local-first orchestrator (disk → DB → network) inherited
-    # from this module's get_or_fetch_nav_for_date.
     nav_map = get_or_fetch_nav_for_date(target_iso, allow_network=True)
     return target_iso, nav_map
 
@@ -1355,23 +1404,30 @@ def get_week_ago_nav(
 # ══════════════════════════════════════════════════════════════
 # IN-MEMORY INDEX
 # ══════════════════════════════════════════════════════════════
+class _IndexState(NamedTuple):
+    nav: dict
+    amc: dict
+    records: list
+    path: Optional[str]
+    sig: Optional[tuple]
+
+
+_EMPTY_STATE = _IndexState({}, {}, [], None, None)
+
+
 class AMFINavIndex:
     """
     In-memory ISIN-keyed index of the latest snapshot. Thread-safe, never
     touches the network, reloads automatically when a newer / changed
     snapshot appears (checked at most every _SIG_CHECK_INTERVAL seconds).
+    State is swapped atomically as one immutable tuple.
     """
 
-    def __init__(self, ttl_seconds: int = 3600):
+    def __init__(self):
         self._lock = threading.RLock()
-        self._nav_by_isin: dict[str, NavPoint] = {}
-        self._amc_by_isin: dict[str, str] = {}
-        self._records: list[dict] = []
-        self._loaded_from: Optional[str] = None
-        self._loaded_sig: Optional[tuple] = None
-        self._last_load: Optional[datetime] = None
+        self._state: _IndexState = _EMPTY_STATE
         self._checked_at: float = 0.0
-        self._ttl_seconds = ttl_seconds  # kept for compat; reload is signature-driven
+        self._failed_at: Optional[float] = None
 
     @staticmethod
     def _current_sig() -> Optional[tuple]:
@@ -1383,77 +1439,94 @@ class AMFINavIndex:
         except OSError:
             return None
 
+    def _recently_failed(self) -> bool:
+        return (self._failed_at is not None
+                and (_time.monotonic() - self._failed_at) < _SIG_CHECK_INTERVAL)
+
     def _ensure_loaded(self) -> None:
-        if self._nav_by_isin and (_time.monotonic() - self._checked_at) < _SIG_CHECK_INTERVAL:
+        st = self._state
+        if st.nav and (_time.monotonic() - self._checked_at) < _SIG_CHECK_INTERVAL:
+            return
+        if not st.nav and self._recently_failed():
             return
         with self._lock:
+            st = self._state
             now = _time.monotonic()
-            if self._nav_by_isin and (now - self._checked_at) < _SIG_CHECK_INTERVAL:
+            if st.nav and (now - self._checked_at) < _SIG_CHECK_INTERVAL:
+                return
+            if not st.nav and self._recently_failed():
                 return
             self._checked_at = now
-            sig = self._current_sig()
-            if self._nav_by_isin and sig == self._loaded_sig:
+            if st.nav and self._current_sig() == st.sig:
                 return
             self._load_locked()
 
     def _load_locked(self) -> dict[str, NavPoint]:
         path = _latest_snapshot_path()
         if path is None:
-            log.error("[AMFI] No saved NAV file in '%s' (abs: %s). Run "
-                      "download_and_save_nav_if_needed() first, or check NAV_TEXT_DIR.",
-                      NAV_TEXT_DIR, os.path.abspath(NAV_TEXT_DIR))
+            self._failed_at = _time.monotonic()
+            _log_throttled("amfi-no-file", logging.ERROR,
+                           "[AMFI] No saved NAV file in '%s' (abs: %s). Run "
+                           "download_and_save_nav_if_needed() first, or check NAV_TEXT_DIR.",
+                           NAV_TEXT_DIR, os.path.abspath(NAV_TEXT_DIR))
             return {}
         try:
             sig = (path,) + _file_sig(path)
             with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
                 text = f.read()
         except OSError:
-            log.exception("[AMFI] Failed to read saved NAV file '%s'", path)
+            self._failed_at = _time.monotonic()
+            _log_throttled("amfi-read-fail", logging.ERROR,
+                           "[AMFI] Failed to read saved NAV file '%s'", path)
             return {}
         if not text.strip():
-            log.error("[AMFI] Saved NAV file '%s' is empty", path)
+            self._failed_at = _time.monotonic()
+            _log_throttled("amfi-empty-file", logging.ERROR,
+                           "[AMFI] Saved NAV file '%s' is empty", path)
             return {}
 
         nav_map, amc_map, records = _parse_nav_text(text)
-        self._nav_by_isin = nav_map
-        self._amc_by_isin = amc_map
-        self._records = records
-        self._loaded_from = path
-        self._loaded_sig = sig
-        self._last_load = datetime.now()
+        self._state = _IndexState(nav_map, amc_map, records, path, sig)
         self._checked_at = _time.monotonic()
+        self._failed_at = None
         log.info("[AMFI] Loaded index from '%s': %s ISINs (NAV), %s ISINs (AMC), %s records",
                  path, len(nav_map), len(amc_map), len(records))
         return nav_map
 
     def load(self, force: bool = False) -> dict[str, NavPoint]:
         with self._lock:
-            if force or not self._nav_by_isin:
-                return self._load_locked() or self._nav_by_isin
+            if force or (not self._state.nav and not self._recently_failed()):
+                return self._load_locked() or self._state.nav
             self._ensure_loaded()
-            return self._nav_by_isin
+            return self._state.nav
 
     def get_nav(self, isin: str) -> Optional[NavPoint]:
         if not isin:
             return None
         self._ensure_loaded()
-        if not self._nav_by_isin:
+        st = self._state
+        if not st.nav:
             self.load()
-        return self._nav_by_isin.get(isin.strip().upper())
+            st = self._state
+        return st.nav.get(isin.strip().upper())
 
     def get_amc(self, isin: str) -> str:
         if not isin:
             return ""
         self._ensure_loaded()
-        if not self._amc_by_isin:
+        st = self._state
+        if not st.amc:
             self.load()
-        return self._amc_by_isin.get(isin.strip().upper(), "")
+            st = self._state
+        return st.amc.get(isin.strip().upper(), "")
 
     def get_records(self) -> list[dict]:
         self._ensure_loaded()
-        if not self._records:
+        st = self._state
+        if not st.records:
             self.load()
-        return self._records
+            st = self._state
+        return st.records
 
 
 _amfi = AMFINavIndex()
@@ -1482,12 +1555,19 @@ def load_nav_dataframe():
 # DB INDEXES
 # ══════════════════════════════════════════════════════════════
 _indexes_ready = False
+_UNIQUE_OK = False          # True once UNIQUE(nav_option_id, nav_date) exists
 _INDEX_LOCK_DB = threading.Lock()
+
+
+def _create_unique_history_index(conn) -> bool:
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_nav_history_opt_date "
+                 "ON nav_history(nav_option_id, nav_date)")
+    return True
 
 
 def ensure_db_indexes() -> None:
     """Idempotent. Called automatically before the first ingestion."""
-    global _indexes_ready
+    global _indexes_ready, _UNIQUE_OK
     if _indexes_ready:
         return
     with _INDEX_LOCK_DB:
@@ -1496,13 +1576,22 @@ def ensure_db_indexes() -> None:
         try:
             with get_conn() as conn:
                 try:
-                    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_nav_history_opt_date "
-                                 "ON nav_history(nav_option_id, nav_date)")
+                    _UNIQUE_OK = _create_unique_history_index(conn)
                 except Exception:
-                    log.warning("[NAV-DB] Could not create UNIQUE (nav_option_id, nav_date) "
-                                "index (duplicates?) — creating a plain index instead")
-                    conn.execute("CREATE INDEX IF NOT EXISTS ix_nav_history_opt_date "
-                                 "ON nav_history(nav_option_id, nav_date)")
+                    log.warning("[NAV-DB] UNIQUE (nav_option_id, nav_date) failed — "
+                                "removing duplicate rows and retrying")
+                    try:
+                        conn.execute(
+                            "DELETE FROM nav_history WHERE rowid NOT IN ("
+                            "SELECT MAX(rowid) FROM nav_history "
+                            "GROUP BY nav_option_id, nav_date)")
+                        _UNIQUE_OK = _create_unique_history_index(conn)
+                    except Exception:
+                        log.exception("[NAV-DB] Could not enforce UNIQUE index — "
+                                      "using plain index and INSERT OR REPLACE")
+                        _UNIQUE_OK = False
+                        conn.execute("CREATE INDEX IF NOT EXISTS ix_nav_history_opt_date "
+                                     "ON nav_history(nav_option_id, nav_date)")
                 for stmt in (
                     "CREATE INDEX IF NOT EXISTS ix_nav_history_date ON nav_history(nav_date)",
                     "CREATE INDEX IF NOT EXISTS ix_nav_options_isin_payout ON nav_options(isin_payout)",
@@ -1519,6 +1608,14 @@ def ensure_db_indexes() -> None:
 # ══════════════════════════════════════════════════════════════
 # DB QUERIES
 # ══════════════════════════════════════════════════════════════
+# Two indexed lookups instead of `isin_payout = ? OR isin_reinvest = ?`
+# (an OR defeats both indexes). Bind the ISIN twice.
+_OPT_CTE = ("WITH opts AS ("
+            "SELECT id FROM nav_options WHERE isin_payout = ? "
+            "UNION "
+            "SELECT id FROM nav_options WHERE isin_reinvest = ?) ")
+
+
 def _points_from_rows(rows) -> dict[str, NavPoint]:
     """rows of (isin_payout, isin_reinvest, nav_value, nav_date) → {isin: NavPoint}.
     Emits BOTH ISINs of every option."""
@@ -1535,11 +1632,10 @@ def get_latest_nav_by_isin(isin: str) -> Optional[NavPoint]:
     """Latest NAV + date for an ISIN, from DB."""
     isin = (isin or "").strip().upper()
     with get_conn() as conn:
-        row = conn.execute("""
+        row = conn.execute(_OPT_CTE + """
             SELECT nh.nav_value, nh.nav_date
             FROM nav_history nh
-            JOIN nav_options o ON nh.nav_option_id = o.id
-            WHERE (o.isin_payout = ? OR o.isin_reinvest = ?)
+            JOIN opts ON nh.nav_option_id = opts.id
             ORDER BY nh.nav_date DESC
             LIMIT 1
         """, (isin, isin)).fetchone()
@@ -1585,12 +1681,11 @@ def get_nav_for_date_by_isin(isin: str, nav_date: str) -> Optional[float]:
     isin = (isin or "").strip().upper()
 
     with get_conn() as conn:
-        row = conn.execute("""
+        row = conn.execute(_OPT_CTE + """
             SELECT nh.nav_value
             FROM nav_history nh
-            JOIN nav_options o ON nh.nav_option_id = o.id
-            WHERE (o.isin_payout = ? OR o.isin_reinvest = ?)
-                AND nh.nav_date = ?
+            JOIN opts ON nh.nav_option_id = opts.id
+            WHERE nh.nav_date = ?
             LIMIT 1
         """, (isin, isin, date_str)).fetchone()
     return float(row[0]) if row else None
@@ -1617,11 +1712,10 @@ def get_previous_nav_by_isin(isin: str) -> Optional[NavPoint]:
     """Penultimate NAV for an ISIN, from DB."""
     isin = (isin or "").strip().upper()
     with get_conn() as conn:
-        row = conn.execute("""
+        row = conn.execute(_OPT_CTE + """
             SELECT nh.nav_value, nh.nav_date
             FROM nav_history nh
-            JOIN nav_options o ON nh.nav_option_id = o.id
-            WHERE (o.isin_payout = ? OR o.isin_reinvest = ?)
+            JOIN opts ON nh.nav_option_id = opts.id
             ORDER BY nh.nav_date DESC
             LIMIT 1 OFFSET 1
         """, (isin, isin)).fetchone()
@@ -1645,9 +1739,10 @@ def get_previous_navs_map() -> dict[str, NavPoint]:
 
 def _history(isin: str, days: int, regular_only: bool) -> list[dict]:
     isin = (isin or "").strip().upper()
-    plan_clause = "AND o.plan = 'Regular Plan'" if regular_only else ""
+    plan_join = ("JOIN nav_options o ON o.id = nh.nav_option_id "
+                 "AND o.plan = 'Regular Plan' ") if regular_only else ""
     with get_conn() as conn:
-        rows = conn.execute(f"""
+        rows = conn.execute(_OPT_CTE + f"""
             SELECT
                 nh.nav_date,
                 nh.nav_value,
@@ -1655,8 +1750,8 @@ def _history(isin: str, days: int, regular_only: bool) -> list[dict]:
                     PARTITION BY nh.nav_option_id ORDER BY nh.nav_date
                 ) AS prev_nav
             FROM nav_history nh
-            JOIN nav_options o ON nh.nav_option_id = o.id
-            WHERE (o.isin_payout = ? OR o.isin_reinvest = ?) {plan_clause}
+            JOIN opts ON nh.nav_option_id = opts.id
+            {plan_join}
             ORDER BY nh.nav_date DESC
             LIMIT ?
         """, (isin, isin, days)).fetchall()
@@ -1761,13 +1856,11 @@ _PLAN_DIRECT_RE = re.compile(r"\bdirect\b", re.I)
 _AMC_SUFFIX_RE = re.compile(r"\s+mutual fund$", re.I)
 
 
-def _derive_plan_option(parts: list[str], scheme_name: str) -> tuple[str, str]:
+def _derive_plan_option(scheme_name: str) -> tuple[str, str]:
     """
-    Plan/option from an explicit 8-col layout when present, otherwise from
-    the scheme name (live & history files carry no plan column).
+    Plan/option derived from the scheme name (every layout is normalized to
+    the 6-col form, which carries no plan/option columns).
     """
-    if len(parts) >= 8 and "plan" in parts[4].lower():
-        return parts[4], parts[5]
     n = scheme_name.lower()
     plan = "Direct Plan" if _PLAN_DIRECT_RE.search(scheme_name) else "Regular Plan"
     if "growth" in n:
@@ -1783,9 +1876,9 @@ def _derive_plan_option(parts: list[str], scheme_name: str) -> tuple[str, str]:
 
 def _parse_nav_file(filepath: str) -> list[dict]:
     """
-    Parse an AMFI text file (any layout) into DB-ready Regular Plan rows.
-    Plan is derived per row, so the Regular-Plan filter works for the 6-col
-    live file too.
+    Parse an AMFI text file (any layout) into DB-ready rows, filtered to the
+    plans in NAV_INGEST_PLANS (default: Regular Plan). Plan is derived per
+    row from the scheme name.
     """
     try:
         with open(filepath, "r", encoding="utf-8-sig", errors="replace") as f:
@@ -1801,8 +1894,8 @@ def _parse_nav_file(filepath: str) -> list[dict]:
             code = int(r["scheme_code"])
         except ValueError:
             continue
-        plan, option = _derive_plan_option(r["parts"], r["scheme_name"])
-        if plan.lower() != "regular plan":
+        plan, option = _derive_plan_option(r["scheme_name"])
+        if not _INGEST_ALL and plan.lower() not in _INGEST_PLANS:
             continue
         rows.append({
             "scheme_code": code,
@@ -1816,6 +1909,14 @@ def _parse_nav_file(filepath: str) -> list[dict]:
             "nav_date": r["nav_date"],          # ISO string
         })
     return rows
+
+
+_HISTORY_UPSERT = (
+    "INSERT INTO nav_history (nav_option_id, nav_value, nav_date) VALUES (?, ?, ?) "
+    "ON CONFLICT(nav_option_id, nav_date) DO UPDATE SET nav_value = excluded.nav_value")
+_HISTORY_REPLACE = (
+    "INSERT OR REPLACE INTO nav_history (nav_option_id, nav_value, nav_date) "
+    "VALUES (?, ?, ?)")
 
 
 def _insert_nav_rows(rows: list[dict]) -> dict:
@@ -1902,8 +2003,7 @@ def _insert_nav_rows(rows: list[dict]) -> dict:
                 hist[k] = r["nav_value"]
 
             cur.executemany(
-                "INSERT OR REPLACE INTO nav_history (nav_option_id, nav_value, nav_date) "
-                "VALUES (?, ?, ?)",
+                _HISTORY_UPSERT if _UNIQUE_OK else _HISTORY_REPLACE,
                 [(oid, v, d) for (oid, d), v in hist.items()])
             conn.commit()
         except Exception:
@@ -1915,7 +2015,7 @@ def _insert_nav_rows(rows: list[dict]) -> dict:
 
 
 def ingest_nav_file_to_db(filepath: str) -> dict:
-    """Parse an AMFI NAV text file (any layout) and insert Regular Plan rows."""
+    """Parse an AMFI NAV text file (any layout) and insert rows (see NAV_INGEST_PLANS)."""
     try:
         rows = _parse_nav_file(filepath)
         result = _insert_nav_rows(rows)

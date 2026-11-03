@@ -12128,3 +12128,31 @@ requests.exceptions.HTTPError: 500 Server Error: Internal Server Error for url: 
 2026-11-03 11:00:25,777 [INFO] [cron] background_worker | ======================================================================
 2026-11-03 11:00:25,779 [INFO] [cron] background_worker | [WORKER] data_version bumped
 ──── worker end   2026-11-03 11:00:26 IST (exit=0) ────
+──── worker start 2026-11-03 15:00:01 IST ────
+2026-11-03 15:00:03,730 [INFO] [cron] background_worker | ======================================================================
+2026-11-03 15:00:03,730 [INFO] [cron] background_worker | BACKGROUND WORKER RUN  @ 2026-11-03T15:00:03  (trigger=cron, pid=12463)
+2026-11-03 15:00:03,730 [INFO] [cron] background_worker | ======================================================================
+2026-11-03 15:00:05,313 [INFO] [cron] background_worker | [MAILBACK] Starting
+2026-11-03 15:00:08,643 [INFO] [cron] mailback_sync | [IMAP] Connected
+2026-11-03 15:00:09,094 [INFO] [cron] mailback_sync | [CAMS] Found 0 unread mailback emails
+2026-11-03 15:00:09,436 [INFO] [cron] mailback_sync | [KFinTech] Found 0 unread mailback emails
+2026-11-03 15:00:10,315 [INFO] [cron] background_worker | [MAILBACK] checked=0 downloaded=0 parsed=0 failed=0 no_data=0 errors=0
+2026-11-03 15:00:10,317 [INFO] [cron] background_worker | [mailback] -> OK
+2026-11-03 15:00:10,318 [INFO] [cron] background_worker | [NAV-LIVE] Starting
+2026-11-03 15:00:10,340 [INFO] [cron] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-11-03 15:00:11,384 [INFO] [cron] nav_service | [NAV-PARSE] Parsed 14055 records | column counts seen: {8: 14188}
+2026-11-03 15:00:11,403 [INFO] [cron] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-11-02.txt: 1527192 bytes, 17943 rows (source=live)
+2026-11-03 15:00:11,413 [INFO] [cron] nav_service | [AMFI] NAV file overwritten: nav_data/nav_2026-11-02.txt (1527192 bytes, 18219 lines) | NAV Date: 2026-11-02
+2026-11-03 15:00:11,416 [INFO] [cron] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-11-02.txt...
+2026-11-03 15:00:12,142 [INFO] [cron] nav_db | [NAV-DB] Ingested 4314 records (skipped 0) for date 2026-11-02
+2026-11-03 15:00:12,144 [INFO] [cron] nav_service | [NAV-DB] Success: Inserted 4314 NAV records
+2026-11-03 15:00:12,144 [INFO] [cron] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-11-03 15:00:12,144 [INFO] [cron] background_worker | [nav_live] -> OK
+2026-11-03 15:00:12,144 [INFO] [cron] background_worker | [NAV-PREV] Starting
+2026-11-03 15:00:12,203 [INFO] [cron] nav_service | [AMFI-HIST] Already have 2026-10-30 — skipping fetch
+2026-11-03 15:00:12,203 [INFO] [cron] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-10-30
+2026-11-03 15:00:12,203 [INFO] [cron] background_worker | [nav_previous] -> OK
+2026-11-03 15:00:12,203 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-11-03T15:00:12  (trigger=cron)
+2026-11-03 15:00:12,203 [INFO] [cron] background_worker | ======================================================================
+2026-11-03 15:00:12,205 [INFO] [cron] background_worker | [WORKER] data_version bumped
+──── worker end   2026-11-03 15:00:12 IST (exit=0) ────
