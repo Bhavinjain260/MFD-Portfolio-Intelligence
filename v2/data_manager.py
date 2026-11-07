@@ -9,12 +9,13 @@ No .upper(), .lower(), or date reformatting is applied.
 import logging
 import os
 import re
-import io 
+import threading
+from pathlib import Path
 import sqlite3
-import time
+
 from contextlib import contextmanager
 from datetime import datetime
-from pathlib import Path
+
 
 import pandas as pd
 import streamlit as st
@@ -32,13 +33,12 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "mfd_local.db")
 # background_worker.py runs in a separate process from Streamlit, so an
 # in-memory counter would never be visible to the app. Persisting to a
 # file means any process that bumps also notifies every other process.
-import threading
-from pathlib import Path
+
 
 _lock = threading.Lock()
 _VERSION_FILE = Path(os.environ.get(
     "DATA_VERSION_FILE",
-    str(Path(__file__).resolve().parent / ".data_version"),
+    str(Path(__file__).resolve().parent / "logs" / ".data_version"),
 ))
 
 
@@ -2368,7 +2368,7 @@ def render_data_manager():
 
 
     with st.expander("📧 Mailback Auto-Sync", expanded=False):
-        import cams_mailback_sync as cms
+        import mailback_sync as cms
 
         # Settings + auto-sync toggle (moved from Admin Panel)
         cms.render_settings_ui()

@@ -25,6 +25,14 @@ import time as _time
 from pathlib import Path
 import fcntl
 
+PROJECT_DIR = Path(__file__).resolve().parent
+LOG_DIR = PROJECT_DIR / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+PROJECT_DIR = Path(__file__).resolve().parent
+LOG_DIR = PROJECT_DIR / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 LOCK_FILE = os.environ.get("WORKER_LOCK", "/tmp/background_worker.lock")
 
 # Human-readable record of the last successful worker run. Read by the
@@ -32,16 +40,15 @@ LOCK_FILE = os.environ.get("WORKER_LOCK", "/tmp/background_worker.lock")
 # data_version — this one exists so you can `cat` it from a shell.
 STAMP_FILE = os.environ.get(
     "WORKER_STAMP_FILE",
-    str(Path(__file__).resolve().parent / ".worker_run_stamp"),
+    str(LOG_DIR / ".worker_run_stamp"),
 )
 
 os.environ.setdefault("TZ", "Asia/Kolkata")
 _time.tzset()
 
-PROJECT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_DIR))
 
-LOG_FILE = os.environ.get("WORKER_LOG", "background_worker.log")
+LOG_FILE = os.environ.get("WORKER_LOG", str(LOG_DIR / "background_worker.log"))
 
 logging.basicConfig(
     level=logging.INFO,

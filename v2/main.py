@@ -22,15 +22,15 @@ import capital_gain as cg
 
 import capital_gain as cg_row
 import data_manager
-import nav_data_ingestion
-# import nav_scheduler
+
+
 import data_manager as dm
 from data_manager import current as data_version
 import xirr
 from init_db import init_db, get_conn
 from theme_patch import THEME_WATCHER_JS, render_theme
-import cams_mailback_sync
-import cams_mailback_sync as mail_sync
+import mailback_sync
+import mailback_sync as mail_sync
 import email_tempate
 import sync_failure_log as sflog
 import worker_launcher
@@ -43,8 +43,9 @@ from xirr import compute_xirr_debug
 # index all live there now. app.py only consumes them.
 # ══════════════════════════════════════════════════════════════
 import nav_engine
+
 from nav_engine import (
-    NAV_TEXT_DIR,
+NAV_TEXT_DIR,
     _ensure_text_dir,
     _file_nav_date,                      # was _get_file_nav_date
     _previous_snapshot_path,
@@ -55,7 +56,9 @@ from nav_engine import (
     sync_previous_business_day_nav_if_needed,
     diagnose_previous_day_coverage,
     _amfi,
+
 )
+
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2190,7 +2193,7 @@ def get_all_folios_with_isin_and_nav(_get_conn, _v: int, force_reload: bool = Fa
              force_reload)
     nav_map = _amfi.load(force=force_reload)
     log.info("[NAV-FLOW][Step 1] Index ready: %s ISINs (NAV), %s ISINs (AMC)",
-             len(nav_map), len(_amfi._amc_by_isin))
+             len(nav_map), len(_amfi._state.amc))
     if not nav_map:
         log.error("[NAV-FLOW][Step 1] nav_map is EMPTY — no saved NAV file found or it's unreadable. "
                   "Every row downstream will have current_nav=None, so total AUM will be 0. "
@@ -2991,40 +2994,7 @@ ensure_family_tables()
 ensure_monthly_brokerage_schema()   # UNIQUE(amc,month,year) for the upsert
 
 
-# ==================== BSE SCHEME MASTER AUTO-DOWNLOAD ====================
-# Moved to background_worker.py — Streamlit no longer triggers downloads
-# on startup. Use the Admin Panel button for manual runs.
 
-
-# # ==================== CAMS MAILBACK AUTO-SYNC ====================
-# def _auto_cams_mailback_sync():
-#     """Non-blocking: starts background IMAP sync if needed, once per day."""
-#     import cams_mailback_sync as cms
-
-#     if not st.session_state.get("cams_mailback_auto_toggle", True):
-#         return
-
-#     last_run = st.session_state.get("cams_mailback_auto_last_run")
-#     today = datetime.now().strftime("%Y-%m-%d")
-#     if last_run == today:
-#         return
-
-#     st.session_state["cams_mailback_auto_last_run"] = today
-
-#     status = cms.get_sync_status()
-#     if status["running"]:
-#         st.info("⏳ Syncing in background...")
-#     elif status["done"]:
-#         st.success(status["msg"]) if status["ok"] else st.error(status["msg"])
-
-# Background workers (mailback IMAP poller, NAV schedule, BSE Selenium)
-# now run in the standalone `background_worker.py` process, not inside
-# Streamlit. Do NOT re-add a startup call here — it would double-run them.
-
-
-# ==================== GLOBAL BSE DOWNLOAD/PARSE NOTIFICATION ====================
-# Reads the last BSE result written by the standalone background worker
-# (via bse_auto's status file), and shows a toast once per session.
 def _notify_bse_scheme_status():
     from bse_auto import get_download_status
     status = get_download_status()
@@ -3109,9 +3079,12 @@ if _watchdog_startup.get("triggered"):
 #
 # If either moved, we clear every cache that reads the DB or NAV files.
 
+LOG_DIR = Path(__file__).resolve().parent / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 WORKER_STAMP_FILE = os.environ.get(
     "WORKER_STAMP_FILE",
-    str(Path(__file__).resolve().parent / ".worker_run_stamp"),
+    str(LOG_DIR / ".worker_run_stamp"),
 )
 
 
@@ -3870,7 +3843,7 @@ def send_brokerage_sharing_email(
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
     from email.mime.application import MIMEApplication
-    import cams_mailback_sync as cms
+    import mailback_sync as cms
 
     creds = cms.get_credentials()
     if not creds["imap_user"] or not creds["imap_app_password"]:
