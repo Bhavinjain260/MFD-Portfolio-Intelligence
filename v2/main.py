@@ -1,18 +1,16 @@
 import logging
 import os
 import re
-import time
-import requests
-import threading
+
 import warnings
-from pathlib import Path          # ← add this
-from datetime import datetime, timedelta, date as date_cls
-from datetime import timedelta, datetime as dt
-from datetime import time as time_cls
+from pathlib import Path
+from datetime import date as date_cls
+from datetime import datetime as dt
+
 from datetime import timedelta
 from typing import Optional
 from datetime import datetime
-from bse_auto import should_auto_download, start_background_download
+
 
 import pandas as pd
 import plotly.express as px
@@ -24,18 +22,19 @@ import capital_gain as cg_row
 import data_manager
 
 
-import data_manager as dm
+
 from data_manager import current as data_version
 import xirr
 from init_db import init_db, get_conn
 from theme_patch import THEME_WATCHER_JS, render_theme
-import mailback_sync
+
 import mailback_sync as mail_sync
-import email_tempate
+
 import sync_failure_log as sflog
 import worker_launcher
+import bse_scheme
 
-from xirr import compute_xirr_debug
+
 
 # ══════════════════════════════════════════════════════════════
 # NAV SERVICE — single source of truth for all NAV logic.
@@ -174,19 +173,10 @@ def format_brokerage(val) -> str:
 
 @st.cache_data(show_spinner=False, ttl=3600)
 def _bse_scheme_lookup(_v: int) -> pd.DataFrame:
-    """Shared cached dedup of bse_scheme_master. product_code → scheme_name, isin.
-    Consumed by any function that maps a broker/AMC product code to a
-    scheme name or ISIN. One query, one cache entry, reused everywhere."""
-    with get_conn() as conn:
-        return pd.read_sql("""
-            SELECT UPPER(TRIM(Channel_Partner_Code)) AS product_code,
-                   MAX(Scheme_Name) AS scheme_name,
-                   MAX(ISIN)        AS isin
-            FROM bse_scheme_master
-            WHERE Channel_Partner_Code IS NOT NULL
-              AND TRIM(Channel_Partner_Code) != ''
-            GROUP BY UPPER(TRIM(Channel_Partner_Code))
-        """, conn)
+    """Cached wrapper around bse_scheme.get_scheme_lookup().
+    Logic lives in bse_scheme.py; decorator lives here so bse_scheme stays
+    importable from plain-Python contexts."""
+    return bse_scheme.get_scheme_lookup()
 
 
 @st.cache_data(show_spinner=False)
@@ -237,14 +227,10 @@ def get_cams_txns_raw(folio_no: str, product_code: str) -> pd.DataFrame:
     return df
 
 
+@st.cache_data(show_spinner=False)
 def get_isin_for_cams_product(prodcode: str) -> Optional[str]:
-    with get_conn() as conn:
-        row = conn.execute("""
-            SELECT ISIN FROM bse_scheme_master
-            WHERE UPPER(TRIM(Channel_Partner_Code)) = ?
-            LIMIT 1
-        """, (prodcode.strip().upper(),)).fetchone()
-        return row[0] if row else None
+    """Cached wrapper around bse_scheme.get_isin_for_product()."""
+    return bse_scheme.get_isin_for_product(prodcode)
 
 @st.cache_data(show_spinner=False)
 def get_client_kfin_schemes(folio_ids: list[str], _v: int) -> pd.DataFrame:
@@ -1466,13 +1452,13 @@ def generate_valuation_pdf(
     # Title
     pdf.set_font('Main', 'B', 16)
     pdf.set_text_color(*DARK)
-    pdf.cell(PAGE_W, 10, 'Portfolio Valuation Report', align='C', new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 10, 'Portfolio Valuation Report', align='C', ln=1)
     pdf.ln(3)
 
     # Client info
     pdf.set_font('Main', '', 9)
     pdf.set_text_color(*GREY)
-    pdf.cell(PAGE_W, 5, f'Client: {client_name}', new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(PAGE_W, 5, f'Client: {client_name}', ln=1)
     pdf.cell(PAGE_W, 5,
              f'PAN: {pan or "N/A"}   |   Code: {client_code}   |   Mobile: {mobile or "N/A"}',
              new_x="LMARGIN", new_y="NEXT")
@@ -1486,8 +1472,8 @@ def generate_valuation_pdf(
     col_w = PAGE_W / 3
     pdf.set_font('Main', 'B', 8)
     pdf.set_text_color(*GREY)
-    pdf.cell(col_w, 5, 'Total Invested', border=0, fill=True, new_x="RIGHT")
-    pdf.cell(col_w, 5, 'Total Value', border=0, fill=True, new_x="RIGHT")
+    pdf.cell(col_w, 5, 'Total Invested', border=0, fill=True)
+    pdf.cell(col_w, 5, 'Total Value', border=0, fill=True)
     pdf.cell(col_w, 5, 'Gain / Loss', border=0, fill=True, new_x="LMARGIN", new_y="NEXT")
 
     pdf.set_font('Main', 'B', 11)
@@ -1663,149 +1649,6 @@ def generate_valuation_pdf(
 
 
 
-def generate_email_body(client_name: str, report_type: str,
-                        period_str: str | None = None) -> str:
-    """
-    Professional HTML email wrapper — used for both Capital Gain & Valuation emails.
-
-    period_str: human-readable period label, e.g. "FY 2025-26" or
-                "01-Apr-2026 to 23-Sep-2026". Shown in the header so the
-                recipient knows which report they're looking at without
-                opening the attachment.
-    """
-    greeting = f"Dear {client_name},"
-    period_line = f"<br><strong>Period:</strong> {period_str}" if period_str else ""
-
-    if report_type == "Capital Gain":
-        intro = """
-<p>Please find attached your <strong>Capital Gain Report</strong>. This report
-details realized capital gains/losses on your mutual fund redemptions, computed
-using the <strong>FIFO (First In, First Out)</strong> cost-basis method.</p>
-
-<p><strong>What's in the report:</strong></p>
-<ul>
-    <li>Purchase and redemption details for every matched lot</li>
-    <li>STCG / LTCG classification by holding period</li>
-    <li>Realized gain/loss per transaction</li>
-    <li>Tax summary (equity assumption)</li>
-</ul>
-"""
-    else:  # Valuation
-        intro = """
-<p>Please find attached your <strong>Portfolio Valuation Report</strong>. This
-report gives a snapshot of your mutual fund holdings, current valuations, and
-investment performance as of the valuation date.</p>
-
-<p><strong>What's in the report:</strong></p>
-<ul>
-    <li>Scheme-wise investment summary with current valuations</li>
-    <li>Gain/loss analysis across holdings</li>
-    <li>Detailed transaction history for the selected period</li>
-</ul>
-"""
-
-    return f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <style>
-        body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6; color: #333; margin: 0; padding: 20px;
-            background-color: #f9f9f9;
-        }}
-        .email-container {{
-            max-width: 700px; margin: 0 auto; background: white;
-            padding: 30px; border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }}
-        .header {{ border-bottom: 3px solid #2980b9; padding-bottom: 15px; margin-bottom: 20px; }}
-        .header h2 {{ color: #2980b9; margin: 0; font-size: 24px; }}
-        .greeting {{ font-size: 16px; color: #2c3e50; margin-bottom: 15px; }}
-        .intro-section {{
-            background: #ecf0f1; padding: 15px;
-            border-left: 4px solid #2980b9; margin: 20px 0; border-radius: 4px;
-        }}
-        .intro-section p, .intro-section li {{ color: #2c3e50; font-size: 14px; }}
-        .intro-section ul {{ margin: 10px 0; padding-left: 20px; }}
-        .attachment-note {{
-            background: #d5f4e6; border-left: 4px solid #27ae60;
-            padding: 15px; margin: 25px 0; border-radius: 4px;
-        }}
-        .attachment-note strong {{ color: #27ae60; }}
-        .feedback-section {{
-            background: #fff3cd; border-left: 4px solid #f39c12;
-            padding: 15px; margin: 25px 0; border-radius: 4px;
-        }}
-        .feedback-section h3 {{ color: #e67e22; margin-top: 0; font-size: 16px; }}
-        .feedback-section p {{ margin: 8px 0; color: #7d6608; font-size: 14px; }}
-        .footer {{
-            border-top: 1px solid #ddd; padding-top: 20px; margin-top: 30px;
-            color: #7f8c8d; font-size: 12px;
-        }}
-        .signature {{ margin-top: 20px; color: #2c3e50; }}
-    </style>
-</head>
-<body>
-    <div class="email-container">
-        <div class="header">
-            <h2>📊 {report_type} Report</h2>
-        </div>
-
-        <div class="greeting">
-            {greeting}{period_line}
-        </div>
-
-        <div class="intro-section">
-            {intro}
-        </div>
-
-        <div class="attachment-note">
-            <strong>✓ Report Attached</strong><br>
-            Your <strong>{report_type} Report</strong> is attached to this email
-            as a PDF. You can download, print, or save it for your records.
-        </div>
-
-        <div class="feedback-section">
-            <h3>⏰ Please Review Within 24–48 Hours</h3>
-            <p>
-                Kindly review the attached report carefully. If you notice any
-                discrepancy — a missing transaction, incorrect folio number, or
-                a valuation that doesn't match your records — please reply to
-                this email within 24–48 hours so we can correct it.
-            </p>
-        </div>
-
-        <p style="color: #2c3e50; margin: 20px 0;"><strong>What to check:</strong></p>
-        <ul style="color: #2c3e50; margin: 10px 0;">
-            <li>Folio numbers and scheme names</li>
-            <li>Transaction dates, units, and amounts</li>
-            <li>NAV values used and valuation date</li>
-            <li>For Capital Gain reports: purchase and redemption dates per matched lot</li>
-        </ul>
-
-        <div class="footer">
-            <p>
-                <strong>Contact:</strong> If you have any questions about this
-                report, please reply to this email.
-            </p>
-            <p>
-                <strong>Generated:</strong> {datetime.now().strftime("%d %B %Y at %I:%M %p")}<br>
-                This is an automated report from the Portfolio Intelligence platform.
-            </p>
-            <p style="margin-top: 20px; color: #34495e;">
-                Thank you for your continued trust.
-            </p>
-            <div class="signature">
-                <strong>Best Regards,</strong><br>
-                Portfolio Intelligence Team<br>
-                <em>Your Investment Partner</em>
-            </div>
-        </div>
-    </div>
-</body>
-</html>"""
-
 # ==================== Cams, Karvy and Manual entir Brokerage Data HELPERS ====================
 def _resolve_amc_via_isin(get_conn, scheme_code_col_sql: str, table: str, scheme_code_value_alias: str):
     """
@@ -1838,19 +1681,9 @@ def load_brokerage_report(_get_conn, _v: int) -> dict:
     pandas' format inference lock onto whichever format it sees first
     and silently return NaT for every row in the other format.
     """
-    # ---- Resolve BSE's AMC fallback column FIRST, on its own connection,
-    #      BEFORE opening the connection used for the real reads ----
-    bse_amc_col = _get_bse_amc_column(_get_conn)
-    bse_amc_select = f"MAX({bse_amc_col}) AS bse_amc_name" if bse_amc_col else "NULL AS bse_amc_name"
-    bse_dedup = f"""
-        SELECT
-            UPPER(TRIM(Channel_Partner_Code)) AS cp_code,
-            MAX(ISIN) AS ISIN,
-            {bse_amc_select}
-        FROM bse_scheme_master
-        WHERE Channel_Partner_Code IS NOT NULL AND TRIM(Channel_Partner_Code) != ''
-        GROUP BY UPPER(TRIM(Channel_Partner_Code))
-    """
+    # ---- Dedup BSE scheme master as a subquery (cp_code, ISIN, bse_amc_name).
+    #      AMC-column probe + SQL live in bse_scheme.build_dedup_subquery(). ----
+    bse_dedup = bse_scheme.build_dedup_subquery(include_amc=True)
 
     # ---- CAMS brokerage -> cams_wbr9_folio (get product code) -> Channel_Partner_Code -> ISIN ----
     cams_sql = f"""
@@ -2127,7 +1960,9 @@ def render_email_report_button(
                 success, msg = mail_sync.send_report_email(
                     to_email=recipient_email,
                     subject=subject,
-                    html_body=generate_email_body(client_name, report_type, period_str),
+                    html_body=email_tempate.generate_email_body(
+                        client_name, report_type, period_str
+                    ),
                     pdf_bytes=pdf_content,
                     pdf_filename=filename,
                     cc_emails=cc_list,
@@ -2144,28 +1979,12 @@ def render_email_report_button(
 
 # ==================== FOLIO JOIN (CAMS/KFin × BSE × AMFI) ====================
 
-def _get_bse_amc_column(get_conn) -> Optional[str]:
-    """
-    Probe bse_scheme_master's actual schema to find whichever column holds
-    the AMC/fund-house name string. Used only as a fallback label for ISINs
-    that don't resolve via AMFI.
-    """
-    candidates = [
-        "amc_code", "amc_ind", "amc_name",
-        "AMC", "AMC_Name", "AMC_NAME", "Amc_Name",
-        "Fund_Name", "FUND_NAME", "Fund", "FUND",
-        "AMC_Code", "AMC_CODE",
-    ]
-    with get_conn() as conn:
-        cols = [row[1] for row in conn.execute("PRAGMA table_info(bse_scheme_master)").fetchall()]
-    # log.info("[NAV-FLOW] bse_scheme_master columns: %s", cols)
-    for c in candidates:
-        if c in cols:
-            log.info("[NAV-FLOW] Using '%s' as BSE AMC-name fallback column", c)
-            return c
-    log.warning("[NAV-FLOW] No AMC-name column found in bse_scheme_master (checked %s). "
-                "BSE fallback name disabled — rows will rely on AMFI ISIN match only.", candidates)
-    return None
+def _get_bse_amc_column(_get_conn=None) -> Optional[str]:
+    """Thin wrapper around bse_scheme.get_amc_column().
+    The positional arg is accepted for backwards compatibility only —
+    the probe now caches its result per process inside bse_scheme, so the
+    connection argument is ignored."""
+    return bse_scheme.get_amc_column()
 
 @st.cache_data(show_spinner=False)
 def get_all_folios_with_isin_and_nav(_get_conn, _v: int, force_reload: bool = False) -> pd.DataFrame:
@@ -2202,18 +2021,9 @@ def get_all_folios_with_isin_and_nav(_get_conn, _v: int, force_reload: bool = Fa
 
     # ── Step 2: Deduplicated BSE Scheme Master subquery ──
     log.info("[NAV-FLOW][Step 2] Building deduplicated BSE lookup...")
-    bse_amc_col = _get_bse_amc_column(_get_conn)
-    bse_amc_select = f"MAX({bse_amc_col}) AS bse_amc_name" if bse_amc_col else "NULL AS bse_amc_name"
-    bse_dedup = f"""
-        SELECT 
-            UPPER(TRIM(Channel_Partner_Code)) AS cp_code,
-            MAX(ISIN) AS ISIN,
-            MAX(Scheme_Name) AS Scheme_Name,
-            {bse_amc_select}
-        FROM bse_scheme_master
-        WHERE Channel_Partner_Code IS NOT NULL AND TRIM(Channel_Partner_Code) != ''
-        GROUP BY UPPER(TRIM(Channel_Partner_Code))
-    """
+    bse_dedup = bse_scheme.build_dedup_subquery(
+        include_scheme_name=True, include_amc=True,
+    )
 
     # ── Step 3: CAMS Query ──
     log.info("[NAV-FLOW][Step 3] Building CAMS SQL...")
@@ -3739,94 +3549,6 @@ def generate_brokerage_sharing_excel(
 # ══════════════════════════════════════════════════════════════
 # EMAIL SENDING FOR SHARING REPORT
 # ══════════════════════════════════════════════════════════════
-def generate_brokerage_email_body(
-    sub_broker_name: str,
-    period_label: str,
-    total_brokerage: float,
-    sub_broker_share: float,
-    my_share: float,
-    transfer: dict | None = None,
-) -> str:
-    def fi(v):
-        try:    return f"₹{float(v):,.2f}"
-        except Exception: return "—"
-
-    transfer_block = ""
-    if transfer:
-        status = (transfer.get("status") or "pending").lower()
-        if status == "transferred":
-            colour, label = "#27ae60", "✅ Transferred"
-        elif status == "partial":
-            colour, label = "#f39c12", "⏳ Partially Transferred"
-        else:
-            colour, label = "#c0392b", "⏰ Pending"
-        transfer_block = f"""
-        <div style="background:#f8f9fa;border-left:4px solid {colour};padding:14px 18px;margin:20px 0;border-radius:4px;">
-          <div style="font-size:13px;font-weight:bold;color:{colour};margin-bottom:8px;">{label}</div>
-          <table style="width:100%;font-size:13px;color:#2c3e50;">
-            <tr><td style="padding:3px 0;">Amount Transferred</td>
-                <td style="text-align:right;font-weight:bold;">{fi(transfer.get('transferred_amount', 0))}</td></tr>
-            <tr><td style="padding:3px 0;">Transfer Date</td>
-                <td style="text-align:right;">{transfer.get('transfer_date') or '—'}</td></tr>
-            <tr><td style="padding:3px 0;">Reference</td>
-                <td style="text-align:right;">{transfer.get('transfer_reference') or '—'}</td></tr>
-            <tr><td style="padding:3px 0;">Notes</td>
-                <td style="text-align:right;">{transfer.get('transfer_notes') or '—'}</td></tr>
-          </table>
-        </div>
-        """
-
-    return f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"></head>
-<body style="font-family:'Segoe UI',Tahoma,sans-serif;color:#333;background:#f9f9f9;padding:20px;margin:0;">
-  <div style="max-width:680px;margin:0 auto;background:#fff;padding:30px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-    <div style="border-bottom:3px solid #2980b9;padding-bottom:14px;margin-bottom:20px;">
-      <h2 style="color:#2980b9;margin:0;font-size:22px;">💹 Brokerage Sharing Statement</h2>
-      <div style="color:#7f8c8d;font-size:13px;margin-top:6px;">Period: <strong>{period_label}</strong></div>
-    </div>
-
-    <p style="font-size:15px;color:#2c3e50;">Dear <strong>{sub_broker_name}</strong>,</p>
-
-    <p style="font-size:14px;color:#2c3e50;line-height:1.6;">
-      Please find below the brokerage generated on your assigned clients for <strong>{period_label}</strong>,
-      along with your share and the transfer status.
-    </p>
-
-    <table style="width:100%;border-collapse:collapse;margin:22px 0;font-size:14px;">
-      <tr style="background:#ecf0f1;">
-        <td style="padding:12px 16px;color:#7f8c8d;font-size:12px;text-transform:uppercase;">Total Brokerage</td>
-        <td style="padding:12px 16px;text-align:right;font-weight:bold;color:#2c3e50;">{fi(total_brokerage)}</td>
-      </tr>
-      <tr style="background:#eaf2f8;">
-        <td style="padding:12px 16px;color:#7f8c8d;font-size:12px;text-transform:uppercase;">Your Share</td>
-        <td style="padding:12px 16px;text-align:right;font-weight:bold;color:#27ae60;">{fi(sub_broker_share)}</td>
-      </tr>
-      <tr>
-        <td style="padding:12px 16px;color:#7f8c8d;font-size:12px;text-transform:uppercase;">Firm's Share</td>
-        <td style="padding:12px 16px;text-align:right;font-weight:bold;color:#2c3e50;">{fi(my_share)}</td>
-      </tr>
-    </table>
-
-    {transfer_block}
-
-    <div style="background:#d5f4e6;border-left:4px solid #27ae60;padding:12px 16px;margin:20px 0;border-radius:4px;font-size:13px;color:#1e7e46;">
-      <strong>✓ Detailed report attached</strong><br>
-      Please review the attached PDF for the full client-wise breakdown.
-    </div>
-
-    <p style="font-size:13px;color:#7f8c8d;line-height:1.6;">
-      If you notice any discrepancy in the amounts, client attribution, or sharing percentage,
-      please reply to this email within 24–48 hours so we can correct it.
-    </p>
-
-    <div style="border-top:1px solid #ddd;padding-top:16px;margin-top:26px;color:#7f8c8d;font-size:12px;">
-      Generated: {datetime.now().strftime('%d %B %Y at %I:%M %p')}<br>
-      This is an automated statement from the Portfolio Intelligence platform.
-    </div>
-  </div>
-</body></html>"""
-
-
 def send_brokerage_sharing_email(
     to_email: str,
     subject: str,
@@ -4355,7 +4077,7 @@ def render_sub_broker_sharing_report() -> None:
                         my_share=float(summary_row["my_share"]),
                         transfer=transfer_info,
                     )
-                    html_body = generate_brokerage_email_body(
+                    html_body = email_tempate.generate_brokerage_email_body(
                         sub_broker_name=email_sb_name,
                         period_label=period_label,
                         total_brokerage=float(summary_row["total_brokerage"]),
@@ -4370,7 +4092,7 @@ def render_sub_broker_sharing_report() -> None:
                     subject = f"Brokerage Sharing Statement — {period_label}"
                     cc_list = [e.strip() for e in cc_input.split(",") if e.strip()] if cc_input else None
 
-                    ok, msg = send_brokerage_sharing_email(
+                    ok, msg = mail_sync.send_brokerage_sharing_email(
                         to_email=to_email,
                         subject=subject,
                         html_body=html_body,
@@ -8051,19 +7773,10 @@ elif mode == "📊 Reports":
         for f in kfin_f['folio'].tolist():
             folio_rta_map[f] = 'KFinTech'
 
-        # ── Product code → ISIN + scheme name ──
-        with get_conn() as conn:
-            pc_info = pd.read_sql("""
-                SELECT UPPER(TRIM(Channel_Partner_Code)) AS pc,
-                       MAX(ISIN)        AS isin,
-                       MAX(Scheme_Name) AS scheme_name
-                FROM bse_scheme_master
-                WHERE Channel_Partner_Code IS NOT NULL
-                  AND TRIM(Channel_Partner_Code) != ''
-                GROUP BY UPPER(TRIM(Channel_Partner_Code))
-            """, conn)
-        isin_lk = dict(zip(pc_info['pc'], pc_info['isin']))
-        name_lk = dict(zip(pc_info['pc'], pc_info['scheme_name']))
+        # ── Product code → ISIN + scheme name (cached via _bse_scheme_lookup) ──
+        pc_info = _bse_scheme_lookup(data_version())
+        isin_lk = dict(zip(pc_info['product_code'], pc_info['isin']))
+        name_lk = dict(zip(pc_info['product_code'], pc_info['scheme_name']))
 
     
         # ── NAV: use today's live NAV if valuing as of today, else historical ──

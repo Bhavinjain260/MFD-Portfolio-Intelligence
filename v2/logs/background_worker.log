@@ -1,0 +1,20 @@
+2026-11-07 22:53:24,603 [INFO] [manual] background_worker | ======================================================================
+2026-11-07 22:53:24,603 [INFO] [manual] background_worker | BACKGROUND WORKER RUN  @ 2026-11-07T22:53:24  (trigger=manual, pid=17554)
+2026-11-07 22:53:24,603 [INFO] [manual] background_worker | ======================================================================
+2026-11-07 22:53:24,977 [INFO] [manual] background_worker | [MAILBACK] Starting
+2026-11-07 22:53:24,977 [ERROR] [manual] background_worker | [MAILBACK] Failed
+Traceback (most recent call last):
+  File "/Users/bhavinjain/PycharmProjects/MFD-Portfolio-Intelligence V1/background_worker.py", line 173, in task_mailback
+    import cams_mailback_sync as cms
+ModuleNotFoundError: No module named 'cams_mailback_sync'. Did you mean: 'mailback_sync'?
+2026-11-07 22:53:25,000 [INFO] [manual] background_worker | [mailback] -> FAIL
+2026-11-07 22:53:25,000 [INFO] [manual] background_worker | [NAV-LIVE] Starting
+2026-11-07 22:53:25,066 [INFO] [manual] background_worker | [NAV-LIVE] ok=True ran=False reason=snapshot nav_2026-11-06.txt is current
+2026-11-07 22:53:25,066 [INFO] [manual] background_worker | [nav_live] -> OK
+2026-11-07 22:53:25,066 [INFO] [manual] background_worker | [NAV-PREV] Starting
+2026-11-07 22:53:25,067 [INFO] [manual] nav_engine | [AMFI-HIST] Already have 2026-11-05 — skipping fetch
+2026-11-07 22:53:25,067 [INFO] [manual] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-11-05
+2026-11-07 22:53:25,067 [INFO] [manual] background_worker | [nav_previous] -> OK
+2026-11-07 22:53:25,067 [INFO] [manual] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-11-07T22:53:25  (trigger=manual)
+2026-11-07 22:53:25,067 [INFO] [manual] background_worker | ======================================================================
+2026-11-07 22:53:25,068 [INFO] [manual] background_worker | [WORKER] data_version bumped
