@@ -5673,10 +5673,10 @@ Axis Mutual Fund
 149846;INF846K012G7;INF846K013G5;Axis Multi Factor Passive FoF;Direct Plan;IDCW Option;15.1316;04-Nov-2026
 149844;INF846K014G3;-;Axis Multi Factor Passive FoF;Regular Plan;Growth Option;14.9001;04-Nov-2026
 149845;INF846K015G0;INF846K016G8;Axis Multi Factor Passive FoF;Regular Plan;IDCW Option;14.9010;04-Nov-2026
-153960;INF846KA1366;-;Axis Multi-Asset Omni FoF;Direct Plan;Growth Option;10.5108;03-Nov-2026
-153961;INF846KA1374;INF846KA1382;Axis Multi-Asset Omni FoF;Direct Plan;IDCW Option;10.5108;03-Nov-2026
-153963;INF846KA1333;-;Axis Multi-Asset Omni FoF;Regular Plan;Growth Option;10.4017;03-Nov-2026
-153962;INF846KA1341;INF846KA1358;Axis Multi-Asset Omni FoF;Regular Plan;IDCW Option;10.4017;03-Nov-2026
+153960;INF846KA1366;-;Axis Multi-Asset Omni FoF;Direct Plan;Growth Option;10.6515;04-Nov-2026
+153961;INF846KA1374;INF846KA1382;Axis Multi-Asset Omni FoF;Direct Plan;IDCW Option;10.6515;04-Nov-2026
+153963;INF846KA1333;-;Axis Multi-Asset Omni FoF;Regular Plan;Growth Option;10.5406;04-Nov-2026
+153962;INF846KA1341;INF846KA1358;Axis Multi-Asset Omni FoF;Regular Plan;IDCW Option;10.5406;04-Nov-2026
 150618;INF846K019J6;INF846K010K3;Axis Silver Fund of Fund;Regular Plan;IDCW Option;31.0133;04-Nov-2026
 150617;INF846K018J8;-;Axis Silver Fund of Fund;Regular Plan;Growth Option;31.0144;04-Nov-2026
 150616;INF846K016J2;INF846K017J0;Axis Silver Fund of Fund;Direct Plan;IDCW Option;31.6803;04-Nov-2026
@@ -11180,10 +11180,10 @@ DSP Mutual Fund
 130491;INF740K01Z68;INF740K01Z76;DSP Income Plus Arbitrage Omni FoF;Direct Plan;IDCW;18.5806;04-Nov-2026
 130492;INF740K01Z27;-;DSP Income Plus Arbitrage Omni FoF;Regular Plan;Growth;22.5154;04-Nov-2026
 130490;INF740K01Z35;INF740K01Z43;DSP Income Plus Arbitrage Omni FoF;Regular Plan;IDCW;16.6338;04-Nov-2026
-154167;INF740KA1YE9;-;DSP Multi Asset Omni Fund of Funds;Direct Plan;Growth;10.0316;03-Nov-2026
-154166;INF740KA1YF6;INF740KA1YG4;DSP Multi Asset Omni Fund of Funds;Direct Plan;IDCW;10.0316;03-Nov-2026
-154165;INF740KA1YB5;-;DSP Multi Asset Omni Fund of Funds;Regular Plan;Growth;9.9791;03-Nov-2026
-154168;INF740KA1YC3;INF740KA1YD1;DSP Multi Asset Omni Fund of Funds;Regular Plan;IDCW;9.9791;03-Nov-2026
+154167;INF740KA1YE9;-;DSP Multi Asset Omni Fund of Funds;Direct Plan;Growth;10.1106;04-Nov-2026
+154166;INF740KA1YF6;INF740KA1YG4;DSP Multi Asset Omni Fund of Funds;Direct Plan;IDCW;10.1106;04-Nov-2026
+154165;INF740KA1YB5;-;DSP Multi Asset Omni Fund of Funds;Regular Plan;Growth;10.0575;04-Nov-2026
+154168;INF740KA1YC3;INF740KA1YD1;DSP Multi Asset Omni Fund of Funds;Regular Plan;IDCW;10.0575;04-Nov-2026
 153487;INF740KA1VZ0;-;DSP Silver ETF Fund of Fund;Direct Plan;Growth;19.0816;04-Nov-2026
 153489;INF740KA1WA1;INF740KA1WB9;DSP Silver ETF Fund of Fund;Direct Plan;IDCW;19.0816;04-Nov-2026
 153486;INF740KA1VW7;-;DSP Silver ETF Fund of Fund;Regular Plan;Growth;18.9604;04-Nov-2026
@@ -11264,9 +11264,9 @@ HDFC Mutual Fund
  
 ICICI Prudential Mutual Fund
  
-120700;INF109K01X40;-;ICICI Prudential Aggressive Hybrid Active FOF;Direct Plan;Growth;242.0617;03-Nov-2026
-102135;INF109K01852;-;ICICI Prudential Aggressive Hybrid Active FOF;Regular Plan;Growth;223.3716;03-Nov-2026
-102136;INF109K01FR2;INF109K01860;ICICI Prudential Aggressive Hybrid Active FOF - Dividend Option;Regular Plan;IDCW;173.1549;03-Nov-2026
+120700;INF109K01X40;-;ICICI Prudential Aggressive Hybrid Active FOF;Direct Plan;Growth;243.8978;04-Nov-2026
+102135;INF109K01852;-;ICICI Prudential Aggressive Hybrid Active FOF;Regular Plan;Growth;225.0590;04-Nov-2026
+102136;INF109K01FR2;INF109K01860;ICICI Prudential Aggressive Hybrid Active FOF - Dividend Option;Regular Plan;IDCW;174.4630;04-Nov-2026
 143904;INF109KC1FW3;-;ICICI Prudential BHARAT 22 FOF;Regular Plan;Cumulative;32.9566;04-Nov-2026
 143903;INF109KC1FX1;-;ICICI Prudential BHARAT 22 FOF;Direct Plan;Cumulative;32.9691;04-Nov-2026
 149331;INF109KC1V91;-;ICICI Prudential BSE 500 ETF FOF;Direct Plan;Growth;15.5835;04-Nov-2026
@@ -11279,18 +11279,18 @@ ICICI Prudential Mutual Fund
 102143;INF109K01FS0;INF109K01886;ICICI Prudential Diversified Debt Strategy Active FOF - Dividend option;Regular Plan;IDCW;41.7582;04-Nov-2026
 154266;INF109K1A468;-;ICICI Prudential Diversified Equity All Cap Active FOF;Direct Plan;Growth;10.5319;04-Nov-2026
 154265;INF109K1A450;-;ICICI Prudential Diversified Equity All Cap Active FOF;Regular Plan;Growth;10.4618;04-Nov-2026
-148035;INF109KC1I49;-;ICICI Prudential Diversified Equity All Cap Omni FOF;Direct Plan;Growth;32.1173;03-Nov-2026
-148036;INF109KC1I64;INF109KC1I56;ICICI Prudential Diversified Equity All Cap Omni FOF;Direct Plan;IDCW;25.0129;03-Nov-2026
-148033;INF109KC1I15;-;ICICI Prudential Diversified Equity All Cap Omni FOF;Regular Plan;Growth;30.6266;03-Nov-2026
-148034;INF109KC1I31;INF109KC1I23;ICICI Prudential Diversified Equity All Cap Omni FOF;Regular Plan;IDCW;23.6797;03-Nov-2026
-120679;INF109K01X16;-;ICICI Prudential Dynamic Asset Allocation Active FOF;Direct Plan;Growth;136.9097;03-Nov-2026
-120680;INF109K01W90;INF109K01X08;ICICI Prudential Dynamic Asset Allocation Active FOF;Direct Plan;IDCW;107.3641;03-Nov-2026
-102137;INF109K01837;-;ICICI Prudential Dynamic Asset Allocation Active FOF;Regular Plan;Growth;122.3006;03-Nov-2026
-102138;INF109K01FJ9;INF109K01845;ICICI Prudential Dynamic Asset Allocation Active FOF- Dividend;Regular Plan;IDCW;93.9872;03-Nov-2026
-147648;INF109KC1F34;-;ICICI Prudential Global Advantage Fund (FOF);Direct Plan;Growth;22.6833;02-Nov-2026
-147645;INF109KC1F42;-;ICICI Prudential Global Advantage Fund (FOF);Direct Plan;IDCW;22.6832;02-Nov-2026
-147647;INF109KC1F00;-;ICICI Prudential Global Advantage Fund (FOF);Regular Plan;Growth;21.6154;02-Nov-2026
-147646;INF109KC1F18;-;ICICI Prudential Global Advantage Fund (FOF);Regular Plan;IDCW;21.6147;02-Nov-2026
+148035;INF109KC1I49;-;ICICI Prudential Diversified Equity All Cap Omni FOF;Direct Plan;Growth;32.4463;04-Nov-2026
+148036;INF109KC1I64;INF109KC1I56;ICICI Prudential Diversified Equity All Cap Omni FOF;Direct Plan;IDCW;25.2692;04-Nov-2026
+148033;INF109KC1I15;-;ICICI Prudential Diversified Equity All Cap Omni FOF;Regular Plan;Growth;30.9400;04-Nov-2026
+148034;INF109KC1I31;INF109KC1I23;ICICI Prudential Diversified Equity All Cap Omni FOF;Regular Plan;IDCW;23.9220;04-Nov-2026
+120679;INF109K01X16;-;ICICI Prudential Dynamic Asset Allocation Active FOF;Direct Plan;Growth;137.9671;04-Nov-2026
+120680;INF109K01W90;INF109K01X08;ICICI Prudential Dynamic Asset Allocation Active FOF;Direct Plan;IDCW;108.1933;04-Nov-2026
+102137;INF109K01837;-;ICICI Prudential Dynamic Asset Allocation Active FOF;Regular Plan;Growth;123.2420;04-Nov-2026
+102138;INF109K01FJ9;INF109K01845;ICICI Prudential Dynamic Asset Allocation Active FOF- Dividend;Regular Plan;IDCW;94.7106;04-Nov-2026
+147648;INF109KC1F34;-;ICICI Prudential Global Advantage Fund (FOF);Direct Plan;Growth;23.1169;04-Nov-2026
+147645;INF109KC1F42;-;ICICI Prudential Global Advantage Fund (FOF);Direct Plan;IDCW;23.1169;04-Nov-2026
+147647;INF109KC1F00;-;ICICI Prudential Global Advantage Fund (FOF);Regular Plan;Growth;22.0278;04-Nov-2026
+147646;INF109KC1F18;-;ICICI Prudential Global Advantage Fund (FOF);Regular Plan;IDCW;22.0271;04-Nov-2026
 120685;INF109K01U92;-;ICICI Prudential Gold ETF FOF;Direct Plan;Growth;45.0950;04-Nov-2026
 120686;INF109K01U76;INF109K01U84;ICICI Prudential Gold ETF FOF;Direct Plan;IDCW;45.0992;04-Nov-2026
 115833;INF109K01TK8;-;ICICI Prudential Gold ETF FOF;Regular Plan;Growth;43.3729;04-Nov-2026
@@ -11303,8 +11303,8 @@ ICICI Prudential Mutual Fund
 120242;INF109K01W58;-;ICICI Prudential Multi Sector Passive FOF;Direct Plan;Growth;175.8673;04-Nov-2026
 102133;INF109K01795;-;ICICI Prudential Multi Sector Passive FOF;Regular Plan;Growth;167.6131;04-Nov-2026
 102134;INF109K01DW7;INF109K01803;ICICI Prudential Multi Sector Passive FOF-Dividend Option;Regular Plan;IDCW;130.5917;04-Nov-2026
-154449;INF109K1A559;-;ICICI Prudential Multi-Asset Active FOF;Direct Plan;Growth;9.8257;03-Nov-2026
-154450;INF109K1A542;-;ICICI Prudential Multi-Asset Active FOF;Regular Plan;Growth;9.7933;03-Nov-2026
+154449;INF109K1A559;-;ICICI Prudential Multi-Asset Active FOF;Direct Plan;Growth;9.9507;04-Nov-2026
+154450;INF109K1A542;-;ICICI Prudential Multi-Asset Active FOF;Regular Plan;Growth;9.9176;04-Nov-2026
 148822;INF109KC1P81;-;ICICI Prudential Nifty 100 Low Volatility 30 ETF FOF;Direct Plan;Growth;18.0170;04-Nov-2026
 148823;INF109KC1Q07;INF109KC1P99;ICICI Prudential Nifty 100 Low Volatility 30 ETF FOF;Direct Plan;IDCW;18.0171;04-Nov-2026
 148821;INF109KC1P57;-;ICICI Prudential Nifty 100 Low Volatility 30 ETF FOF;Regular Plan;Growth;17.5798;04-Nov-2026
@@ -11511,10 +11511,10 @@ Bandhan Mutual Fund
 149100;INF194KB1CC9;-;Bandhan US specific Equity Active FOF;Regular Plan;Growth;18.942;04-Nov-2026
 149099;INF194KB1CG0;-;Bandhan US specific Equity Active FOF;Direct Plan;IDCW;19.986;04-Nov-2026
 149097;INF194KB1CD7;-;Bandhan US specific Equity Active FOF;Regular Plan;IDCW;18.942;04-Nov-2026
-151548;INF194KB1FV2;-;Bandhan US Treasury Bond 0-1 year specific Debt Passive FOF;Direct Plan;Growth;13.4252;03-Nov-2026
-151549;INF194KB1FW0;INF194KB1GA4;Bandhan US Treasury Bond 0-1 year specific Debt Passive FOF;Direct Plan;IDCW;13.4252;03-Nov-2026
-151546;INF194KB1FT6;-;Bandhan US Treasury Bond 0-1 year specific Debt Passive FOF;Regular Plan;Growth;13.3964;03-Nov-2026
-151547;INF194KB1FU4;INF194KB1FZ3;Bandhan US Treasury Bond 0-1 year specific Debt Passive FOF;Regular Plan;IDCW;13.3964;03-Nov-2026
+151548;INF194KB1FV2;-;Bandhan US Treasury Bond 0-1 year specific Debt Passive FOF;Direct Plan;Growth;13.4172;04-Nov-2026
+151549;INF194KB1FW0;INF194KB1GA4;Bandhan US Treasury Bond 0-1 year specific Debt Passive FOF;Direct Plan;IDCW;13.4172;04-Nov-2026
+151546;INF194KB1FT6;-;Bandhan US Treasury Bond 0-1 year specific Debt Passive FOF;Regular Plan;Growth;13.3885;04-Nov-2026
+151547;INF194KB1FU4;INF194KB1FZ3;Bandhan US Treasury Bond 0-1 year specific Debt Passive FOF;Regular Plan;IDCW;13.3885;04-Nov-2026
  
 Baroda BNP Paribas Mutual Fund
  
@@ -13104,10 +13104,10 @@ Axis Mutual Fund
 148955;INF846K01Z38;INF846K01Z46;Axis Global Innovation Fund of Fund;Direct Plan;IDCW Option;18.96;04-Nov-2026
 148953;INF846K01Z53;-;Axis Global Innovation Fund of Fund;Regular Plan;Growth Option;17.98;04-Nov-2026
 148956;INF846K01Z61;INF846K01Z79;Axis Global Innovation Fund of Fund;Regular Plan;IDCW Option;17.98;04-Nov-2026
-148699;INF846K01Y39;-;Axis Greater China Equity Fund of Fund;Direct Plan;Growth Option;11.15;03-Nov-2026
-148700;INF846K01Y47;INF846K01Y54;Axis Greater China Equity Fund of Fund;Direct Plan;IDCW Option;11.14;03-Nov-2026
-148701;INF846K01Y62;-;Axis Greater China Equity Fund of Fund;Regular Plan;Growth Option;10.48;03-Nov-2026
-148702;INF846K01Y70;INF846K01Y88;Axis Greater China Equity Fund of Fund;Regular Plan;IDCW Option;10.47;03-Nov-2026
+148699;INF846K01Y39;-;Axis Greater China Equity Fund of Fund;Direct Plan;Growth Option;11.49;04-Nov-2026
+148700;INF846K01Y47;INF846K01Y54;Axis Greater China Equity Fund of Fund;Direct Plan;IDCW Option;11.48;04-Nov-2026
+148701;INF846K01Y62;-;Axis Greater China Equity Fund of Fund;Regular Plan;Growth Option;10.79;04-Nov-2026
+148702;INF846K01Y70;INF846K01Y88;Axis Greater China Equity Fund of Fund;Regular Plan;IDCW Option;10.79;04-Nov-2026
 150751;INF846K012K9;-;Axis NASDAQ 100 US Specific Equity Passive FOF;Direct Plan;Growth Option;28.5932;04-Nov-2026
 150749;INF846K013K7;INF846K014K5;Axis NASDAQ 100 US Specific Equity Passive FOF;Direct Plan;IDCW Option;28.5931;04-Nov-2026
 150750;INF846K015K2;-;Axis NASDAQ 100 US Specific Equity Passive FOF;Regular Plan;Growth Option;28.1690;04-Nov-2026

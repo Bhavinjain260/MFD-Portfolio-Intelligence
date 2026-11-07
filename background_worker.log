@@ -12244,3 +12244,665 @@ requests.exceptions.HTTPError: 500 Server Error: Internal Server Error for url: 
 2026-11-04 15:00:15,299 [INFO] [cron] background_worker | ======================================================================
 2026-11-04 15:00:15,302 [INFO] [cron] background_worker | [WORKER] data_version bumped
 ──── worker end   2026-11-04 15:00:15 IST (exit=0) ────
+2026-11-05 09:58:31,575 [INFO] [manual] background_worker | ======================================================================
+2026-11-05 09:58:31,577 [INFO] [manual] background_worker | BACKGROUND WORKER RUN  @ 2026-11-05T09:58:31  (trigger=manual, pid=23318)
+2026-11-05 09:58:31,577 [INFO] [manual] background_worker | ======================================================================
+2026-11-05 09:58:33,270 [INFO] [manual] background_worker | [MAILBACK] Starting
+2026-11-05 09:58:35,729 [INFO] [manual] mailback_sync | [IMAP] Connected
+2026-11-05 09:58:36,136 [INFO] [manual] mailback_sync | [CAMS] Found 4 unread mailback emails
+2026-11-05 09:58:36,554 [INFO] [manual] mailback_sync | [CAMS] Processing email: Updation of Social Media Details 
+2026-11-05 09:58:36,573 [INFO] [manual] mailback_sync | [CAMS] Skipping non-report email (marking read): Updation of Social Media Details 
+2026-11-05 09:58:37,417 [INFO] [manual] mailback_sync | [CAMS] Processing email: WBR49. SIP/STP procured for the period, Request Id:220638803R49
+2026-11-05 09:58:37,418 [INFO] [manual] mailback_sync | [CAMS-WBR49] Report code resolved
+2026-11-05 09:58:37,419 [INFO] [manual] mailback_sync | [CAMS-WBR49] No data — marking read, skipping
+2026-11-05 09:58:38,291 [INFO] [manual] mailback_sync | [CAMS] Processing email: WBR9. Investor Static details feed - CRMS Format, Request
+ Id:220638757R9
+2026-11-05 09:58:38,292 [INFO] [manual] mailback_sync | [CAMS-WBR9] Report code resolved
+2026-11-05 09:58:38,293 [INFO] [manual] mailback_sync | [CAMS-WBR9] No data — marking read, skipping
+2026-11-05 09:58:39,212 [INFO] [manual] mailback_sync | [CAMS] Processing email: WBR2. Investor Transactions for a Period, Request Id:220638668R2
+2026-11-05 09:58:39,218 [INFO] [manual] mailback_sync | [CAMS-WBR2] Report code resolved
+2026-11-05 09:58:39,219 [INFO] [manual] mailback_sync | [CAMS-WBR2] No data — marking read, skipping
+2026-11-05 09:58:40,334 [INFO] [manual] mailback_sync | [KFinTech] Found 4 unread mailback emails
+2026-11-05 09:58:40,751 [INFO] [manual] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-11-05 09:58:40,762 [INFO] [manual] mailback_sync | [KFinTech] Skipping non-report email (marking read): Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-11-05 09:58:41,582 [INFO] [manual] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-11-05 09:58:41,583 [INFO] [manual] mailback_sync | [KFinTech] Skipping non-report email (marking read): Investor Master Information Report for Ref.No:WBMST9447075
+2026-11-05 09:58:42,309 [INFO] [manual] mailback_sync | [KFinTech] Processing email: Subscribed SIP Registration Report for Ref.No : WSREG8279819
+2026-11-05 09:58:42,320 [INFO] [manual] mailback_sync | [KFinTech] Skipping non-report email (marking read): Subscribed SIP Registration Report for Ref.No : WSREG8279819
+2026-11-05 09:58:43,203 [INFO] [manual] mailback_sync | [KFinTech] Processing email: Subscribed SIP Registrations Report for Ref. No. : WSREG8279819
+2026-11-05 09:58:43,226 [INFO] [manual] mailback_sync | [KFinTech-MFSD243] Report code resolved
+2026-11-05 09:58:43,233 [INFO] [manual] mailback_sync | [KFinTech-MFSD243] Download URL found
+2026-11-05 09:58:43,236 [INFO] [manual] mailback_sync | [KFinTech-MFSD243] Downloading https://scdelivery.kfintech.com/c/?u=iuuqt%3B00ett%2Flgjoufdi%2Fdpn0ettepxompbe0sfqpsut0hfofsbuf%40rszuzqf%3EV%7BO9W2OTSVd5Nkd6PEF6PUBzPUh2gEJxNkZyNUB2&p=qqttqbdb.bqeesknn--342260441-44ACC558-69C2-4F29-BEF0-5D5B947F2B63.71.1&e=s1
+2026-11-05 09:58:44,438 [INFO] [manual] mailback_sync | [KFinTech-MFSD243] Extracted MFSD313_WSREG8279819_1173666_0.csv (390 bytes)
+2026-11-05 09:58:45,068 [INFO] [manual] mailback_sync | [KFinTech-MFSD243] MFSD313_WSREG8279819_1173666_0.csv contains 0 data rows — moving to done (no-op)
+2026-11-05 09:58:45,823 [INFO] [manual] background_worker | [MAILBACK] checked=8 downloaded=1 parsed=1 failed=0 no_data=3 errors=0
+2026-11-05 09:58:45,824 [INFO] [manual] background_worker | [mailback] -> OK
+2026-11-05 09:58:45,824 [INFO] [manual] background_worker | [NAV-LIVE] Starting
+2026-11-05 09:58:45,834 [INFO] [manual] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-11-05 09:58:47,195 [INFO] [manual] nav_service | [NAV-PARSE] Parsed 14056 records | column counts seen: {8: 14189}
+2026-11-05 09:58:47,216 [INFO] [manual] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-11-04.txt: 1527414 bytes, 17944 rows (source=live)
+2026-11-05 09:58:47,230 [INFO] [manual] nav_service | [AMFI] NAV file overwritten: nav_data/nav_2026-11-04.txt (1527414 bytes, 18217 lines) | NAV Date: 2026-11-04
+2026-11-05 09:58:47,240 [INFO] [manual] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-11-04.txt...
+2026-11-05 09:58:48,191 [INFO] [manual] nav_db | [NAV-DB] Ingested 4314 records (skipped 0) for date 2026-11-04
+2026-11-05 09:58:48,194 [INFO] [manual] nav_service | [NAV-DB] Success: Inserted 4314 NAV records
+2026-11-05 09:58:48,194 [INFO] [manual] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-11-05 09:58:48,194 [INFO] [manual] background_worker | [nav_live] -> OK
+2026-11-05 09:58:48,194 [INFO] [manual] background_worker | [NAV-PREV] Starting
+2026-11-05 09:58:48,224 [INFO] [manual] nav_service | [AMFI-HIST] Already have 2026-11-03 — skipping fetch
+2026-11-05 09:58:48,224 [INFO] [manual] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-11-03
+2026-11-05 09:58:48,224 [INFO] [manual] background_worker | [nav_previous] -> OK
+2026-11-05 09:58:48,224 [INFO] [manual] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-11-05T09:58:48  (trigger=manual)
+2026-11-05 09:58:48,224 [INFO] [manual] background_worker | ======================================================================
+2026-11-05 09:58:48,227 [INFO] [manual] background_worker | [WORKER] data_version bumped
+──── worker start 2026-11-05 11:00:01 IST ────
+2026-11-05 11:00:03,700 [INFO] [cron] background_worker | ======================================================================
+2026-11-05 11:00:03,700 [INFO] [cron] background_worker | BACKGROUND WORKER RUN  @ 2026-11-05T11:00:03  (trigger=cron, pid=8054)
+2026-11-05 11:00:03,700 [INFO] [cron] background_worker | ======================================================================
+2026-11-05 11:00:05,314 [INFO] [cron] background_worker | [MAILBACK] Starting
+2026-11-05 11:00:11,035 [INFO] [cron] mailback_sync | [IMAP] Connected
+2026-11-05 11:00:11,441 [INFO] [cron] mailback_sync | [CAMS] Found 0 unread mailback emails
+2026-11-05 11:00:11,854 [INFO] [cron] mailback_sync | [KFinTech] Found 0 unread mailback emails
+2026-11-05 11:00:12,609 [INFO] [cron] background_worker | [MAILBACK] checked=0 downloaded=0 parsed=0 failed=0 no_data=0 errors=0
+2026-11-05 11:00:12,611 [INFO] [cron] background_worker | [mailback] -> OK
+2026-11-05 11:00:12,612 [INFO] [cron] background_worker | [NAV-LIVE] Starting
+2026-11-05 11:00:12,628 [INFO] [cron] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-11-05 11:00:13,702 [INFO] [cron] nav_service | [NAV-PARSE] Parsed 14056 records | column counts seen: {8: 14189}
+2026-11-05 11:00:13,762 [INFO] [cron] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-11-04.txt: 1527416 bytes, 17944 rows (source=live)
+2026-11-05 11:00:13,772 [INFO] [cron] nav_service | [AMFI] NAV file overwritten: nav_data/nav_2026-11-04.txt (1527416 bytes, 18217 lines) | NAV Date: 2026-11-04
+2026-11-05 11:00:13,778 [INFO] [cron] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-11-04.txt...
+2026-11-05 11:00:14,929 [INFO] [cron] nav_db | [NAV-DB] Ingested 4314 records (skipped 0) for date 2026-11-04
+2026-11-05 11:00:14,932 [INFO] [cron] nav_service | [NAV-DB] Success: Inserted 4314 NAV records
+2026-11-05 11:00:14,932 [INFO] [cron] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-11-05 11:00:14,932 [INFO] [cron] background_worker | [nav_live] -> OK
+2026-11-05 11:00:14,933 [INFO] [cron] background_worker | [NAV-PREV] Starting
+2026-11-05 11:00:14,991 [INFO] [cron] nav_service | [AMFI-HIST] Already have 2026-11-03 — skipping fetch
+2026-11-05 11:00:14,992 [INFO] [cron] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-11-03
+2026-11-05 11:00:14,992 [INFO] [cron] background_worker | [nav_previous] -> OK
+2026-11-05 11:00:14,992 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-11-05T11:00:14  (trigger=cron)
+2026-11-05 11:00:14,992 [INFO] [cron] background_worker | ======================================================================
+2026-11-05 11:00:14,993 [INFO] [cron] background_worker | [WORKER] data_version bumped
+──── worker end   2026-11-05 11:00:15 IST (exit=0) ────
+──── worker start 2026-11-05 15:00:01 IST ────
+2026-11-05 15:00:03,776 [INFO] [cron] background_worker | ======================================================================
+2026-11-05 15:00:03,777 [INFO] [cron] background_worker | BACKGROUND WORKER RUN  @ 2026-11-05T15:00:03  (trigger=cron, pid=6942)
+2026-11-05 15:00:03,777 [INFO] [cron] background_worker | ======================================================================
+2026-11-05 15:00:05,369 [INFO] [cron] background_worker | [MAILBACK] Starting
+2026-11-05 15:00:08,096 [INFO] [cron] mailback_sync | [IMAP] Connected
+2026-11-05 15:00:08,502 [INFO] [cron] mailback_sync | [CAMS] Found 0 unread mailback emails
+2026-11-05 15:00:08,910 [INFO] [cron] mailback_sync | [KFinTech] Found 0 unread mailback emails
+2026-11-05 15:00:09,909 [INFO] [cron] background_worker | [MAILBACK] checked=0 downloaded=0 parsed=0 failed=0 no_data=0 errors=0
+2026-11-05 15:00:09,914 [INFO] [cron] background_worker | [mailback] -> OK
+2026-11-05 15:00:09,916 [INFO] [cron] background_worker | [NAV-LIVE] Starting
+2026-11-05 15:00:09,961 [INFO] [cron] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-11-05 15:00:10,844 [INFO] [cron] nav_service | [NAV-PARSE] Parsed 14056 records | column counts seen: {8: 14189}
+2026-11-05 15:00:10,861 [INFO] [cron] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-11-04.txt: 1527416 bytes, 17944 rows (source=live)
+2026-11-05 15:00:10,871 [INFO] [cron] nav_service | [AMFI] NAV file overwritten: nav_data/nav_2026-11-04.txt (1527416 bytes, 18217 lines) | NAV Date: 2026-11-04
+2026-11-05 15:00:10,873 [INFO] [cron] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-11-04.txt...
+2026-11-05 15:00:11,973 [INFO] [cron] nav_db | [NAV-DB] Ingested 4314 records (skipped 0) for date 2026-11-04
+2026-11-05 15:00:11,978 [INFO] [cron] nav_service | [NAV-DB] Success: Inserted 4314 NAV records
+2026-11-05 15:00:11,979 [INFO] [cron] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-11-05 15:00:11,979 [INFO] [cron] background_worker | [nav_live] -> OK
+2026-11-05 15:00:11,980 [INFO] [cron] background_worker | [NAV-PREV] Starting
+2026-11-05 15:00:12,046 [INFO] [cron] nav_service | [AMFI-HIST] Already have 2026-11-03 — skipping fetch
+2026-11-05 15:00:12,047 [INFO] [cron] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-11-03
+2026-11-05 15:00:12,047 [INFO] [cron] background_worker | [nav_previous] -> OK
+2026-11-05 15:00:12,048 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-11-05T15:00:12  (trigger=cron)
+2026-11-05 15:00:12,048 [INFO] [cron] background_worker | ======================================================================
+2026-11-05 15:00:12,057 [INFO] [cron] background_worker | [WORKER] data_version bumped
+──── worker end   2026-11-05 15:00:12 IST (exit=0) ────
+──── worker start 2026-11-06 11:00:01 IST ────
+2026-11-06 11:00:03,872 [INFO] [cron] background_worker | ======================================================================
+2026-11-06 11:00:03,872 [INFO] [cron] background_worker | BACKGROUND WORKER RUN  @ 2026-11-06T11:00:03  (trigger=cron, pid=28351)
+2026-11-06 11:00:03,872 [INFO] [cron] background_worker | ======================================================================
+2026-11-06 11:00:05,388 [INFO] [cron] background_worker | [MAILBACK] Starting
+2026-11-06 11:00:08,045 [INFO] [cron] mailback_sync | [IMAP] Connected
+2026-11-06 11:00:08,432 [INFO] [cron] mailback_sync | [CAMS] Found 5 unread mailback emails
+2026-11-06 11:00:08,882 [INFO] [cron] mailback_sync | [CAMS] Processing email: Updation of Social Media Details 
+2026-11-06 11:00:08,910 [INFO] [cron] mailback_sync | [CAMS] Skipping non-report email (marking read): Updation of Social Media Details 
+2026-11-06 11:00:09,797 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR49. SIP/STP procured for the period, Request Id:220638803R49
+2026-11-06 11:00:09,802 [INFO] [cron] mailback_sync | [CAMS-WBR49] Report code resolved
+2026-11-06 11:00:09,806 [INFO] [cron] mailback_sync | [CAMS-WBR49] No data — marking read, skipping
+2026-11-06 11:00:10,719 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR2. Investor Transactions for a Period, Request Id:221369186R2
+2026-11-06 11:00:10,724 [INFO] [cron] mailback_sync | [CAMS-WBR2] Report code resolved
+2026-11-06 11:00:10,732 [INFO] [cron] mailback_sync | [CAMS-WBR2] Download URL found
+2026-11-06 11:00:10,735 [INFO] [cron] mailback_sync | [CAMS-WBR2] Downloading https://mailback3.camsonline.com/mailback_result/5HUZFCHBCNPH4V3CAEOG6H1Y0HGCDD0U0IKI5I1N3C2X681361142565BMB221369186R2.zip
+2026-11-06 11:00:11,203 [ERROR] [cron] mailback_sync | [CAMS-WBR2] Download/extract failed
+Traceback (most recent call last):
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 464, in _make_request
+    self._validate_conn(conn)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 1106, in _validate_conn
+    conn.connect()
+    ~~~~~~~~~~~~^^
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connection.py", line 796, in connect
+    sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+        sock=sock,
+    ...<14 lines>...
+        assert_fingerprint=self.assert_fingerprint,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connection.py", line 975, in _ssl_wrap_socket_and_match_hostname
+    ssl_sock = ssl_wrap_socket(
+        sock=sock,
+    ...<8 lines>...
+        tls_in_tls=tls_in_tls,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/util/ssl_.py", line 433, in ssl_wrap_socket
+    ssl_sock = _ssl_wrap_socket_impl(sock, context, tls_in_tls, server_hostname)
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/util/ssl_.py", line 477, in _ssl_wrap_socket_impl
+    return ssl_context.wrap_socket(sock, server_hostname=server_hostname)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/ssl.py", line 455, in wrap_socket
+    return self.sslsocket_class._create(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sock=sock,
+        ^^^^^^^^^^
+    ...<5 lines>...
+        session=session
+        ^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib/python3.13/ssl.py", line 1076, in _create
+    self.do_handshake()
+    ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/ssl.py", line 1372, in do_handshake
+    self._sslobj.do_handshake()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 788, in urlopen
+    response = self._make_request(
+        conn,
+    ...<10 lines>...
+        **response_kw,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 488, in _make_request
+    raise new_e
+urllib3.exceptions.SSLError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/adapters.py", line 696, in send
+    resp = conn.urlopen(
+        method=request.method,
+    ...<9 lines>...
+        chunked=chunked,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 842, in urlopen
+    retries = retries.increment(
+        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/util/retry.py", line 543, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='mailback3.camsonline.com', port=443): Max retries exceeded with url: /mailback_result/5HUZFCHBCNPH4V3CAEOG6H1Y0HGCDD0U0IKI5I1N3C2X681361142565BMB221369186R2.zip (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)')))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/projects/MFD-Portfolio-Intelligence/cams_mailback_sync.py", line 861, in sync_once
+    saved = _download_and_extract(url, rta, report_code, zip_password)
+  File "/root/projects/MFD-Portfolio-Intelligence/cams_mailback_sync.py", line 488, in _download_and_extract
+    resp = requests.get(url, timeout=60)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/api.py", line 87, in get
+    return request("get", url, params=params, **kwargs)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/api.py", line 71, in request
+    return session.request(method=method, url=url, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/sessions.py", line 651, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/sessions.py", line 784, in send
+    r = adapter.send(request, **kwargs)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/adapters.py", line 727, in send
+    raise SSLError(e, request=request)
+requests.exceptions.SSLError: HTTPSConnectionPool(host='mailback3.camsonline.com', port=443): Max retries exceeded with url: /mailback_result/5HUZFCHBCNPH4V3CAEOG6H1Y0HGCDD0U0IKI5I1N3C2X681361142565BMB221369186R2.zip (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)')))
+2026-11-06 11:00:11,747 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR9. Investor Static details feed - CRMS Format, Request
+ Id:220638757R9
+2026-11-06 11:00:11,751 [INFO] [cron] mailback_sync | [CAMS-WBR9] Report code resolved
+2026-11-06 11:00:11,751 [INFO] [cron] mailback_sync | [CAMS-WBR9] No data — marking read, skipping
+2026-11-06 11:00:12,563 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR2. Investor Transactions for a Period, Request Id:220638668R2
+2026-11-06 11:00:12,567 [INFO] [cron] mailback_sync | [CAMS-WBR2] Report code resolved
+2026-11-06 11:00:12,568 [INFO] [cron] mailback_sync | [CAMS-WBR2] No data — marking read, skipping
+2026-11-06 11:00:13,444 [INFO] [cron] mailback_sync | [KFinTech] Found 6 unread mailback emails
+2026-11-06 11:00:13,791 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Nippon India Mutual Fund- Brokerage Threshold Annexure Mailers
+ October2026 for ARN-335644
+2026-11-06 11:00:13,811 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Nippon India Mutual Fund- Brokerage Threshold Annexure Mailers
+ October2026 for
+2026-11-06 11:00:14,719 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Baroda BNP Paribas Mutual Fund- Brokerage Threshold Annexure
+ Mailers October2026 for ARN-335644
+2026-11-06 11:00:14,735 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Baroda BNP Paribas Mutual Fund- Brokerage Threshold Annexure
+ Mailers October20
+2026-11-06 11:00:15,629 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Investor Master Information Report for Ref.No:WBMST9447075
+2026-11-06 11:00:15,635 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Investor Master Information Report for Ref.No:WBMST9447075
+2026-11-06 11:00:16,443 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-11-06 11:00:16,448 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-11-06 11:00:17,265 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Motilal Mutual Fund- Brokerage  Annexure - October2026 for
+ ARN-335644
+2026-11-06 11:00:17,270 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Motilal Mutual Fund- Brokerage  Annexure - October2026 for
+ ARN-335644
+2026-11-06 11:00:18,104 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Subscribed SIP Registrations Report for Ref. No. : WSREG8279819
+2026-11-06 11:00:18,122 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] Report code resolved
+2026-11-06 11:00:18,127 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] Download URL found
+2026-11-06 11:00:18,130 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] Downloading https://scdelivery.kfintech.com/c/?u=iuuqt%3B00ett%2Flgjoufdi%2Fdpn0ettepxompbe0sfqpsut0hfofsbuf%40rszuzqf%3EV%7BO9W2OTSVd5Nkd6PEF6PUVxO%7BZxgEJxNkZyNUB3&p=qqttqbdb.bqeesknn--342351527-4E8E1D4A-19F2-454A-B725-CB72DCB237C3.180.1&e=s1
+2026-11-06 11:00:20,594 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] Extracted MFSD313_WSREG8279819_1221441.csv (390 bytes)
+2026-11-06 11:00:21,202 [INFO] [cron] mailback_sync | [KFinTech-MFSD243] MFSD313_WSREG8279819_1221441.csv contains 0 data rows — moving to done (no-op)
+2026-11-06 11:00:21,908 [INFO] [cron] background_worker | [MAILBACK] checked=11 downloaded=1 parsed=1 failed=0 no_data=3 errors=1
+2026-11-06 11:00:21,910 [INFO] [cron] background_worker | [mailback] -> FAIL
+2026-11-06 11:00:21,912 [INFO] [cron] background_worker | [NAV-LIVE] Starting
+2026-11-06 11:00:21,929 [INFO] [cron] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-11-06 11:00:22,932 [INFO] [cron] nav_service | [NAV-PARSE] Parsed 14059 records | column counts seen: {8: 14196}
+2026-11-06 11:00:22,940 [INFO] [cron] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-11-05.txt: 1528484 bytes, 17947 rows (source=live)
+2026-11-06 11:00:22,947 [INFO] [cron] nav_service | [AMFI] NAV file created: nav_data/nav_2026-11-05.txt (1528484 bytes, 18230 lines) | NAV Date: 2026-11-05
+2026-11-06 11:00:22,950 [INFO] [cron] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-11-05.txt...
+2026-11-06 11:00:24,060 [INFO] [cron] nav_db | [NAV-DB] Ingested 4317 records (skipped 0) for date 2026-11-05
+2026-11-06 11:00:24,063 [INFO] [cron] nav_service | [NAV-DB] Success: Inserted 4317 NAV records
+2026-11-06 11:00:24,063 [INFO] [cron] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-11-06 11:00:24,063 [INFO] [cron] background_worker | [nav_live] -> OK
+2026-11-06 11:00:24,064 [INFO] [cron] background_worker | [NAV-PREV] Starting
+2026-11-06 11:00:24,112 [INFO] [cron] nav_service | [AMFI-HIST] Already have 2026-11-04 — skipping fetch
+2026-11-06 11:00:24,113 [INFO] [cron] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-11-04
+2026-11-06 11:00:24,113 [INFO] [cron] background_worker | [nav_previous] -> OK
+2026-11-06 11:00:24,113 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-11-06T11:00:24  (trigger=cron)
+2026-11-06 11:00:24,113 [INFO] [cron] background_worker | ======================================================================
+2026-11-06 11:00:24,115 [INFO] [cron] background_worker | [WORKER] data_version bumped
+──── worker end   2026-11-06 11:00:24 IST (exit=0) ────
+──── worker start 2026-11-06 15:00:02 IST ────
+2026-11-06 15:00:04,188 [INFO] [cron] background_worker | ======================================================================
+2026-11-06 15:00:04,188 [INFO] [cron] background_worker | BACKGROUND WORKER RUN  @ 2026-11-06T15:00:04  (trigger=cron, pid=20601)
+2026-11-06 15:00:04,188 [INFO] [cron] background_worker | ======================================================================
+2026-11-06 15:00:05,709 [INFO] [cron] background_worker | [MAILBACK] Starting
+2026-11-06 15:00:08,292 [INFO] [cron] mailback_sync | [IMAP] Connected
+2026-11-06 15:00:08,671 [INFO] [cron] mailback_sync | [CAMS] Found 1 unread mailback emails
+2026-11-06 15:00:09,123 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR2. Investor Transactions for a Period, Request Id:221369186R2
+2026-11-06 15:00:09,131 [INFO] [cron] mailback_sync | [CAMS-WBR2] Report code resolved
+2026-11-06 15:00:09,139 [INFO] [cron] mailback_sync | [CAMS-WBR2] Download URL found
+2026-11-06 15:00:09,142 [INFO] [cron] mailback_sync | [CAMS-WBR2] Downloading https://mailback3.camsonline.com/mailback_result/5HUZFCHBCNPH4V3CAEOG6H1Y0HGCDD0U0IKI5I1N3C2X681361142565BMB221369186R2.zip
+2026-11-06 15:00:10,191 [ERROR] [cron] mailback_sync | [CAMS-WBR2] Download/extract failed
+Traceback (most recent call last):
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 464, in _make_request
+    self._validate_conn(conn)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 1106, in _validate_conn
+    conn.connect()
+    ~~~~~~~~~~~~^^
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connection.py", line 796, in connect
+    sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+        sock=sock,
+    ...<14 lines>...
+        assert_fingerprint=self.assert_fingerprint,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connection.py", line 975, in _ssl_wrap_socket_and_match_hostname
+    ssl_sock = ssl_wrap_socket(
+        sock=sock,
+    ...<8 lines>...
+        tls_in_tls=tls_in_tls,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/util/ssl_.py", line 433, in ssl_wrap_socket
+    ssl_sock = _ssl_wrap_socket_impl(sock, context, tls_in_tls, server_hostname)
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/util/ssl_.py", line 477, in _ssl_wrap_socket_impl
+    return ssl_context.wrap_socket(sock, server_hostname=server_hostname)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/ssl.py", line 455, in wrap_socket
+    return self.sslsocket_class._create(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sock=sock,
+        ^^^^^^^^^^
+    ...<5 lines>...
+        session=session
+        ^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib/python3.13/ssl.py", line 1076, in _create
+    self.do_handshake()
+    ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/ssl.py", line 1372, in do_handshake
+    self._sslobj.do_handshake()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 788, in urlopen
+    response = self._make_request(
+        conn,
+    ...<10 lines>...
+        **response_kw,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 488, in _make_request
+    raise new_e
+urllib3.exceptions.SSLError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/adapters.py", line 696, in send
+    resp = conn.urlopen(
+        method=request.method,
+    ...<9 lines>...
+        chunked=chunked,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 842, in urlopen
+    retries = retries.increment(
+        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/util/retry.py", line 543, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='mailback3.camsonline.com', port=443): Max retries exceeded with url: /mailback_result/5HUZFCHBCNPH4V3CAEOG6H1Y0HGCDD0U0IKI5I1N3C2X681361142565BMB221369186R2.zip (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)')))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/projects/MFD-Portfolio-Intelligence/cams_mailback_sync.py", line 861, in sync_once
+    saved = _download_and_extract(url, rta, report_code, zip_password)
+  File "/root/projects/MFD-Portfolio-Intelligence/cams_mailback_sync.py", line 488, in _download_and_extract
+    resp = requests.get(url, timeout=60)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/api.py", line 87, in get
+    return request("get", url, params=params, **kwargs)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/api.py", line 71, in request
+    return session.request(method=method, url=url, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/sessions.py", line 651, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/sessions.py", line 784, in send
+    r = adapter.send(request, **kwargs)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/adapters.py", line 727, in send
+    raise SSLError(e, request=request)
+requests.exceptions.SSLError: HTTPSConnectionPool(host='mailback3.camsonline.com', port=443): Max retries exceeded with url: /mailback_result/5HUZFCHBCNPH4V3CAEOG6H1Y0HGCDD0U0IKI5I1N3C2X681361142565BMB221369186R2.zip (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)')))
+2026-11-06 15:00:10,642 [INFO] [cron] mailback_sync | [KFinTech] Found 0 unread mailback emails
+2026-11-06 15:00:11,528 [INFO] [cron] background_worker | [MAILBACK] checked=1 downloaded=0 parsed=0 failed=0 no_data=0 errors=1
+2026-11-06 15:00:11,531 [INFO] [cron] background_worker | [mailback] -> FAIL
+2026-11-06 15:00:11,531 [INFO] [cron] background_worker | [NAV-LIVE] Starting
+2026-11-06 15:00:11,543 [INFO] [cron] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-11-06 15:00:12,612 [INFO] [cron] nav_service | [NAV-PARSE] Parsed 14059 records | column counts seen: {8: 14196}
+2026-11-06 15:00:12,628 [INFO] [cron] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-11-05.txt: 1528486 bytes, 17947 rows (source=live)
+2026-11-06 15:00:12,638 [INFO] [cron] nav_service | [AMFI] NAV file overwritten: nav_data/nav_2026-11-05.txt (1528486 bytes, 18230 lines) | NAV Date: 2026-11-05
+2026-11-06 15:00:12,643 [INFO] [cron] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-11-05.txt...
+2026-11-06 15:00:13,678 [INFO] [cron] nav_db | [NAV-DB] Ingested 4317 records (skipped 0) for date 2026-11-05
+2026-11-06 15:00:13,680 [INFO] [cron] nav_service | [NAV-DB] Success: Inserted 4317 NAV records
+2026-11-06 15:00:13,681 [INFO] [cron] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-11-06 15:00:13,681 [INFO] [cron] background_worker | [nav_live] -> OK
+2026-11-06 15:00:13,681 [INFO] [cron] background_worker | [NAV-PREV] Starting
+2026-11-06 15:00:13,727 [INFO] [cron] nav_service | [AMFI-HIST] Already have 2026-11-04 — skipping fetch
+2026-11-06 15:00:13,728 [INFO] [cron] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-11-04
+2026-11-06 15:00:13,728 [INFO] [cron] background_worker | [nav_previous] -> OK
+2026-11-06 15:00:13,728 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-11-06T15:00:13  (trigger=cron)
+2026-11-06 15:00:13,728 [INFO] [cron] background_worker | ======================================================================
+2026-11-06 15:00:13,731 [INFO] [cron] background_worker | [WORKER] data_version bumped
+──── worker end   2026-11-06 15:00:14 IST (exit=0) ────
+──── worker start 2026-11-07 11:00:01 IST ────
+2026-11-07 11:00:03,847 [INFO] [cron] background_worker | ======================================================================
+2026-11-07 11:00:03,848 [INFO] [cron] background_worker | BACKGROUND WORKER RUN  @ 2026-11-07T11:00:03  (trigger=cron, pid=6593)
+2026-11-07 11:00:03,848 [INFO] [cron] background_worker | ======================================================================
+2026-11-07 11:00:05,445 [INFO] [cron] background_worker | [MAILBACK] Starting
+2026-11-07 11:00:07,970 [INFO] [cron] mailback_sync | [IMAP] Connected
+2026-11-07 11:00:08,395 [INFO] [cron] mailback_sync | [CAMS] Found 5 unread mailback emails
+2026-11-07 11:00:08,814 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR2. Investor Transactions for a Period, Request Id:221369186R2
+2026-11-07 11:00:08,816 [INFO] [cron] mailback_sync | [CAMS-WBR2] Report code resolved
+2026-11-07 11:00:08,822 [INFO] [cron] mailback_sync | [CAMS-WBR2] Download URL found
+2026-11-07 11:00:08,824 [INFO] [cron] mailback_sync | [CAMS-WBR2] Downloading https://mailback3.camsonline.com/mailback_result/5HUZFCHBCNPH4V3CAEOG6H1Y0HGCDD0U0IKI5I1N3C2X681361142565BMB221369186R2.zip
+2026-11-07 11:00:09,256 [ERROR] [cron] mailback_sync | [CAMS-WBR2] Download/extract failed
+Traceback (most recent call last):
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 464, in _make_request
+    self._validate_conn(conn)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 1106, in _validate_conn
+    conn.connect()
+    ~~~~~~~~~~~~^^
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connection.py", line 796, in connect
+    sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+        sock=sock,
+    ...<14 lines>...
+        assert_fingerprint=self.assert_fingerprint,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connection.py", line 975, in _ssl_wrap_socket_and_match_hostname
+    ssl_sock = ssl_wrap_socket(
+        sock=sock,
+    ...<8 lines>...
+        tls_in_tls=tls_in_tls,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/util/ssl_.py", line 433, in ssl_wrap_socket
+    ssl_sock = _ssl_wrap_socket_impl(sock, context, tls_in_tls, server_hostname)
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/util/ssl_.py", line 477, in _ssl_wrap_socket_impl
+    return ssl_context.wrap_socket(sock, server_hostname=server_hostname)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/ssl.py", line 455, in wrap_socket
+    return self.sslsocket_class._create(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sock=sock,
+        ^^^^^^^^^^
+    ...<5 lines>...
+        session=session
+        ^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib/python3.13/ssl.py", line 1076, in _create
+    self.do_handshake()
+    ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/ssl.py", line 1372, in do_handshake
+    self._sslobj.do_handshake()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 788, in urlopen
+    response = self._make_request(
+        conn,
+    ...<10 lines>...
+        **response_kw,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 488, in _make_request
+    raise new_e
+urllib3.exceptions.SSLError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/adapters.py", line 696, in send
+    resp = conn.urlopen(
+        method=request.method,
+    ...<9 lines>...
+        chunked=chunked,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 842, in urlopen
+    retries = retries.increment(
+        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/util/retry.py", line 543, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='mailback3.camsonline.com', port=443): Max retries exceeded with url: /mailback_result/5HUZFCHBCNPH4V3CAEOG6H1Y0HGCDD0U0IKI5I1N3C2X681361142565BMB221369186R2.zip (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)')))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/projects/MFD-Portfolio-Intelligence/cams_mailback_sync.py", line 861, in sync_once
+    saved = _download_and_extract(url, rta, report_code, zip_password)
+  File "/root/projects/MFD-Portfolio-Intelligence/cams_mailback_sync.py", line 488, in _download_and_extract
+    resp = requests.get(url, timeout=60)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/api.py", line 87, in get
+    return request("get", url, params=params, **kwargs)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/api.py", line 71, in request
+    return session.request(method=method, url=url, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/sessions.py", line 651, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/sessions.py", line 784, in send
+    r = adapter.send(request, **kwargs)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/adapters.py", line 727, in send
+    raise SSLError(e, request=request)
+requests.exceptions.SSLError: HTTPSConnectionPool(host='mailback3.camsonline.com', port=443): Max retries exceeded with url: /mailback_result/5HUZFCHBCNPH4V3CAEOG6H1Y0HGCDD0U0IKI5I1N3C2X681361142565BMB221369186R2.zip (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)')))
+2026-11-07 11:00:09,833 [INFO] [cron] mailback_sync | [CAMS] Processing email: Updation of Social Media Details 
+2026-11-07 11:00:09,835 [INFO] [cron] mailback_sync | [CAMS] Skipping non-report email (marking read): Updation of Social Media Details 
+2026-11-07 11:00:10,753 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR49. SIP/STP procured for the period, Request Id:220638803R49
+2026-11-07 11:00:10,755 [INFO] [cron] mailback_sync | [CAMS-WBR49] Report code resolved
+2026-11-07 11:00:10,756 [INFO] [cron] mailback_sync | [CAMS-WBR49] No data — marking read, skipping
+2026-11-07 11:00:11,575 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR9. Investor Static details feed - CRMS Format, Request
+ Id:220638757R9
+2026-11-07 11:00:11,580 [INFO] [cron] mailback_sync | [CAMS-WBR9] Report code resolved
+2026-11-07 11:00:11,583 [INFO] [cron] mailback_sync | [CAMS-WBR9] No data — marking read, skipping
+2026-11-07 11:00:12,508 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR2. Investor Transactions for a Period, Request Id:220638668R2
+2026-11-07 11:00:12,526 [INFO] [cron] mailback_sync | [CAMS-WBR2] Report code resolved
+2026-11-07 11:00:12,530 [INFO] [cron] mailback_sync | [CAMS-WBR2] No data — marking read, skipping
+2026-11-07 11:00:13,413 [INFO] [cron] mailback_sync | [KFinTech] Found 4 unread mailback emails
+2026-11-07 11:00:13,732 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Jm Mutual Fund- Brokerage  Annexure - October2026 for ARN-335644
+2026-11-07 11:00:13,743 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Jm Mutual Fund- Brokerage  Annexure - October2026 for ARN-335644
+2026-11-07 11:00:14,644 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-11-07 11:00:14,650 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Transaction Feeds Report for Ref.No:WBTRN29458988
+2026-11-07 11:00:15,569 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Subscribed Investor Master Information Report for
+ Ref.No:WBMST9447075
+2026-11-07 11:00:15,577 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Subscribed Investor Master Information Report for
+ Ref.No:WBMST9447075
+2026-11-07 11:00:16,597 [INFO] [cron] mailback_sync | [KFinTech] Processing email: Subscribed SIP Registration Report for Ref.No : WSREG8279819
+2026-11-07 11:00:16,604 [INFO] [cron] mailback_sync | [KFinTech] Skipping non-report email (marking read): Subscribed SIP Registration Report for Ref.No : WSREG8279819
+2026-11-07 11:00:18,208 [INFO] [cron] background_worker | [MAILBACK] checked=9 downloaded=0 parsed=0 failed=0 no_data=3 errors=1
+2026-11-07 11:00:18,209 [INFO] [cron] background_worker | [mailback] -> FAIL
+2026-11-07 11:00:18,209 [INFO] [cron] background_worker | [NAV-LIVE] Starting
+2026-11-07 11:00:18,227 [INFO] [cron] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-11-07 11:00:19,317 [INFO] [cron] nav_service | [NAV-PARSE] Parsed 14063 records | column counts seen: {8: 14200}
+2026-11-07 11:00:19,322 [INFO] [cron] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-11-06.txt: 1528945 bytes, 17951 rows (source=live)
+2026-11-07 11:00:19,330 [INFO] [cron] nav_service | [AMFI] NAV file created: nav_data/nav_2026-11-06.txt (1528945 bytes, 18240 lines) | NAV Date: 2026-11-06
+2026-11-07 11:00:19,333 [INFO] [cron] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-11-06.txt...
+2026-11-07 11:00:20,518 [INFO] [cron] nav_db | [NAV-DB] Ingested 4318 records (skipped 0) for date 2026-11-06
+2026-11-07 11:00:20,534 [INFO] [cron] nav_service | [NAV-DB] Success: Inserted 4318 NAV records
+2026-11-07 11:00:20,534 [INFO] [cron] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-11-07 11:00:20,534 [INFO] [cron] background_worker | [nav_live] -> OK
+2026-11-07 11:00:20,534 [INFO] [cron] background_worker | [NAV-PREV] Starting
+2026-11-07 11:00:20,601 [INFO] [cron] nav_service | [AMFI-HIST] Already have 2026-11-05 — skipping fetch
+2026-11-07 11:00:20,602 [INFO] [cron] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-11-05
+2026-11-07 11:00:20,602 [INFO] [cron] background_worker | [nav_previous] -> OK
+2026-11-07 11:00:20,602 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-11-07T11:00:20  (trigger=cron)
+2026-11-07 11:00:20,602 [INFO] [cron] background_worker | ======================================================================
+2026-11-07 11:00:20,604 [INFO] [cron] background_worker | [WORKER] data_version bumped
+──── worker end   2026-11-07 11:00:21 IST (exit=0) ────
+──── worker start 2026-11-07 15:00:01 IST ────
+2026-11-07 15:00:03,894 [INFO] [cron] background_worker | ======================================================================
+2026-11-07 15:00:03,894 [INFO] [cron] background_worker | BACKGROUND WORKER RUN  @ 2026-11-07T15:00:03  (trigger=cron, pid=30397)
+2026-11-07 15:00:03,894 [INFO] [cron] background_worker | ======================================================================
+2026-11-07 15:00:05,609 [INFO] [cron] background_worker | [MAILBACK] Starting
+2026-11-07 15:00:08,029 [INFO] [cron] mailback_sync | [IMAP] Connected
+2026-11-07 15:00:08,542 [INFO] [cron] mailback_sync | [CAMS] Found 1 unread mailback emails
+2026-11-07 15:00:09,053 [INFO] [cron] mailback_sync | [CAMS] Processing email: WBR2. Investor Transactions for a Period, Request Id:221369186R2
+2026-11-07 15:00:09,054 [INFO] [cron] mailback_sync | [CAMS-WBR2] Report code resolved
+2026-11-07 15:00:09,058 [INFO] [cron] mailback_sync | [CAMS-WBR2] Download URL found
+2026-11-07 15:00:09,059 [INFO] [cron] mailback_sync | [CAMS-WBR2] Downloading https://mailback3.camsonline.com/mailback_result/5HUZFCHBCNPH4V3CAEOG6H1Y0HGCDD0U0IKI5I1N3C2X681361142565BMB221369186R2.zip
+2026-11-07 15:00:09,402 [ERROR] [cron] mailback_sync | [CAMS-WBR2] Download/extract failed
+Traceback (most recent call last):
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 464, in _make_request
+    self._validate_conn(conn)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 1106, in _validate_conn
+    conn.connect()
+    ~~~~~~~~~~~~^^
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connection.py", line 796, in connect
+    sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+        sock=sock,
+    ...<14 lines>...
+        assert_fingerprint=self.assert_fingerprint,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connection.py", line 975, in _ssl_wrap_socket_and_match_hostname
+    ssl_sock = ssl_wrap_socket(
+        sock=sock,
+    ...<8 lines>...
+        tls_in_tls=tls_in_tls,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/util/ssl_.py", line 433, in ssl_wrap_socket
+    ssl_sock = _ssl_wrap_socket_impl(sock, context, tls_in_tls, server_hostname)
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/util/ssl_.py", line 477, in _ssl_wrap_socket_impl
+    return ssl_context.wrap_socket(sock, server_hostname=server_hostname)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/ssl.py", line 455, in wrap_socket
+    return self.sslsocket_class._create(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sock=sock,
+        ^^^^^^^^^^
+    ...<5 lines>...
+        session=session
+        ^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib/python3.13/ssl.py", line 1076, in _create
+    self.do_handshake()
+    ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/ssl.py", line 1372, in do_handshake
+    self._sslobj.do_handshake()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 788, in urlopen
+    response = self._make_request(
+        conn,
+    ...<10 lines>...
+        **response_kw,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 488, in _make_request
+    raise new_e
+urllib3.exceptions.SSLError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/adapters.py", line 696, in send
+    resp = conn.urlopen(
+        method=request.method,
+    ...<9 lines>...
+        chunked=chunked,
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/connectionpool.py", line 842, in urlopen
+    retries = retries.increment(
+        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
+    )
+  File "/root/mfd-venv/lib/python3.13/site-packages/urllib3/util/retry.py", line 543, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='mailback3.camsonline.com', port=443): Max retries exceeded with url: /mailback_result/5HUZFCHBCNPH4V3CAEOG6H1Y0HGCDD0U0IKI5I1N3C2X681361142565BMB221369186R2.zip (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)')))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/projects/MFD-Portfolio-Intelligence/cams_mailback_sync.py", line 861, in sync_once
+    saved = _download_and_extract(url, rta, report_code, zip_password)
+  File "/root/projects/MFD-Portfolio-Intelligence/cams_mailback_sync.py", line 488, in _download_and_extract
+    resp = requests.get(url, timeout=60)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/api.py", line 87, in get
+    return request("get", url, params=params, **kwargs)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/api.py", line 71, in request
+    return session.request(method=method, url=url, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/sessions.py", line 651, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/sessions.py", line 784, in send
+    r = adapter.send(request, **kwargs)
+  File "/root/mfd-venv/lib/python3.13/site-packages/requests/adapters.py", line 727, in send
+    raise SSLError(e, request=request)
+requests.exceptions.SSLError: HTTPSConnectionPool(host='mailback3.camsonline.com', port=443): Max retries exceeded with url: /mailback_result/5HUZFCHBCNPH4V3CAEOG6H1Y0HGCDD0U0IKI5I1N3C2X681361142565BMB221369186R2.zip (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1029)')))
+2026-11-07 15:00:09,852 [INFO] [cron] mailback_sync | [KFinTech] Found 0 unread mailback emails
+2026-11-07 15:00:10,769 [INFO] [cron] background_worker | [MAILBACK] checked=1 downloaded=0 parsed=0 failed=0 no_data=0 errors=1
+2026-11-07 15:00:10,772 [INFO] [cron] background_worker | [mailback] -> FAIL
+2026-11-07 15:00:10,775 [INFO] [cron] background_worker | [NAV-LIVE] Starting
+2026-11-07 15:00:10,803 [INFO] [cron] nav_service | [AMFI] Downloading NAV file from https://portal.amfiindia.com/spages/NAVAll.txt
+2026-11-07 15:00:11,779 [INFO] [cron] nav_service | [NAV-PARSE] Parsed 14063 records | column counts seen: {8: 14200}
+2026-11-07 15:00:11,794 [INFO] [cron] nav_service | [NAV-SAVE] Saved nav_data/nav_2026-11-06.txt: 1528966 bytes, 17951 rows (source=live)
+2026-11-07 15:00:11,802 [INFO] [cron] nav_service | [AMFI] NAV file overwritten: nav_data/nav_2026-11-06.txt (1528966 bytes, 18240 lines) | NAV Date: 2026-11-06
+2026-11-07 15:00:11,805 [INFO] [cron] nav_service | [NAV-DB] File ready. Starting database ingestion for nav_data/nav_2026-11-06.txt...
+2026-11-07 15:00:12,843 [INFO] [cron] nav_db | [NAV-DB] Ingested 4318 records (skipped 0) for date 2026-11-06
+2026-11-07 15:00:12,846 [INFO] [cron] nav_service | [NAV-DB] Success: Inserted 4318 NAV records
+2026-11-07 15:00:12,846 [INFO] [cron] background_worker | [NAV-LIVE] ok=True ran=True reason=downloaded and ingested
+2026-11-07 15:00:12,846 [INFO] [cron] background_worker | [nav_live] -> OK
+2026-11-07 15:00:12,846 [INFO] [cron] background_worker | [NAV-PREV] Starting
+2026-11-07 15:00:12,897 [INFO] [cron] nav_service | [AMFI-HIST] Already have 2026-11-05 — skipping fetch
+2026-11-07 15:00:12,897 [INFO] [cron] background_worker | [NAV-PREV] ok=True ran=False reason=already have 2026-11-05
+2026-11-07 15:00:12,897 [INFO] [cron] background_worker | [nav_previous] -> OK
+2026-11-07 15:00:12,897 [INFO] [cron] background_worker | BACKGROUND WORKER RUN COMPLETE  @ 2026-11-07T15:00:12  (trigger=cron)
+2026-11-07 15:00:12,897 [INFO] [cron] background_worker | ======================================================================
+2026-11-07 15:00:12,899 [INFO] [cron] background_worker | [WORKER] data_version bumped
+──── worker end   2026-11-07 15:00:13 IST (exit=0) ────
